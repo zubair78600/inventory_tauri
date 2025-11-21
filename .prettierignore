@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+dist
+inventory.db
+postcss.config.js
+tailwind.config.js
