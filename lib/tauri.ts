@@ -48,6 +48,47 @@ export interface UpdateSupplierInput {
   contact_info: string | null;
 }
 
+export interface Customer {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCustomerInput {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+}
+
+export interface UpdateCustomerInput {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+}
+
+export interface DashboardStats {
+  total_products: number;
+  total_suppliers: number;
+  total_customers: number;
+  total_invoices: number;
+  low_stock_products: number;
+  total_revenue: number;
+}
+
+export interface LowStockProduct {
+  id: number;
+  name: string;
+  sku: string;
+  stock_quantity: number;
+}
+
 /**
  * Product Commands
  */
@@ -139,5 +180,71 @@ export const supplierCommands = {
    */
   addMockData: async (): Promise<string> => {
     return await invoke<string>('add_mock_suppliers');
+  },
+};
+
+/**
+ * Customer Commands
+ */
+export const customerCommands = {
+  /**
+   * Get all customers, optionally filtered by search query
+   */
+  getAll: async (search?: string): Promise<Customer[]> => {
+    return await invoke<Customer[]>('get_customers', { search });
+  },
+
+  /**
+   * Get a single customer by ID
+   */
+  getById: async (id: number): Promise<Customer> => {
+    return await invoke<Customer>('get_customer', { id });
+  },
+
+  /**
+   * Create a new customer
+   */
+  create: async (input: CreateCustomerInput): Promise<Customer> => {
+    return await invoke<Customer>('create_customer', { input });
+  },
+
+  /**
+   * Update an existing customer
+   */
+  update: async (input: UpdateCustomerInput): Promise<Customer> => {
+    return await invoke<Customer>('update_customer', { input });
+  },
+
+  /**
+   * Delete a customer by ID
+   */
+  delete: async (id: number): Promise<void> => {
+    return await invoke<void>('delete_customer', { id });
+  },
+
+  /**
+   * Add mock customer data for testing
+   */
+  addMockData: async (): Promise<string> => {
+    return await invoke<string>('add_mock_customers');
+  },
+};
+
+/**
+ * Analytics Commands
+ */
+export const analyticsCommands = {
+  /**
+   * Get dashboard statistics
+   */
+  getDashboardStats: async (): Promise<DashboardStats> => {
+    return await invoke<DashboardStats>('get_dashboard_stats');
+  },
+
+  /**
+   * Get low stock products (stock < 10)
+   */
+  getLowStockProducts: async (): Promise<LowStockProduct[]> => {
+    return await invoke<LowStockProduct[]>('get_low_stock_products');
   },
 };

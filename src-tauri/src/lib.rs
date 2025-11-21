@@ -42,6 +42,14 @@ pub fn run() {
       commands::update_supplier,
       commands::delete_supplier,
       commands::add_mock_suppliers,
+      commands::get_customers,
+      commands::get_customer,
+      commands::create_customer,
+      commands::update_customer,
+      commands::delete_customer,
+      commands::add_mock_customers,
+      commands::get_dashboard_stats,
+      commands::get_low_stock_products,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

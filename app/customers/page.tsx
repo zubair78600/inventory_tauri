@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { customerCommands } from '@/lib/tauri';
 
 type NewCustomerFormState = {
   name: string;
@@ -53,8 +54,7 @@ export default function Customers() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch('/api/customers');
-      const data = (await res.json()) as Customer[];
+      const data = await customerCommands.getAll();
       setCustomers(data);
       setSearchTerm('');
     } catch (error) {
