@@ -89,6 +89,54 @@ export interface LowStockProduct {
   stock_quantity: number;
 }
 
+export interface Invoice {
+  id: number;
+  invoice_number: string;
+  customer_id: number | null;
+  total_amount: number;
+  tax_amount: number;
+  discount_amount: number;
+  payment_method: string | null;
+  created_at: string;
+  cgst_amount: number | null;
+  destination_state: string | null;
+  fy_year: string | null;
+  gst_rate: number | null;
+  igst_amount: number | null;
+  language: string | null;
+  origin_state: string | null;
+  sgst_amount: number | null;
+}
+
+export interface InvoiceItemWithProduct {
+  id: number;
+  invoice_id: number;
+  product_id: number;
+  product_name: string;
+  product_sku: string;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface InvoiceWithItems {
+  invoice: Invoice;
+  items: InvoiceItemWithProduct[];
+}
+
+export interface CreateInvoiceItemInput {
+  product_id: number;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface CreateInvoiceInput {
+  customer_id: number | null;
+  items: CreateInvoiceItemInput[];
+  tax_amount?: number;
+  discount_amount?: number;
+  payment_method?: string;
+}
+
 /**
  * Product Commands
  */
@@ -246,5 +294,99 @@ export const analyticsCommands = {
    */
   getLowStockProducts: async (): Promise<LowStockProduct[]> => {
     return await invoke<LowStockProduct[]>('get_low_stock_products');
+  },
+};
+
+/**
+ * Invoice Commands
+ */
+export const invoiceCommands = {
+  /**
+   * Get all invoices, optionally filtered by customer
+   */
+  getAll: async (customerId?: number): Promise<Invoice[]> => {
+    return await invoke<Invoice[]>('get_invoices', { customer_id: customerId });
+  },
+
+  /**
+   * Get a single invoice with its items
+   */
+  getById: async (id: number): Promise<InvoiceWithItems> => {
+    return await invoke<InvoiceWithItems>('get_invoice', { id });
+  },
+
+  /**
+   * Create a new invoice with items (updates stock)
+   */
+  create: async (input: CreateInvoiceInput): Promise<Invoice> => {
+    return await invoke<Invoice>('create_invoice', { input });
+  },
+
+  /**
+   * Delete an invoice (restores stock)
+   */
+  delete: async (id: number): Promise<void> => {
+    return await invoke<void>('delete_invoice', { id });
+  },
+};
+
+export interface SearchProduct {
+  id: number;
+  name: string;
+  sku: string;
+  price: number;
+  stock_quantity: number;
+}
+
+export interface SearchCustomer {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface SearchSupplier {
+  id: number;
+  name: string;
+  contact_info: string | null;
+}
+
+export interface SearchInvoice {
+  id: number;
+  invoice_number: string;
+  total_amount: number;
+  created_at: string;
+}
+
+export interface SearchResult {
+  products: SearchProduct[];
+  customers: SearchCustomer[];
+  suppliers: SearchSupplier[];
+  invoices: SearchInvoice[];
+}
+
+/**
+ * Search Commands
+ */
+export const searchCommands = {
+  /**
+   * OmniSearch: Search across all entities
+   */
+  omnisearch: async (query: string): Promise<SearchResult> => {
+    return await invoke<SearchResult>('omnisearch', { query });
+  },
+
+  /**
+   * Export products to CSV format
+   */
+  exportProductsCSV: async (): Promise<string> => {
+    return await invoke<string>('export_products_csv');
+  },
+
+  /**
+   * Export customers to CSV format
+   */
+  exportCustomersCSV: async (): Promise<string> => {
+    return await invoke<string>('export_customers_csv');
   },
 };

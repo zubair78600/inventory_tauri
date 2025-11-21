@@ -50,6 +50,13 @@ pub fn run() {
       commands::add_mock_customers,
       commands::get_dashboard_stats,
       commands::get_low_stock_products,
+      commands::get_invoices,
+      commands::get_invoice,
+      commands::create_invoice,
+      commands::delete_invoice,
+      commands::omnisearch,
+      commands::export_products_csv,
+      commands::export_customers_csv,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
