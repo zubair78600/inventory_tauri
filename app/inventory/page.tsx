@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { SearchPill } from '@/components/shared/SearchPill';
+import { productCommands } from '@/lib/tauri';
 
 type NewProductFormState = {
   name: string;
@@ -46,16 +47,14 @@ export default function Inventory() {
 
   const fetchData = async () => {
     try {
-      const [prodRes, suppRes] = await Promise.all([
-        fetch('/api/products'),
-        fetch('/api/suppliers'),
-      ]);
-      const prodData = (await prodRes.json()) as Product[];
-      const suppData = (await suppRes.json()) as Supplier[];
+      // Use Tauri command to get products
+      const prodData = await productCommands.getAll();
       setProducts(prodData);
-      setSuppliers(suppData);
+      // TODO: Add supplier commands when Phase 4 is implemented
+      setSuppliers([]);
     } catch (error) {
-      console.error(error);
+      console.error('Error fetching products:', error);
+      alert('Failed to fetch products');
     } finally {
       setLoading(false);
     }
@@ -64,25 +63,19 @@ export default function Inventory() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newProduct,
-          price: parseFloat(newProduct.price),
-          stock_quantity: parseInt(newProduct.stock_quantity, 10),
-          supplier_id: newProduct.supplier_id ? Number(newProduct.supplier_id) : null,
-        }),
+      await productCommands.create({
+        name: newProduct.name,
+        sku: newProduct.sku,
+        price: parseFloat(newProduct.price),
+        stock_quantity: parseInt(newProduct.stock_quantity, 10),
+        supplier_id: newProduct.supplier_id ? Number(newProduct.supplier_id) : null,
       });
-      if (res.ok) {
-        setShowAddForm(false);
-        setNewProduct({ name: '', sku: '', price: '', stock_quantity: '', supplier_id: '' });
-        void fetchData();
-      } else {
-        alert('Error saving product');
-      }
+      setShowAddForm(false);
+      setNewProduct({ name: '', sku: '', price: '', stock_quantity: '', supplier_id: '' });
+      void fetchData();
     } catch (error) {
-      console.error(error);
+      console.error('Error creating product:', error);
+      alert(`Error saving product: ${error}`);
     }
   };
 
@@ -90,40 +83,41 @@ export default function Inventory() {
     e.preventDefault();
     if (!editProduct) return;
     try {
-      const res = await fetch(`/api/products/${editProduct.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editProduct.name,
-          sku: editProduct.sku,
-          price: editProduct.price,
-          stock_quantity: editProduct.stock_quantity,
-          supplier_id: editProduct.supplier_id,
-        }),
+      await productCommands.update({
+        id: editProduct.id,
+        name: editProduct.name,
+        sku: editProduct.sku,
+        price: editProduct.price,
+        stock_quantity: editProduct.stock_quantity,
+        supplier_id: editProduct.supplier_id,
       });
-      if (res.ok) {
-        setEditProduct(null);
-        void fetchData();
-      } else {
-        const err = await res.json();
-        alert(err.error || 'Error updating');
-      }
+      setEditProduct(null);
+      void fetchData();
     } catch (error) {
-      console.error(error);
+      console.error('Error updating product:', error);
+      alert(`Error updating: ${error}`);
     }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this product?')) return;
     try {
-      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        void fetchData();
-      } else {
-        alert('Delete failed');
-      }
+      await productCommands.delete(id);
+      void fetchData();
     } catch (error) {
-      console.error(error);
+      console.error('Error deleting product:', error);
+      alert(`Delete failed: ${error}`);
+    }
+  };
+
+  const handleAddMockData = async () => {
+    try {
+      const result = await productCommands.addMockData();
+      alert(result);
+      void fetchData();
+    } catch (error) {
+      console.error('Error adding mock data:', error);
+      alert(`Failed to add mock data: ${error}`);
     }
   };
 
@@ -148,6 +142,11 @@ export default function Inventory() {
           />
         </div>
         <div className="flex gap-2">
+          {products.length === 0 && (
+            <Button variant="outline" onClick={handleAddMockData}>
+              Load Sample Data
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => fetchData()}>
             Refresh
           </Button>
