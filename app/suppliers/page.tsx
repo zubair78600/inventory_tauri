@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { SearchPill } from '@/components/shared/SearchPill';
+import { supplierCommands } from '@/lib/tauri';
 
 type NewSupplierForm = {
   name: string;
@@ -37,11 +38,11 @@ export default function Suppliers() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch('/api/suppliers');
-      const data = (await res.json()) as Supplier[];
+      const data = await supplierCommands.getAll();
       setSuppliers(data);
     } catch (error) {
-      console.error(error);
+      console.error('Error fetching suppliers:', error);
+      alert('Failed to fetch suppliers');
     } finally {
       setLoading(false);
     }
@@ -50,20 +51,16 @@ export default function Suppliers() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/suppliers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSupplier),
+      await supplierCommands.create({
+        name: newSupplier.name,
+        contact_info: newSupplier.contact_info || null,
       });
-      if (res.ok) {
-        setShowAddForm(false);
-        setNewSupplier({ name: '', contact_info: '' });
-        void fetchData();
-      } else {
-        alert('Error adding supplier');
-      }
+      setShowAddForm(false);
+      setNewSupplier({ name: '', contact_info: '' });
+      void fetchData();
     } catch (error) {
-      console.error(error);
+      console.error('Error creating supplier:', error);
+      alert(`Error adding supplier: ${error}`);
     }
   };
 
@@ -71,33 +68,38 @@ export default function Suppliers() {
     e.preventDefault();
     if (!editSupplier) return;
     try {
-      const res = await fetch(`/api/suppliers/${editSupplier.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editSupplier),
+      await supplierCommands.update({
+        id: editSupplier.id,
+        name: editSupplier.name,
+        contact_info: editSupplier.contact_info,
       });
-      if (res.ok) {
-        setEditSupplier(null);
-        void fetchData();
-      } else {
-        alert('Error updating supplier');
-      }
+      setEditSupplier(null);
+      void fetchData();
     } catch (error) {
-      console.error(error);
+      console.error('Error updating supplier:', error);
+      alert(`Error updating supplier: ${error}`);
     }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this supplier?')) return;
     try {
-      const res = await fetch(`/api/suppliers/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        void fetchData();
-      } else {
-        alert('Error deleting supplier');
-      }
+      await supplierCommands.delete(id);
+      void fetchData();
     } catch (error) {
-      console.error(error);
+      console.error('Error deleting supplier:', error);
+      alert(`Error deleting supplier: ${error}`);
+    }
+  };
+
+  const handleAddMockData = async () => {
+    try {
+      const result = await supplierCommands.addMockData();
+      alert(result);
+      void fetchData();
+    } catch (error) {
+      console.error('Error adding mock data:', error);
+      alert(`Failed to add mock data: ${error}`);
     }
   };
 
@@ -124,6 +126,11 @@ export default function Suppliers() {
           />
         </div>
         <div className="flex gap-2">
+          {suppliers.length === 0 && (
+            <Button variant="outline" onClick={handleAddMockData}>
+              Load Sample Data
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => fetchData()}>
             Refresh
           </Button>

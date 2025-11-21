@@ -31,6 +31,23 @@ export interface UpdateProductInput {
   supplier_id: number | null;
 }
 
+export interface Supplier {
+  id: number;
+  name: string;
+  contact_info: string | null;
+}
+
+export interface CreateSupplierInput {
+  name: string;
+  contact_info: string | null;
+}
+
+export interface UpdateSupplierInput {
+  id: number;
+  name: string;
+  contact_info: string | null;
+}
+
 /**
  * Product Commands
  */
@@ -75,5 +92,52 @@ export const productCommands = {
    */
   addMockData: async (): Promise<string> => {
     return await invoke<string>('add_mock_products');
+  },
+};
+
+/**
+ * Supplier Commands
+ */
+export const supplierCommands = {
+  /**
+   * Get all suppliers, optionally filtered by search query
+   */
+  getAll: async (search?: string): Promise<Supplier[]> => {
+    return await invoke<Supplier[]>('get_suppliers', { search });
+  },
+
+  /**
+   * Get a single supplier by ID
+   */
+  getById: async (id: number): Promise<Supplier> => {
+    return await invoke<Supplier>('get_supplier', { id });
+  },
+
+  /**
+   * Create a new supplier
+   */
+  create: async (input: CreateSupplierInput): Promise<Supplier> => {
+    return await invoke<Supplier>('create_supplier', { input });
+  },
+
+  /**
+   * Update an existing supplier
+   */
+  update: async (input: UpdateSupplierInput): Promise<Supplier> => {
+    return await invoke<Supplier>('update_supplier', { input });
+  },
+
+  /**
+   * Delete a supplier by ID
+   */
+  delete: async (id: number): Promise<void> => {
+    return await invoke<void>('delete_supplier', { id });
+  },
+
+  /**
+   * Add mock supplier data for testing
+   */
+  addMockData: async (): Promise<string> => {
+    return await invoke<string>('add_mock_suppliers');
   },
 };

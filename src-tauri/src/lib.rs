@@ -36,6 +36,12 @@ pub fn run() {
       commands::update_product,
       commands::delete_product,
       commands::add_mock_products,
+      commands::get_suppliers,
+      commands::get_supplier,
+      commands::create_supplier,
+      commands::update_supplier,
+      commands::delete_supplier,
+      commands::add_mock_suppliers,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
