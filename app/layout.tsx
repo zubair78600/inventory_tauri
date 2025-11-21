@@ -4,8 +4,6 @@ import { Plus_Jakarta_Sans, Playfair_Display } from 'next/font/google';
 import Sidebar from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import './globals.css';
-import { authOptions } from '@/lib/auth';
-import { getServerSession } from 'next-auth/next';
 import { Providers } from '@/components/providers';
 
 const sans = Plus_Jakarta_Sans({
@@ -22,15 +20,13 @@ const display = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: 'Billing & Stock Management',
-  description: 'Inventory management system',
+  title: 'Inventory System',
+  description: 'Desktop inventory management system built with Tauri',
 };
 
-type MinimalSession = { user?: { email?: string } } | null;
-
-export default async function RootLayout({ children }: { children: ReactNode }) {
-  const session = (await getServerSession(authOptions)) as MinimalSession;
-  const userEmail = session?.user?.email ?? 'Guest';
+export default function RootLayout({ children }: { children: ReactNode }) {
+  // Auth will be implemented in Phase 10 - for now, desktop app runs in single-user mode
+  const userEmail = 'User';
   return (
     <html lang="en" suppressHydrationWarning className={`${sans.variable} ${display.variable}`}>
       <body>
