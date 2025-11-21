@@ -2,6 +2,7 @@
 
 import type { Product } from '@/types';
 import { useEffect, useState } from 'react';
+import { productCommands, customerCommands, invoiceCommands } from '@/lib/tauri';
 
 type CartItem = {
   product_id: number;
@@ -20,6 +21,7 @@ export default function Billing() {
   const [customerSuggestions, setCustomerSuggestions] = useState<
     { id: number; name: string; phone?: string | null }[]
   >([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState<boolean>(false);
   const [productSearch, setProductSearch] = useState<string>('');
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -34,8 +36,7 @@ export default function Billing() {
   const fetchProducts = async (showLoader = false) => {
     if (showLoader) setLoading(true);
     try {
-      const res = await fetch('/api/products');
-      const data = (await res.json()) as Product[];
+      const data = await productCommands.getAll();
       setProducts(data);
     } catch (error) {
       console.error(error);
@@ -69,14 +70,9 @@ export default function Billing() {
         return;
       }
       try {
-        const res = await fetch(`/api/customers?q=${encodeURIComponent(trimmed)}`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { id: number; name: string; phone?: string | null }[];
+        const data = await customerCommands.getAll(trimmed);
         setCustomerSuggestions(data);
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
         console.error(error);
       }
     };
@@ -151,40 +147,44 @@ export default function Billing() {
     const subtotal = cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
     const taxAmount = subtotal * (taxRate / 100);
 
-    const invoiceData = {
-      customer_name: customerName,
-      customer_phone: customerPhone,
-      items: cart,
-      tax_amount: taxAmount,
-      discount_amount: discount,
-      payment_method: paymentMethod,
-      origin_state: originState,
-      destination_state: destinationState,
-      language,
-    };
+    let finalCustomerId = selectedCustomerId;
 
     try {
-      const res = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invoiceData),
-      });
-
-      if (res.ok) {
-        alert('Invoice created successfully!');
-        setCart([]);
-        setDiscount(0);
-        setTaxRate(0);
-        setCustomerName('');
-        setCustomerPhone('');
-        await fetchProducts();
-      } else {
-        const err = await res.json();
-        alert('Error: ' + err.error);
+      // If no customer selected but name provided, create new customer
+      if (!finalCustomerId && customerName) {
+        const newCustomer = await customerCommands.create({
+          name: customerName,
+          phone: customerPhone || null,
+          email: null,
+          address: null,
+        });
+        finalCustomerId = newCustomer.id;
       }
+
+      const invoiceInput = {
+        customer_id: finalCustomerId,
+        items: cart.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        })),
+        tax_amount: taxAmount,
+        discount_amount: discount,
+        payment_method: paymentMethod,
+      };
+
+      await invoiceCommands.create(invoiceInput);
+      alert('Invoice created successfully!');
+      setCart([]);
+      setDiscount(0);
+      setTaxRate(0);
+      setCustomerName('');
+      setCustomerPhone('');
+      setSelectedCustomerId(null);
+      await fetchProducts();
     } catch (error) {
       console.error(error);
-      alert('Checkout failed');
+      alert('Checkout failed: ' + error);
     }
   };
 
@@ -205,6 +205,7 @@ export default function Billing() {
                 onFocus={() => setShowCustomerSuggestions(true)}
                 onChange={(e) => {
                   setCustomerName(e.target.value);
+                  setSelectedCustomerId(null); // Reset selected ID when typing
                   setShowCustomerSuggestions(true);
                 }}
                 onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 120)}
@@ -220,6 +221,7 @@ export default function Billing() {
                       onClick={() => {
                         setCustomerName(c.name);
                         setCustomerPhone(c.phone ?? '');
+                        setSelectedCustomerId(c.id);
                         setShowCustomerSuggestions(false);
                       }}
                     >
@@ -251,9 +253,8 @@ export default function Billing() {
                 <span className="text-center">Action</span>
               </div>
               <div
-                className={`divide-y divide-slate-200 dark:divide-slate-700/70 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800/70 overflow-hidden ${
-                  cart.length > 3 ? 'max-h-60 overflow-y-auto' : ''
-                }`}
+                className={`divide-y divide-slate-200 dark:divide-slate-700/70 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800/70 overflow-hidden ${cart.length > 3 ? 'max-h-60 overflow-y-auto' : ''
+                  }`}
               >
                 {cart.map((item) => (
                   <div

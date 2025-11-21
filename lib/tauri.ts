@@ -73,13 +73,20 @@ export interface UpdateCustomerInput {
   address: string | null;
 }
 
+export interface DashboardSale {
+  id: number;
+  invoice_number: string;
+  total_amount: number;
+  created_at: string;
+  customer_name: string | null;
+}
+
 export interface DashboardStats {
-  total_products: number;
-  total_suppliers: number;
-  total_customers: number;
-  total_invoices: number;
-  low_stock_products: number;
   total_revenue: number;
+  total_orders: number;
+  low_stock_count: number;
+  total_valuation: number;
+  recent_sales: DashboardSale[];
 }
 
 export interface LowStockProduct {
@@ -231,15 +238,19 @@ export const supplierCommands = {
   },
 };
 
-/**
- * Customer Commands
- */
 export const customerCommands = {
   /**
    * Get all customers, optionally filtered by search query
    */
   getAll: async (search?: string): Promise<Customer[]> => {
     return await invoke<Customer[]>('get_customers', { search });
+  },
+
+  /**
+   * Search for customers (alias for getAll with query)
+   */
+  search: async (query: string): Promise<Customer[]> => {
+    return await invoke<Customer[]>('get_customers', { search: query });
   },
 
   /**
@@ -278,6 +289,31 @@ export const customerCommands = {
   },
 };
 
+export interface CustomerInvoice {
+  id: number;
+  invoice_number: string;
+  total_amount: number;
+  discount_amount: number;
+  created_at: string;
+  item_count: number;
+}
+
+export interface CustomerProductStat {
+  name: string;
+  total_qty: number;
+}
+
+export interface CustomerReport {
+  customer: Customer;
+  invoices: CustomerInvoice[];
+  products: CustomerProductStat[];
+  stats: {
+    total_spent: number;
+    total_discount: number;
+    invoice_count: number;
+  };
+}
+
 /**
  * Analytics Commands
  */
@@ -294,6 +330,13 @@ export const analyticsCommands = {
    */
   getLowStockProducts: async (): Promise<LowStockProduct[]> => {
     return await invoke<LowStockProduct[]>('get_low_stock_products');
+  },
+
+  /**
+   * Search for customers and get detailed reports
+   */
+  customerSearch: async (query: string): Promise<CustomerReport[]> => {
+    return await invoke<CustomerReport[]>('customer_search', { query });
   },
 };
 

@@ -1,6 +1,7 @@
 'use client';
 
-import type { Customer, CustomerReport } from '@/types';
+import type { Customer } from '@/lib/tauri';
+import type { CustomerReport } from '@/lib/tauri';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -14,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { customerCommands } from '@/lib/tauri';
+import { customerCommands, analyticsCommands, invoiceCommands } from '@/lib/tauri';
 
 type NewCustomerFormState = {
   name: string;
@@ -70,11 +71,7 @@ export default function Customers() {
     setActiveInvoice(null);
     setInvoiceItems([]);
     try {
-      const res = await fetch(
-        `/api/reports/customer-search?q=${encodeURIComponent(customer.name)}`
-      );
-      if (!res.ok) throw new Error('Failed to load customer report');
-      const data = (await res.json()) as CustomerReport[];
+      const data = await analyticsCommands.customerSearch(customer.name);
       const match = data.find((r) => r.customer.id === customer.id) ?? data[0] ?? null;
       setSelectedReport(match);
     } catch (error) {
@@ -91,45 +88,39 @@ export default function Customers() {
     const invoiceDetail = selectedReport?.invoices.find((i) => i.id === invoiceId) ?? null;
     setActiveInvoiceDetail(invoiceDetail);
     try {
-      const res = await fetch(`/api/invoices/${invoiceId}/items`);
-      if (!res.ok) {
-        setInvoiceItems([]);
-        setInvoiceError('Could not load items for this invoice.');
-        return;
-      }
-      const data = (await res.json()) as {
-        id: number;
-        product_name: string;
-        quantity: number;
-        unit_price: number;
-        total: number;
-      }[];
+      const invoiceData = await invoiceCommands.getById(invoiceId);
+      const data = invoiceData.items.map(item => ({
+        id: item.id,
+        product_name: item.product_name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total: item.quantity * item.unit_price,
+      }));
       setInvoiceItems(data);
       setShowInvoiceModal(true);
     } catch (error) {
       console.error(error);
       setInvoiceItems([]);
+      setInvoiceError('Could not load items for this invoice.');
     }
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/customers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newCustomer),
+      await customerCommands.create({
+        name: newCustomer.name,
+        email: newCustomer.email || null,
+        phone: newCustomer.phone || null,
+        address: newCustomer.address || null,
       });
-      if (res.ok) {
-        setShowAddForm(false);
-        setNewCustomer({ name: '', email: '', phone: '', address: '' });
-        void fetchData();
-        setSelectedReport(null);
-      } else {
-        alert('Error adding customer');
-      }
+      setShowAddForm(false);
+      setNewCustomer({ name: '', email: '', phone: '', address: '' });
+      void fetchData();
+      setSelectedReport(null);
     } catch (error) {
       console.error(error);
+      alert('Error adding customer');
     }
   };
 
@@ -137,35 +128,31 @@ export default function Customers() {
     e.preventDefault();
     if (!editCustomer) return;
     try {
-      const res = await fetch(`/api/customers/${editCustomer.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editCustomer),
+      await customerCommands.update({
+        id: editCustomer.id,
+        name: editCustomer.name,
+        email: editCustomer.email,
+        phone: editCustomer.phone,
+        address: editCustomer.address,
       });
-      if (res.ok) {
-        setEditCustomer(null);
-        void fetchData();
-        setSelectedReport(null);
-      } else {
-        alert('Error updating customer');
-      }
+      setEditCustomer(null);
+      void fetchData();
+      setSelectedReport(null);
     } catch (error) {
       console.error(error);
+      alert('Error updating customer');
     }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this customer?')) return;
     try {
-      const res = await fetch(`/api/customers/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        void fetchData();
-        setSelectedReport(null);
-      } else {
-        alert('Error deleting customer');
-      }
+      await customerCommands.delete(id);
+      void fetchData();
+      setSelectedReport(null);
     } catch (error) {
       console.error(error);
+      alert('Error deleting customer: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 

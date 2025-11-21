@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Loader2, Search, SquareArrowOutUpRight } from 'lucide-react';
 
 type CategoryId = 'customers' | 'items' | 'suppliers' | 'invoices' | 'sales' | 'inventory';
@@ -21,11 +22,13 @@ type SearchResult = {
   href: string;
 };
 
-const fetchJSON = async <T,>(url: string): Promise<T> => {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Failed to fetch results');
-  return (await res.json()) as T;
-};
+import {
+  customerCommands,
+  productCommands,
+  supplierCommands,
+  invoiceCommands,
+  searchCommands,
+} from '@/lib/tauri';
 
 const categories: Category[] = [
   {
@@ -33,9 +36,7 @@ const categories: Category[] = [
     label: 'Customers',
     placeholder: 'Search in Customers ( / )',
     fetcher: async (q) => {
-      const data = await fetchJSON<
-        { id: number; name: string; email?: string | null; phone?: string | null }[]
-      >(`/api/customers${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+      const data = await customerCommands.search(q);
       return data.map((c) => ({
         id: c.id,
         title: c.name,
@@ -50,9 +51,7 @@ const categories: Category[] = [
     label: 'Items',
     placeholder: 'Search in Items ( / )',
     fetcher: async (q) => {
-      const data = await fetchJSON<
-        { id: number; name: string; sku: string; price: number; stock_quantity: number }[]
-      >(`/api/products${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+      const data = await productCommands.getAll(q);
       return data.map((p) => ({
         id: p.id,
         title: p.name,
@@ -67,9 +66,7 @@ const categories: Category[] = [
     label: 'Suppliers',
     placeholder: 'Search in Suppliers ( / )',
     fetcher: async (q) => {
-      const data = await fetchJSON<{ id: number; name: string; contact_info?: string | null }[]>(
-        `/api/suppliers${q ? `?q=${encodeURIComponent(q)}` : ''}`
-      );
+      const data = await supplierCommands.getAll(q);
       return data.map((s) => ({
         id: s.id,
         title: s.name,
@@ -84,18 +81,11 @@ const categories: Category[] = [
     label: 'Invoices',
     placeholder: 'Search in Invoices ( / )',
     fetcher: async (q) => {
-      const data = await fetchJSON<
-        {
-          id: number;
-          invoice_number: string;
-          customer_name?: string | null;
-          total_amount: number;
-        }[]
-      >(`/api/invoices${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-      return data.map((inv) => ({
+      const res = await searchCommands.omnisearch(q);
+      return res.invoices.map((inv) => ({
         id: inv.id,
         title: inv.invoice_number,
-        subtitle: inv.customer_name ?? 'Walk-in',
+        subtitle: 'Invoice', // search result doesn't have customer name, using generic
         meta: `₹${inv.total_amount.toFixed(2)}`,
         href: '/billing',
       }));
@@ -106,18 +96,11 @@ const categories: Category[] = [
     label: 'Sales',
     placeholder: 'Search Sales (invoices)',
     fetcher: async (q) => {
-      const data = await fetchJSON<
-        {
-          id: number;
-          invoice_number: string;
-          customer_name?: string | null;
-          total_amount: number;
-        }[]
-      >(`/api/invoices${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-      return data.slice(0, 10).map((inv) => ({
+      const res = await searchCommands.omnisearch(q);
+      return res.invoices.slice(0, 10).map((inv) => ({
         id: inv.id,
         title: inv.invoice_number,
-        subtitle: inv.customer_name ?? 'Walk-in',
+        subtitle: 'Invoice',
         meta: `₹${inv.total_amount.toFixed(2)}`,
         href: '/sales',
       }));
@@ -128,9 +111,7 @@ const categories: Category[] = [
     label: 'Inventory',
     placeholder: 'Search Inventory (name or SKU)',
     fetcher: async (q) => {
-      const data = await fetchJSON<
-        { id: number; name: string; sku: string; price: number; stock_quantity: number }[]
-      >(`/api/products${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+      const data = await productCommands.getAll(q);
       return data.map((p) => ({
         id: p.id,
         title: p.name,
@@ -179,27 +160,22 @@ export function OmniSearch() {
     setDetailLoading(true);
     try {
       if (activeCategory.id === 'customers') {
-        const res = await fetch(`/api/customers/${item.id}`);
-        if (!res.ok) throw new Error('Failed to load details');
-        const data = (await res.json()) as {
-          customer: { name: string; phone?: string | null; email?: string | null };
-          invoices?: {
-            id: number;
-            invoice_number: string;
-            total_amount: number;
-          }[];
-        };
+        const [customer, invoices] = await Promise.all([
+          customerCommands.getById(Number(item.id)),
+          invoiceCommands.getAll(Number(item.id)),
+        ]);
+
         setDetail({
           title: item.title,
           content: (
             <div className="space-y-2 text-sm">
-              <p className="font-semibold">{data.customer.name}</p>
-              <p className="text-muted-foreground">{data.customer.phone ?? 'No phone'}</p>
-              <p className="text-muted-foreground">{data.customer.email ?? 'No email'}</p>
+              <p className="font-semibold">{customer.name}</p>
+              <p className="text-muted-foreground">{customer.phone ?? 'No phone'}</p>
+              <p className="text-muted-foreground">{customer.email ?? 'No email'}</p>
               <div className="mt-2">
                 <p className="text-xs text-muted-foreground">Recent Invoices</p>
                 <div className="divide-y border rounded-lg max-h-48 overflow-auto">
-                  {data.invoices?.map((inv) => (
+                  {invoices?.map((inv) => (
                     <div key={inv.id} className="px-3 py-2 flex justify-between">
                       <span className="font-semibold">{inv.invoice_number}</span>
                       <span className="text-muted-foreground text-xs">
@@ -216,32 +192,14 @@ export function OmniSearch() {
       }
 
       if (activeCategory.id === 'invoices' || activeCategory.id === 'sales') {
-        const [itemRes, invRes] = await Promise.all([
-          fetch(`/api/invoices/${item.id}/items`),
-          fetch(`/api/invoices?q=${encodeURIComponent(String(item.title))}`),
-        ]);
-        const items =
-          itemRes && itemRes.ok
-            ? ((await itemRes.json()) as {
-                id: number;
-                product_name: string;
-                quantity: number;
-                unit_price: number;
-              }[])
-            : [];
-        type InvoiceBrief = {
-          id: number;
-          invoice_number: string;
-          customer_name?: string | null;
-          total_amount: number;
-        };
-        const invoiceList = invRes && invRes.ok ? ((await invRes.json()) as InvoiceBrief[]) : [];
-        const invoice = invoiceList.find((i) => i.id === item.id) ?? invoiceList[0];
+        const data = await invoiceCommands.getById(Number(item.id));
+        const { invoice, items } = data;
+
         setDetail({
           title: item.title,
           content: (
             <div className="space-y-2 text-sm">
-              <p className="font-semibold">{invoice?.customer_name ?? 'Walk-in'}</p>
+              <p className="font-semibold">{invoice?.customer_id ? 'Customer #' + invoice.customer_id : 'Walk-in'}</p>
               <p className="text-muted-foreground">
                 Total ₹{invoice?.total_amount?.toFixed?.(2) ?? '-'}
               </p>
@@ -383,9 +341,8 @@ export function OmniSearch() {
               {categories.map((cat) => (
                 <button
                   key={cat.id}
-                  className={`flex w-full items-center justify-between px-4 py-3 text-base hover:bg-sky-50 ${
-                    cat.id === activeCategory.id ? 'bg-sky-100 text-sky-800 font-semibold' : ''
-                  }`}
+                  className={`flex w-full items-center justify-between px-4 py-3 text-base hover:bg-sky-50 ${cat.id === activeCategory.id ? 'bg-sky-100 text-sky-800 font-semibold' : ''
+                    }`}
                   onClick={() => {
                     setActiveCategory(cat);
                     setShowCategories(false);
@@ -446,32 +403,49 @@ export function OmniSearch() {
         </div>
       )}
 
-      {detailOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-lg font-semibold">{detail?.title ?? 'Details'}</h3>
-              <button
-                type="button"
-                className="text-sm text-slate-500 hover:text-slate-700"
-                onClick={() => setDetailOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-            {detailLoading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading details...
+      {detailOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-xl font-semibold text-slate-900">{detail?.title ?? 'Details'}</h3>
+                <button
+                  type="button"
+                  className="rounded-full p-1 hover:bg-slate-100 text-slate-500 transition-colors"
+                  onClick={() => setDetailOpen(false)}
+                >
+                  <span className="sr-only">Close</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-5 w-5"
+                  >
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </button>
               </div>
-            )}
-            {!detailLoading && detail?.content && <div>{detail.content}</div>}
-            {!detailLoading && !detail?.content && (
-              <p className="text-sm text-muted-foreground">No details available.</p>
-            )}
-          </div>
-        </div>
-      )}
+              {detailLoading && (
+                <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  Loading details...
+                </div>
+              )}
+              {!detailLoading && detail?.content && <div>{detail.content}</div>}
+              {!detailLoading && !detail?.content && (
+                <p className="text-sm text-muted-foreground">No details available.</p>
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

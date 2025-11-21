@@ -1,6 +1,5 @@
 'use client';
 
-import type { DashboardStats } from '@/types';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -12,6 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { AlertTriangle, Package, Receipt, TrendingUp } from 'lucide-react';
+import { analyticsCommands, type DashboardStats } from '@/lib/tauri';
 
 export default function Dashboard() {
   const {
@@ -21,9 +21,7 @@ export default function Dashboard() {
   } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const res = await fetch('/api/reports');
-      if (!res.ok) throw new Error('Failed to load stats');
-      return (await res.json()) as DashboardStats;
+      return await analyticsCommands.getDashboardStats();
     },
     staleTime: 30_000,
   });

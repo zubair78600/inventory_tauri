@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { SearchPill } from '@/components/shared/SearchPill';
-import { productCommands } from '@/lib/tauri';
+import { productCommands, supplierCommands } from '@/lib/tauri';
 
 type NewProductFormState = {
   name: string;
@@ -50,8 +50,9 @@ export default function Inventory() {
       // Use Tauri command to get products
       const prodData = await productCommands.getAll();
       setProducts(prodData);
-      // TODO: Add supplier commands when Phase 4 is implemented
-      setSuppliers([]);
+
+      const suppData = await supplierCommands.getAll();
+      setSuppliers(suppData);
     } catch (error) {
       console.error('Error fetching products:', error);
       alert('Failed to fetch products');

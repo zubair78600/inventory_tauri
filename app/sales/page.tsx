@@ -4,6 +4,7 @@ import type { Invoice } from '@/types';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SearchPill } from '@/components/shared/SearchPill';
+import { invoiceCommands } from '@/lib/tauri';
 
 type InvoiceItem = {
   id: number;
@@ -27,8 +28,7 @@ export default function Sales() {
   useEffect(() => {
     const fetchSales = async () => {
       try {
-        const res = await fetch('/api/invoices');
-        const data = (await res.json()) as Invoice[];
+        const data = await invoiceCommands.getAll();
         setSales(data);
         setSelected((data ?? []).slice(0, 10)[0] ?? null);
       } catch (error) {
@@ -49,13 +49,18 @@ export default function Sales() {
       }
       setItemsLoading(true);
       try {
-        const res = await fetch(`/api/invoices/${selected.id}/items`);
-        if (!res.ok) {
-          setItems([]);
-          return;
-        }
-        const data = (await res.json()) as InvoiceItem[];
-        setItems(data);
+        const data = await invoiceCommands.getById(selected.id);
+        setItems(
+          data.items.map((item) => ({
+            id: item.id,
+            product_id: item.product_id,
+            product_name: item.product_name,
+            sku: item.product_sku,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total: item.quantity * item.unit_price,
+          }))
+        );
       } catch (error) {
         console.error(error);
         setItems([]);
@@ -101,11 +106,10 @@ export default function Sales() {
               {displayed.map((sale) => (
                 <button
                   key={sale.id}
-                  className={`w-full text-left px-4 py-3 flex items-center justify-between transition ${
-                    selected?.id === sale.id
+                  className={`w-full text-left px-4 py-3 flex items-center justify-between transition ${selected?.id === sale.id
                       ? 'bg-sky-50 border-l-4 border-sky-400'
                       : 'hover:bg-slate-50'
-                  }`}
+                    }`}
                   onClick={() => setSelected(sale)}
                 >
                   <div className="space-y-1">

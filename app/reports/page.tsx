@@ -1,9 +1,9 @@
 'use client';
 
-import type { CustomerReport, DashboardStats } from '@/types';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { analyticsCommands, type DashboardStats, type CustomerReport } from '@/lib/tauri';
 
 export default function Reports() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -24,13 +24,11 @@ export default function Reports() {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const res = await fetch('/api/reports');
-        const data = (await res.json()) as DashboardStats;
+        const data = await analyticsCommands.getDashboardStats();
         setStats(data);
-        const analyticsRes = await fetch('/api/analytics');
-        if (analyticsRes.ok) {
-          setAnalytics(await analyticsRes.json());
-        }
+        // TODO: Analytics endpoint not yet implemented
+        // const analyticsData = await analyticsCommands.getAnalytics();
+        // setAnalytics(analyticsData);
       } catch (err) {
         console.error(err);
       } finally {
@@ -47,8 +45,7 @@ export default function Reports() {
 
     setSearching(true);
     try {
-      const res = await fetch(`/api/reports/customer-search?q=${encodeURIComponent(searchQuery)}`);
-      const data = (await res.json()) as CustomerReport[];
+      const data = await analyticsCommands.customerSearch(searchQuery);
       setSearchResults(data);
     } catch (error) {
       console.error(error);
