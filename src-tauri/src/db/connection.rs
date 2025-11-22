@@ -41,6 +41,21 @@ impl Database {
     fn init_tables(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch(CREATE_TABLES_SQL)?;
+
+        // Migration: Add place column to customers if it doesn't exist
+        let place_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('customers') WHERE name = 'place'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !place_exists {
+            log::info!("Migrating: Adding place column to customers table");
+            conn.execute("ALTER TABLE customers ADD COLUMN place TEXT", [])?;
+        }
+
         Ok(())
     }
 

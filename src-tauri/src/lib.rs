@@ -51,6 +51,7 @@ pub fn run() {
       commands::get_dashboard_stats,
       commands::get_low_stock_products,
       commands::customer_search,
+      commands::get_customer_report,
       commands::get_invoices,
       commands::get_invoice,
       commands::create_invoice,

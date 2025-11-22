@@ -33,6 +33,8 @@ export default function Billing() {
   const [destinationState, setDestinationState] = useState<string>('KA');
   const [language, setLanguage] = useState<string>('en');
 
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
+
   const fetchProducts = async (showLoader = false) => {
     if (showLoader) setLoading(true);
     try {
@@ -157,6 +159,7 @@ export default function Billing() {
           phone: customerPhone || null,
           email: null,
           address: null,
+          place: null,
         });
         finalCustomerId = newCustomer.id;
       }
@@ -174,7 +177,7 @@ export default function Billing() {
       };
 
       await invoiceCommands.create(invoiceInput);
-      alert('Invoice created successfully!');
+      setShowSuccessModal(true);
       setCart([]);
       setDiscount(0);
       setTaxRate(0);
@@ -432,6 +435,41 @@ export default function Billing() {
           ))}
         </div>
       </div>
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl text-center space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+              <svg
+                className="h-6 w-6 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Invoice Generated!</h3>
+              <p className="text-sm text-slate-500">
+                The invoice has been successfully created and saved.
+              </p>
+            </div>
+            <button
+              className="btn btn-primary w-full"
+              onClick={() => setShowSuccessModal(false)}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

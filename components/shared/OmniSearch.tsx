@@ -348,7 +348,10 @@ export function OmniSearch() {
                     setShowCategories(false);
                     setQuery('');
                     setOpen(true);
-                    inputRef.current?.focus();
+                    // Use setTimeout to ensure focus happens after state updates and triggers properly
+                    setTimeout(() => {
+                      inputRef.current?.focus();
+                    }, 0);
                   }}
                 >
                   <span>{cat.label}</span>

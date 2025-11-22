@@ -35,6 +35,7 @@ model Customer {
   email    String?
   phone    String?
   address  String?
+  place    String?
   invoices Invoice[]
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")

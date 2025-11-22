@@ -54,8 +54,11 @@ export interface Customer {
   email: string | null;
   phone: string | null;
   address: string | null;
+  place: string | null;
   created_at: string;
   updated_at: string;
+  invoice_count?: number;
+  last_billed?: string | null;
 }
 
 export interface CreateCustomerInput {
@@ -63,6 +66,7 @@ export interface CreateCustomerInput {
   email: string | null;
   phone: string | null;
   address: string | null;
+  place: string | null;
 }
 
 export interface UpdateCustomerInput {
@@ -71,6 +75,7 @@ export interface UpdateCustomerInput {
   email: string | null;
   phone: string | null;
   address: string | null;
+  place: string | null;
 }
 
 export interface DashboardSale {
@@ -124,6 +129,8 @@ export interface InvoiceItemWithProduct {
   quantity: number;
   unit_price: number;
 }
+
+export type InvoiceItem = InvoiceItemWithProduct;
 
 export interface InvoiceWithItems {
   invoice: Invoice;
@@ -337,6 +344,13 @@ export const analyticsCommands = {
    */
   customerSearch: async (query: string): Promise<CustomerReport[]> => {
     return await invoke<CustomerReport[]>('customer_search', { query });
+  },
+
+  /**
+   * Get a detailed report for a single customer by ID
+   */
+  getReport: async (id: number): Promise<CustomerReport> => {
+    return await invoke<CustomerReport>('get_customer_report', { id });
   },
 };
 

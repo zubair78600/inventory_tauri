@@ -3,6 +3,7 @@
 import type { Customer } from '@/lib/tauri';
 import type { CustomerReport } from '@/lib/tauri';
 import { useEffect, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,9 +23,11 @@ type NewCustomerFormState = {
   email: string;
   phone: string;
   address: string;
+  place: string;
 };
 
 export default function Customers() {
+  const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
@@ -32,21 +35,13 @@ export default function Customers() {
   const [selectedReport, setSelectedReport] = useState<CustomerReport | null>(null);
   const [reportLoading, setReportLoading] = useState<boolean>(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [invoiceItems, setInvoiceItems] = useState<
-    { id: number; product_name: string; quantity: number; unit_price: number; total: number }[]
-  >([]);
-  const [activeInvoice, setActiveInvoice] = useState<number | null>(null);
-  const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
-  const [activeInvoiceDetail, setActiveInvoiceDetail] = useState<
-    CustomerReport['invoices'][number] | null
-  >(null);
   const [newCustomer, setNewCustomer] = useState<NewCustomerFormState>({
     name: '',
     email: '',
     phone: '',
     address: '',
+    place: '',
   });
 
   useEffect(() => {
@@ -68,8 +63,6 @@ export default function Customers() {
   const loadReport = async (customer: Customer) => {
     setReportLoading(true);
     setSelectedId(customer.id);
-    setActiveInvoice(null);
-    setInvoiceItems([]);
     try {
       const data = await analyticsCommands.customerSearch(customer.name);
       const match = data.find((r) => r.customer.id === customer.id) ?? data[0] ?? null;
@@ -82,29 +75,6 @@ export default function Customers() {
     }
   };
 
-  const loadInvoiceItems = async (invoiceId: number) => {
-    setActiveInvoice(invoiceId);
-    setInvoiceError(null);
-    const invoiceDetail = selectedReport?.invoices.find((i) => i.id === invoiceId) ?? null;
-    setActiveInvoiceDetail(invoiceDetail);
-    try {
-      const invoiceData = await invoiceCommands.getById(invoiceId);
-      const data = invoiceData.items.map(item => ({
-        id: item.id,
-        product_name: item.product_name,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total: item.quantity * item.unit_price,
-      }));
-      setInvoiceItems(data);
-      setShowInvoiceModal(true);
-    } catch (error) {
-      console.error(error);
-      setInvoiceItems([]);
-      setInvoiceError('Could not load items for this invoice.');
-    }
-  };
-
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
@@ -113,9 +83,10 @@ export default function Customers() {
         email: newCustomer.email || null,
         phone: newCustomer.phone || null,
         address: newCustomer.address || null,
+        place: newCustomer.place || null,
       });
       setShowAddForm(false);
-      setNewCustomer({ name: '', email: '', phone: '', address: '' });
+      setNewCustomer({ name: '', email: '', phone: '', address: '', place: '' });
       void fetchData();
       setSelectedReport(null);
     } catch (error) {
@@ -134,6 +105,7 @@ export default function Customers() {
         email: editCustomer.email,
         phone: editCustomer.phone,
         address: editCustomer.address,
+        place: editCustomer.place,
       });
       setEditCustomer(null);
       void fetchData();
@@ -164,7 +136,8 @@ export default function Customers() {
     return (
       c.name.toLowerCase().includes(term) ||
       (c.email ?? '').toLowerCase().includes(term) ||
-      (c.phone ?? '').toLowerCase().includes(term)
+      (c.phone ?? '').toLowerCase().includes(term) ||
+      (c.place ?? '').toLowerCase().includes(term)
     );
   });
 
@@ -207,6 +180,14 @@ export default function Customers() {
                 />
               </div>
               <div>
+                <label className="form-label">Place</label>
+                <Input
+                  value={newCustomer.place}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, place: e.target.value })}
+                  placeholder="City or Location"
+                />
+              </div>
+              <div>
                 <label className="form-label">Email</label>
                 <Input
                   type="email"
@@ -221,7 +202,7 @@ export default function Customers() {
                   onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
                 />
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className="form-label">Address</label>
                 <Input
                   value={newCustomer.address}
@@ -255,6 +236,13 @@ export default function Customers() {
                 />
               </div>
               <div>
+                <label className="form-label">Place</label>
+                <Input
+                  value={editCustomer.place || ''}
+                  onChange={(e) => setEditCustomer({ ...editCustomer, place: e.target.value })}
+                />
+              </div>
+              <div>
                 <label className="form-label">Email</label>
                 <Input
                   type="email"
@@ -269,7 +257,7 @@ export default function Customers() {
                   onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })}
                 />
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className="form-label">Address</label>
                 <Input
                   value={editCustomer.address || ''}
@@ -287,24 +275,25 @@ export default function Customers() {
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="table-container p-0 lg:col-span-2">
+      <div className="w-full">
+        <Card className="table-container p-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Customer</TableHead>
                 <TableHead>Contact</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead></TableHead>
+                <TableHead>Place</TableHead>
+                <TableHead>Last Billed</TableHead>
+                <TableHead>Invoices</TableHead>
+                <TableHead className="text-right pr-6">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(searchTerm ? filteredCustomers : filteredCustomers.slice(0, 10)).map((customer) => (
                 <TableRow
                   key={customer.id}
-                  className={`cursor-pointer hover:bg-sky-50/60 ${selectedId === customer.id ? 'bg-sky-50' : ''}`}
-                  onClick={() => loadReport(customer)}
+                  className={`hover:bg-sky-50/60 cursor-pointer ${selectedId === customer.id ? 'bg-sky-50' : ''}`}
+                  onClick={() => router.push(`/customers/details?id=${customer.id}`)}
                 >
                   <TableCell className="font-semibold space-y-1">
                     <div className="text-slate-900">{customer.name}</div>
@@ -318,194 +307,48 @@ export default function Customers() {
                       <div className="text-sm text-muted-foreground">{customer.phone}</div>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm">{customer.address ?? '—'}</TableCell>
+                  <TableCell className="text-sm">{customer.place ?? '—'}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {customer.created_at ? new Date(customer.created_at).toLocaleString() : '—'}
+                    {customer.last_billed ? new Date(customer.last_billed).toLocaleString() : '—'}
                   </TableCell>
-                  <TableCell className="space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditCustomer(customer);
-                      }}
+                  <TableCell>
+                    <div
+                      className="inline-flex items-center justify-center px-2 py-1 rounded-full bg-sky-100 text-sky-700 text-xs font-medium"
                     >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(customer.id);
-                      }}
-                    >
-                      Delete
-                    </Button>
+                      {customer.invoice_count ?? 0}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right pr-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 lg:px-3"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditCustomer(customer);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 lg:px-3 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(customer.id);
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center justify-between">
-            <h3 className="section-title mb-0">Purchases</h3>
-            {reportLoading && <span className="text-xs text-muted-foreground">Loading...</span>}
-          </div>
-          {selectedReport && (
-            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-              <div className="flex justify-between">
-                <span className="font-semibold">{selectedReport.customer.name}</span>
-                <span className="text-muted-foreground">
-                  Last invoice:{' '}
-                  {selectedReport.invoices[0]
-                    ? new Date(selectedReport.invoices[0].created_at).toLocaleString()
-                    : '—'}
-                </span>
-              </div>
-              <div className="text-muted-foreground">
-                {selectedReport.customer.phone ?? 'No phone'}
-              </div>
-            </div>
-          )}
-          {!selectedReport && !reportLoading && (
-            <p className="text-sm text-muted-foreground">
-              Select a customer to view their invoices and items.
-            </p>
-          )}
-          {selectedReport && (
-            <div className="space-y-4 mt-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm text-muted-foreground">Totals</p>
-                <p className="text-lg font-semibold">
-                  ₹{selectedReport.stats.total_spent.toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {selectedReport.stats.invoice_count} invoices • discounts ₹
-                  {selectedReport.stats.total_discount.toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Joined:{' '}
-                  {selectedReport.customer.created_at
-                    ? new Date(selectedReport.customer.created_at).toLocaleString()
-                    : '—'}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="text-sm font-semibold">Recent Invoices</h4>
-                <div className="space-y-2 max-h-40 overflow-auto pr-1">
-                  {selectedReport.invoices.map((inv) => (
-                    <button
-                      key={inv.id}
-                      className={`w-full text-left rounded-lg border px-3 py-2 transition ${
-                        activeInvoice === inv.id
-                          ? 'border-sky-300 bg-sky-50'
-                          : 'border-slate-200 hover:border-sky-200 hover:bg-sky-50/60'
-                      }`}
-                      onClick={() => loadInvoiceItems(inv.id)}
-                    >
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-semibold">{inv.invoice_number}</span>
-                        <span className="font-semibold">₹{inv.total_amount.toFixed(2)}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(inv.created_at).toLocaleDateString()} • {inv.item_count} items
-                      </p>
-                    </button>
-                  ))}
-                  {selectedReport.invoices.length === 0 && (
-                    <p className="text-xs text-muted-foreground">No invoices yet.</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold">
-                    {activeInvoice ? 'Items for selected invoice' : 'Items Purchased'}
-                  </h4>
-                  {activeInvoice && (
-                    <button
-                      className="text-xs text-sky-600 hover:text-sky-700"
-                      type="button"
-                      onClick={() => {
-                        setActiveInvoice(null);
-                        setInvoiceItems([]);
-                        setInvoiceError(null);
-                      }}
-                    >
-                      Show all
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-1 max-h-40 overflow-auto pr-1">
-                  {(activeInvoice ? invoiceItems : selectedReport.products).map((p, idx) => (
-                    <div
-                      key={`${'product_name' in p ? p.product_name : p.name ?? 'item'}-${idx}`}
-                      className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    >
-                      <span>{'product_name' in p ? p.product_name : p.name}</span>
-                      <span className="font-semibold">
-                        {'quantity' in p ? `${p.quantity} qty` : `${p.total_qty} qty`}
-                      </span>
-                    </div>
-                  ))}
-                  {(activeInvoice ? invoiceItems : selectedReport.products).length === 0 &&
-                    !invoiceError && (
-                      <p className="text-xs text-muted-foreground">No products purchased yet.</p>
-                    )}
-                  {invoiceError && <p className="text-xs text-danger">{invoiceError}</p>}
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        {showInvoiceModal && activeInvoiceDetail && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-lg">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Invoice</p>
-                  <p className="text-lg font-semibold">{activeInvoiceDetail.invoice_number}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(activeInvoiceDetail.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <Button variant="ghost" onClick={() => setShowInvoiceModal(false)}>
-                  Close
-                </Button>
-              </div>
-              <div className="mt-3 text-sm">
-                <p className="font-semibold">{selectedReport?.customer.name}</p>
-                <p className="text-muted-foreground">{selectedReport?.customer.phone ?? ''}</p>
-              </div>
-              <div className="mt-3 rounded-xl border border-slate-200 max-h-64 overflow-auto divide-y">
-                {invoiceItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="px-3 py-2 flex items-center justify-between text-sm"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900">{item.product_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        ₹{item.unit_price.toFixed(2)} • Qty {item.quantity}
-                      </p>
-                    </div>
-                    <p className="font-semibold text-slate-900">₹{item.total.toFixed(2)}</p>
-                  </div>
-                ))}
-                {invoiceItems.length === 0 && (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">No items loaded.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

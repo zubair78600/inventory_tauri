@@ -7,9 +7,7 @@ const nextConfig = {
   trailingSlash: true,
   distDir: 'out',
   // Disable server-side features for static export
-  eslint: {
-    ignoreDuringBuilds: false,
-  },
+
   typescript: {
     ignoreBuildErrors: false,
   },

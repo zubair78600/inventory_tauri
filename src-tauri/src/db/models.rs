@@ -28,6 +28,7 @@ pub struct Customer {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub address: Option<String>,
+    pub place: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

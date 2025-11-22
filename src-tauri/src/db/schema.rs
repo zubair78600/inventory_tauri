@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS customers (
     email TEXT,
     phone TEXT,
     address TEXT,
+    place TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

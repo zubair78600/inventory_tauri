@@ -181,7 +181,7 @@ pub fn customer_search(query: String, db: State<Database>) -> Result<Vec<Custome
     // Search for customers
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, email, phone, address, created_at, updated_at
+            "SELECT id, name, email, phone, address, place, created_at, updated_at
              FROM customers
              WHERE name LIKE ?1 OR phone LIKE ?1
              ORDER BY name
@@ -197,8 +197,9 @@ pub fn customer_search(query: String, db: State<Database>) -> Result<Vec<Custome
                 email: row.get(2)?,
                 phone: row.get(3)?,
                 address: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                place: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -278,4 +279,104 @@ pub fn customer_search(query: String, db: State<Database>) -> Result<Vec<Custome
 
     log::info!("Returning {} customer reports", reports.len());
     Ok(reports)
+}
+
+/// Get detailed report for a single customer by ID
+#[tauri::command]
+pub fn get_customer_report(id: i32, db: State<Database>) -> Result<CustomerReport, String> {
+    log::info!("get_customer_report called with id: {}", id);
+
+    let conn = db.conn();
+    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    // Get customer details
+    let customer = conn
+        .query_row(
+            "SELECT id, name, email, phone, address, place, created_at, updated_at
+             FROM customers
+             WHERE id = ?1",
+            [id],
+            |row| {
+                Ok(Customer {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    email: row.get(2)?,
+                    phone: row.get(3)?,
+                    address: row.get(4)?,
+                    place: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
+                })
+            },
+        )
+        .map_err(|e| format!("Customer not found: {}", e))?;
+
+    // Get invoices for this customer
+    let mut invoice_stmt = conn
+        .prepare(
+            "SELECT i.id, i.invoice_number, i.total_amount, i.discount_amount, i.created_at,
+             (SELECT COUNT(*) FROM invoice_items WHERE invoice_id = i.id) as item_count
+             FROM invoices i
+             WHERE i.customer_id = ?1
+             ORDER BY i.created_at DESC"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let invoices: Vec<CustomerInvoice> = invoice_stmt
+        .query_map([id], |row| {
+            Ok(CustomerInvoice {
+                id: row.get(0)?,
+                invoice_number: row.get(1)?,
+                total_amount: row.get(2)?,
+                discount_amount: row.get(3)?,
+                created_at: row.get(4)?,
+                item_count: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Get product statistics for this customer
+    let mut product_stmt = conn
+        .prepare(
+            "SELECT p.name, SUM(ii.quantity) as total_qty
+             FROM invoice_items ii
+             JOIN invoices i ON ii.invoice_id = i.id
+             JOIN products p ON ii.product_id = p.id
+             WHERE i.customer_id = ?1
+             GROUP BY p.id, p.name
+             ORDER BY total_qty DESC"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let products: Vec<CustomerProductStat> = product_stmt
+        .query_map([id], |row| {
+            Ok(CustomerProductStat {
+                name: row.get(0)?,
+                total_qty: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Calculate stats
+    let total_spent: f64 = invoices.iter().map(|i| i.total_amount).sum();
+    let total_discount: f64 = invoices.iter().map(|i| i.discount_amount).sum();
+    let invoice_count = invoices.len() as i32;
+
+    let report = CustomerReport {
+        customer,
+        invoices,
+        products,
+        stats: CustomerStats {
+            total_spent,
+            total_discount,
+            invoice_count,
+        },
+    };
+
+    log::info!("Returning report for customer id: {}", id);
+    Ok(report)
 }

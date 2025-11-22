@@ -9,6 +9,7 @@ pub struct CreateCustomerInput {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub address: Option<String>,
+    pub place: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,11 +19,20 @@ pub struct UpdateCustomerInput {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub address: Option<String>,
+    pub place: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomerWithStats {
+    #[serde(flatten)]
+    pub customer: Customer,
+    pub invoice_count: i32,
+    pub last_billed: Option<String>,
 }
 
 /// Get all customers, optionally filtered by search query
 #[tauri::command]
-pub fn get_customers(search: Option<String>, db: State<Database>) -> Result<Vec<Customer>, String> {
+pub fn get_customers(search: Option<String>, db: State<Database>) -> Result<Vec<CustomerWithStats>, String> {
     log::info!("get_customers called with search: {:?}", search);
 
     let conn = db.conn();
@@ -30,22 +40,37 @@ pub fn get_customers(search: Option<String>, db: State<Database>) -> Result<Vec<
 
     let mut customers = Vec::new();
 
+    let base_query = "
+        SELECT c.id, c.name, c.email, c.phone, c.address, c.place, c.created_at, c.updated_at,
+               COUNT(i.id) as invoice_count,
+               MAX(i.created_at) as last_billed
+        FROM customers c
+        LEFT JOIN invoices i ON c.id = i.customer_id
+    ";
+
+    let group_by = "GROUP BY c.id ORDER BY c.name";
+
     if let Some(search_term) = search {
         let search_pattern = format!("%{}%", search_term);
-        let mut stmt = conn
-            .prepare("SELECT id, name, email, phone, address, created_at, updated_at FROM customers WHERE name LIKE ?1 OR email LIKE ?1 OR phone LIKE ?1 ORDER BY name")
-            .map_err(|e| e.to_string())?;
+        let query = format!("{} WHERE c.name LIKE ?1 OR c.email LIKE ?1 OR c.phone LIKE ?1 OR c.place LIKE ?1 {}", base_query, group_by);
+        
+        let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let customer_iter = stmt
             .query_map([&search_pattern], |row| {
-                Ok(Customer {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    email: row.get(2)?,
-                    phone: row.get(3)?,
-                    address: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
+                Ok(CustomerWithStats {
+                    customer: Customer {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        email: row.get(2)?,
+                        phone: row.get(3)?,
+                        address: row.get(4)?,
+                        place: row.get(5)?,
+                        created_at: row.get(6)?,
+                        updated_at: row.get(7)?,
+                    },
+                    invoice_count: row.get(8)?,
+                    last_billed: row.get(9)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -54,20 +79,24 @@ pub fn get_customers(search: Option<String>, db: State<Database>) -> Result<Vec<
             customers.push(customer.map_err(|e| e.to_string())?);
         }
     } else {
-        let mut stmt = conn
-            .prepare("SELECT id, name, email, phone, address, created_at, updated_at FROM customers ORDER BY name")
-            .map_err(|e| e.to_string())?;
+        let query = format!("{} {}", base_query, group_by);
+        let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let customer_iter = stmt
             .query_map([], |row| {
-                Ok(Customer {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    email: row.get(2)?,
-                    phone: row.get(3)?,
-                    address: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
+                Ok(CustomerWithStats {
+                    customer: Customer {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        email: row.get(2)?,
+                        phone: row.get(3)?,
+                        address: row.get(4)?,
+                        place: row.get(5)?,
+                        created_at: row.get(6)?,
+                        updated_at: row.get(7)?,
+                    },
+                    invoice_count: row.get(8)?,
+                    last_billed: row.get(9)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -91,7 +120,7 @@ pub fn get_customer(id: i32, db: State<Database>) -> Result<Customer, String> {
 
     let customer = conn
         .query_row(
-            "SELECT id, name, email, phone, address, created_at, updated_at FROM customers WHERE id = ?1",
+            "SELECT id, name, email, phone, address, place, created_at, updated_at FROM customers WHERE id = ?1",
             [id],
             |row| {
                 Ok(Customer {
@@ -100,8 +129,9 @@ pub fn get_customer(id: i32, db: State<Database>) -> Result<Customer, String> {
                     email: row.get(2)?,
                     phone: row.get(3)?,
                     address: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
+                    place: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             },
         )
@@ -121,8 +151,8 @@ pub fn create_customer(input: CreateCustomerInput, db: State<Database>) -> Resul
     let now = Utc::now().to_rfc3339();
 
     conn.execute(
-        "INSERT INTO customers (name, email, phone, address, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        (&input.name, &input.email, &input.phone, &input.address, &now, &now),
+        "INSERT INTO customers (name, email, phone, address, place, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        (&input.name, &input.email, &input.phone, &input.address, &input.place, &now, &now),
     )
     .map_err(|e| format!("Failed to create customer: {}", e))?;
 
@@ -134,6 +164,7 @@ pub fn create_customer(input: CreateCustomerInput, db: State<Database>) -> Resul
         email: input.email,
         phone: input.phone,
         address: input.address,
+        place: input.place,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -154,8 +185,8 @@ pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Resul
 
     let rows_affected = conn
         .execute(
-            "UPDATE customers SET name = ?1, email = ?2, phone = ?3, address = ?4, updated_at = ?5 WHERE id = ?6",
-            (&input.name, &input.email, &input.phone, &input.address, &now, input.id),
+            "UPDATE customers SET name = ?1, email = ?2, phone = ?3, address = ?4, place = ?5, updated_at = ?6 WHERE id = ?7",
+            (&input.name, &input.email, &input.phone, &input.address, &input.place, &now, input.id),
         )
         .map_err(|e| format!("Failed to update customer: {}", e))?;
 
@@ -178,6 +209,7 @@ pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Resul
         email: input.email,
         phone: input.phone,
         address: input.address,
+        place: input.place,
         created_at,
         updated_at: now,
     };
@@ -192,31 +224,23 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_customer called with id: {}", id);
 
     let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    // Check if customer has any invoices
-    let invoice_count: i32 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM invoices WHERE customer_id = ?1",
-            [id],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
 
-    if invoice_count > 0 {
-        return Err(format!(
-            "Cannot delete customer: {} invoice(s) are linked to this customer",
-            invoice_count
-        ));
-    }
+    // Delete linked invoices first (invoice_items will cascade delete due to FK)
+    tx.execute("DELETE FROM invoices WHERE customer_id = ?1", [id])
+        .map_err(|e| format!("Failed to delete customer invoices: {}", e))?;
 
-    let rows_affected = conn
-        .execute("DELETE FROM customers WHERE id = ?1", [id])
+    // Delete the customer
+    let rows_affected = tx.execute("DELETE FROM customers WHERE id = ?1", [id])
         .map_err(|e| format!("Failed to delete customer: {}", e))?;
 
     if rows_affected == 0 {
         return Err(format!("Customer with id {} not found", id));
     }
+
+    tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
     log::info!("Deleted customer with id: {}", id);
     Ok(())
@@ -241,18 +265,18 @@ pub fn add_mock_customers(db: State<Database>) -> Result<String, String> {
     let now = Utc::now().to_rfc3339();
 
     let mock_customers = vec![
-        ("Acme Corporation", Some("contact@acme.com"), Some("+1-555-0201"), Some("123 Business St, NYC")),
-        ("Tech Startup Inc", Some("hello@techstartup.io"), Some("+1-555-0202"), Some("456 Innovation Ave, SF")),
-        ("Global Retail Co", Some("orders@globalretail.com"), Some("+1-555-0203"), Some("789 Commerce Blvd, LA")),
-        ("Local Small Business", Some("info@localsmb.com"), Some("+1-555-0204"), Some("321 Main St, Austin")),
-        ("Enterprise Solutions Ltd", Some("sales@enterprise.com"), Some("+1-555-0205"), Some("654 Corporate Dr, Boston")),
+        ("Acme Corporation", Some("contact@acme.com"), Some("+1-555-0201"), Some("123 Business St, NYC"), Some("NYC")),
+        ("Tech Startup Inc", Some("hello@techstartup.io"), Some("+1-555-0202"), Some("456 Innovation Ave, SF"), Some("SF")),
+        ("Global Retail Co", Some("orders@globalretail.com"), Some("+1-555-0203"), Some("789 Commerce Blvd, LA"), Some("LA")),
+        ("Local Small Business", Some("info@localsmb.com"), Some("+1-555-0204"), Some("321 Main St, Austin"), Some("Austin")),
+        ("Enterprise Solutions Ltd", Some("sales@enterprise.com"), Some("+1-555-0205"), Some("654 Corporate Dr, Boston"), Some("Boston")),
     ];
 
     let mut inserted = 0;
-    for (name, email, phone, address) in mock_customers {
+    for (name, email, phone, address, place) in mock_customers {
         conn.execute(
-            "INSERT INTO customers (name, email, phone, address, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            (name, email, phone, address, &now, &now),
+            "INSERT INTO customers (name, email, phone, address, place, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            (name, email, phone, address, place, &now, &now),
         )
         .map_err(|e| format!("Failed to insert mock customer: {}", e))?;
         inserted += 1;
