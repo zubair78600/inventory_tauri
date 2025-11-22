@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { customerCommands, analyticsCommands, invoiceCommands } from '@/lib/tauri';
+import { ask } from '@tauri-apps/plugin-dialog';
 
 type NewCustomerFormState = {
   name: string;
@@ -117,13 +118,26 @@ export default function Customers() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this customer?')) return;
+    const customer = customers.find(c => c.id === id);
+    const customerName = customer?.name || `Customer #${id}`;
+
     try {
+      const confirmed = await ask(`Are you sure you want to delete "${customerName}"?\n\nThis action cannot be undone and will also delete all associated invoices.`, {
+        title: 'Confirm Delete',
+        kind: 'warning',
+        okLabel: 'Delete',
+        cancelLabel: 'Cancel'
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
       await customerCommands.delete(id);
       void fetchData();
       setSelectedReport(null);
     } catch (error) {
-      console.error(error);
+      console.error('Error deleting customer:', error);
       alert('Error deleting customer: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
@@ -335,9 +349,10 @@ export default function Customers() {
                         variant="outline"
                         size="sm"
                         className="h-8 px-2 lg:px-3 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          handleDelete(customer.id);
+                          e.preventDefault();
+                          await handleDelete(customer.id);
                         }}
                       >
                         Delete

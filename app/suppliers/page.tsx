@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table';
 import { SearchPill } from '@/components/shared/SearchPill';
 import { supplierCommands } from '@/lib/tauri';
+import { ask } from '@tauri-apps/plugin-dialog';
 
 type NewSupplierForm = {
   name: string;
@@ -82,13 +83,27 @@ export default function Suppliers() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this supplier?')) return;
+    const supplier = suppliers.find(s => s.id === id);
+    const supplierName = supplier?.name || `Supplier #${id}`;
+
     try {
+      const confirmed = await ask(`Are you sure you want to delete "${supplierName}"?\n\nThis action cannot be undone and will unlink all associated products.`, {
+        title: 'Confirm Delete',
+        kind: 'warning',
+        okLabel: 'Delete',
+        cancelLabel: 'Cancel'
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
       await supplierCommands.delete(id);
       void fetchData();
     } catch (error) {
       console.error('Error deleting supplier:', error);
-      alert(`Error deleting supplier: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      alert(`Error deleting supplier: ${message}`);
     }
   };
 
@@ -225,10 +240,26 @@ export default function Suppliers() {
                 <TableCell className="font-semibold">{supplier.name}</TableCell>
                 <TableCell>{supplier.contact_info}</TableCell>
                 <TableCell className="space-x-2">
-                  <Button variant="ghost" size="sm" onClick={() => setEditSupplier(supplier)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditSupplier(supplier);
+                    }}
+                  >
                     Edit
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(supplier.id)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      await handleDelete(supplier.id);
+                    }}
+                  >
                     Delete
                   </Button>
                 </TableCell>

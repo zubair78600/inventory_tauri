@@ -2,12 +2,13 @@ mod commands;
 mod db;
 
 use db::Database;
-use tauri::Manager;
+use tauri::{Manager, menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder}};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_log::Builder::default().build())
+    .plugin(tauri_plugin_dialog::init())
     .setup(|app| {
       // Initialize database
       let app_handle = app.handle();
@@ -25,6 +26,31 @@ pub fn run() {
 
       // Store database in app state
       app.manage(db);
+
+      // Create Settings menu item
+      let settings_item = MenuItemBuilder::with_id("settings", "Settings...").build(app)?;
+
+      // Create Application submenu (appears under app name on macOS)
+      let app_submenu = SubmenuBuilder::new(app, "Inventory System")
+        .item(&settings_item)
+        .build()?;
+
+      // Create the menu bar
+      let menu = MenuBuilder::new(app)
+        .item(&app_submenu)
+        .build()?;
+
+      app.set_menu(menu)?;
+
+      // Handle menu events
+      let app_handle_clone = app.handle().clone();
+      app.on_menu_event(move |_app, event| {
+        if event.id() == "settings" {
+          if let Some(window) = app_handle_clone.get_webview_window("main") {
+            let _ = window.eval("window.location.href = '/settings'");
+          }
+        }
+      });
 
       log::info!("Application initialized successfully");
       Ok(())
@@ -59,6 +85,12 @@ pub fn run() {
       commands::omnisearch,
       commands::export_products_csv,
       commands::export_customers_csv,
+      commands::get_deleted_items,
+      commands::restore_customer,
+      commands::restore_product,
+      commands::restore_supplier,
+      commands::permanently_delete_item,
+      commands::clear_trash,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

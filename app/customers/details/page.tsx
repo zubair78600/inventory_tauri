@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { analyticsCommands, invoiceCommands, CustomerReport, Invoice, InvoiceItem } from '@/lib/tauri';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, MapPin, Phone, Mail, FileText, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Phone, Mail, FileText, Package, ChevronDown, ChevronUp, Home } from 'lucide-react';
 
 function CustomerDetailsContent() {
     const searchParams = useSearchParams();
@@ -100,6 +100,11 @@ function CustomerDetailsContent() {
                         {customer.email && (
                             <div className="flex items-center gap-1">
                                 <Mail className="w-4 h-4" /> {customer.email}
+                            </div>
+                        )}
+                        {customer.address && (
+                            <div className="flex items-center gap-1">
+                                <Home className="w-4 h-4" /> {customer.address}
                             </div>
                         )}
                     </div>

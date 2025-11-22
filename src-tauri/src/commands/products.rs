@@ -1,4 +1,5 @@
 use crate::db::{Database, Product};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -218,17 +219,63 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_product called with id: {}", id);
 
     let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    let rows_affected = conn
-        .execute("DELETE FROM products WHERE id = ?1", [id])
+    // Check if product is used in any invoices
+    let usage_count: i32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM invoice_items WHERE product_id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if usage_count > 0 {
+        return Err(format!(
+            "Cannot delete product: It is included in {} invoice(s). Delete the invoices first.",
+            usage_count
+        ));
+    }
+
+    // Get product data before deletion for audit trail
+    let product = conn.query_row(
+        "SELECT id, name, sku, price, stock_quantity, supplier_id FROM products WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(Product {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                sku: row.get(2)?,
+                price: row.get(3)?,
+                stock_quantity: row.get(4)?,
+                supplier_id: row.get(5)?,
+            })
+        },
+    )
+    .map_err(|e| format!("Product with id {} not found: {}", id, e))?;
+
+    let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    // Save to deleted_items
+    let product_json = serde_json::to_string(&product).map_err(|e| format!("Failed to serialize product: {}", e))?;
+    let now = Utc::now().to_rfc3339();
+    tx.execute(
+        "INSERT INTO deleted_items (entity_type, entity_id, entity_data, deleted_at) VALUES (?1, ?2, ?3, ?4)",
+        ("product", id, &product_json, &now),
+    )
+    .map_err(|e| format!("Failed to save to trash: {}", e))?;
+
+    // Delete the product
+    let rows_affected = tx.execute("DELETE FROM products WHERE id = ?1", [id])
         .map_err(|e| format!("Failed to delete product: {}", e))?;
 
     if rows_affected == 0 {
         return Err(format!("Product with id {} not found", id));
     }
 
-    log::info!("Deleted product with id: {}", id);
+    tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
+
+    log::info!("Deleted product with id: {} and saved to trash", id);
     Ok(())
 }
 

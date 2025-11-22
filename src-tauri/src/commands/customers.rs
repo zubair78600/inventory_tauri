@@ -226,7 +226,72 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
     let conn = db.conn();
     let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
+    // Get customer data before deletion for audit trail
+    let customer = conn.query_row(
+        "SELECT id, name, email, phone, address, place, created_at, updated_at FROM customers WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(Customer {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                email: row.get(2)?,
+                phone: row.get(3)?,
+                address: row.get(4)?,
+                place: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        },
+    )
+    .map_err(|e| format!("Customer with id {} not found: {}", id, e))?;
+
+    // Get related invoices (scoped to release borrow before transaction)
+    let invoices = {
+        let mut stmt = conn.prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, destination_state, fy_year, gst_rate, igst_amount, language, origin_state, sgst_amount FROM invoices WHERE customer_id = ?1").map_err(|e| e.to_string())?;
+        let invoices_iter = stmt.query_map([id], |row| {
+            Ok(crate::db::Invoice {
+                id: row.get(0)?,
+                invoice_number: row.get(1)?,
+                customer_id: row.get(2)?,
+                total_amount: row.get(3)?,
+                tax_amount: row.get(4)?,
+                discount_amount: row.get(5)?,
+                payment_method: row.get(6)?,
+                created_at: row.get(7)?,
+                cgst_amount: row.get(8)?,
+                destination_state: row.get(9)?,
+                fy_year: row.get(10)?,
+                gst_rate: row.get(11)?,
+                igst_amount: row.get(12)?,
+                language: row.get(13)?,
+                origin_state: row.get(14)?,
+                sgst_amount: row.get(15)?,
+            })
+        }).map_err(|e| e.to_string())?;
+
+        let mut invoices = Vec::new();
+        for invoice in invoices_iter {
+            invoices.push(invoice.map_err(|e| e.to_string())?);
+        }
+        invoices
+    };
+
     let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    // Save to deleted_items
+    let customer_json = serde_json::to_string(&customer).map_err(|e| format!("Failed to serialize customer: {}", e))?;
+    let invoices_json = if invoices.is_empty() {
+        None
+    } else {
+        Some(serde_json::to_string(&invoices).map_err(|e| format!("Failed to serialize invoices: {}", e))?)
+    };
+
+    let now = Utc::now().to_rfc3339();
+    tx.execute(
+        "INSERT INTO deleted_items (entity_type, entity_id, entity_data, related_data, deleted_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        ("customer", id, &customer_json, invoices_json.as_deref(), &now),
+    )
+    .map_err(|e| format!("Failed to save to trash: {}", e))?;
 
     // Delete linked invoices first (invoice_items will cascade delete due to FK)
     tx.execute("DELETE FROM invoices WHERE customer_id = ?1", [id])
@@ -242,7 +307,7 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
 
     tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
-    log::info!("Deleted customer with id: {}", id);
+    log::info!("Deleted customer with id: {} and saved to trash", id);
     Ok(())
 }
 

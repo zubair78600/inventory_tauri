@@ -64,6 +64,17 @@ CREATE TABLE IF NOT EXISTS invoice_items (
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
+-- Deleted Items table (audit trail for all deletions)
+CREATE TABLE IF NOT EXISTS deleted_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL,
+    entity_id INTEGER NOT NULL,
+    entity_data TEXT NOT NULL,
+    related_data TEXT,
+    deleted_at TEXT NOT NULL DEFAULT (datetime('now')),
+    deleted_by TEXT
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id);
@@ -73,4 +84,6 @@ CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);
 CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices(customer_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_deleted_items_type ON deleted_items(entity_type);
+CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
 "#;

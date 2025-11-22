@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Product model matching Prisma schema
@@ -75,4 +74,16 @@ pub struct InvoiceItemWithProduct {
     pub quantity: i32,
     pub unit_price: f64,
     pub total: f64,
+}
+
+/// Deleted Item model for audit trail
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeletedItem {
+    pub id: i32,
+    pub entity_type: String,
+    pub entity_id: i32,
+    pub entity_data: String,
+    pub related_data: Option<String>,
+    pub deleted_at: String,
+    pub deleted_by: Option<String>,
 }

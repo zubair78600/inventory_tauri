@@ -1,4 +1,5 @@
 use crate::db::{Database, Supplier};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -156,33 +157,69 @@ pub fn delete_supplier(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_supplier called with id: {}", id);
 
     let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    // Check if supplier is referenced by any products
-    let product_count: i32 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM products WHERE supplier_id = ?1",
-            [id],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+    // Get supplier data before deletion for audit trail
+    let supplier = conn.query_row(
+        "SELECT id, name, contact_info FROM suppliers WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(Supplier {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                contact_info: row.get(2)?,
+            })
+        },
+    )
+    .map_err(|e| format!("Supplier with id {} not found: {}", id, e))?;
 
-    if product_count > 0 {
-        return Err(format!(
-            "Cannot delete supplier: {} product(s) are linked to this supplier",
-            product_count
-        ));
-    }
+    // Get related product IDs (scoped to release borrow before transaction)
+    let product_ids = {
+        let mut stmt = conn.prepare("SELECT id FROM products WHERE supplier_id = ?1").map_err(|e| e.to_string())?;
+        let product_ids_iter = stmt.query_map([id], |row| row.get::<_, i32>(0)).map_err(|e| e.to_string())?;
 
-    let rows_affected = conn
-        .execute("DELETE FROM suppliers WHERE id = ?1", [id])
+        let mut product_ids = Vec::new();
+        for product_id in product_ids_iter {
+            product_ids.push(product_id.map_err(|e| e.to_string())?);
+        }
+        product_ids
+    };
+
+    let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    // Save to deleted_items
+    let supplier_json = serde_json::to_string(&supplier).map_err(|e| format!("Failed to serialize supplier: {}", e))?;
+    let product_ids_json = if product_ids.is_empty() {
+        None
+    } else {
+        Some(serde_json::to_string(&product_ids).map_err(|e| format!("Failed to serialize product IDs: {}", e))?)
+    };
+
+    let now = Utc::now().to_rfc3339();
+    tx.execute(
+        "INSERT INTO deleted_items (entity_type, entity_id, entity_data, related_data, deleted_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        ("supplier", id, &supplier_json, product_ids_json.as_deref(), &now),
+    )
+    .map_err(|e| format!("Failed to save to trash: {}", e))?;
+
+    // Unlink products from this supplier (set supplier_id to NULL)
+    tx.execute(
+        "UPDATE products SET supplier_id = NULL WHERE supplier_id = ?1",
+        [id],
+    )
+    .map_err(|e| format!("Failed to unlink products from supplier: {}", e))?;
+
+    // Delete the supplier
+    let rows_affected = tx.execute("DELETE FROM suppliers WHERE id = ?1", [id])
         .map_err(|e| format!("Failed to delete supplier: {}", e))?;
 
     if rows_affected == 0 {
         return Err(format!("Supplier with id {} not found", id));
     }
 
-    log::info!("Deleted supplier with id: {}", id);
+    tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
+
+    log::info!("Deleted supplier with id: {} and saved to trash", id);
     Ok(())
 }
 

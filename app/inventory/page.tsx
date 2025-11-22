@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { SearchPill } from '@/components/shared/SearchPill';
 import { productCommands, supplierCommands } from '@/lib/tauri';
+import { ask } from '@tauri-apps/plugin-dialog';
 
 type NewProductFormState = {
   name: string;
@@ -101,13 +102,27 @@ export default function Inventory() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this product?')) return;
+    const product = products.find(p => p.id === id);
+    const productName = product?.name || `Product #${id}`;
+
     try {
+      const confirmed = await ask(`Are you sure you want to delete "${productName}"?\n\nThis action cannot be undone.`, {
+        title: 'Confirm Delete',
+        kind: 'warning',
+        okLabel: 'Delete',
+        cancelLabel: 'Cancel'
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
       await productCommands.delete(id);
       void fetchData();
     } catch (error) {
       console.error('Error deleting product:', error);
-      alert(`Delete failed: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      alert(`Delete failed: ${message}`);
     }
   };
 
@@ -333,10 +348,26 @@ export default function Inventory() {
                   )}
                 </TableCell>
                 <TableCell className="space-x-2">
-                  <Button variant="ghost" size="sm" onClick={() => setEditProduct(product)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditProduct(product);
+                    }}
+                  >
                     Edit
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(product.id)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      await handleDelete(product.id);
+                    }}
+                  >
                     Delete
                   </Button>
                 </TableCell>

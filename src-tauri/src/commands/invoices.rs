@@ -234,11 +234,15 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
     let tax_amount = input.tax_amount.unwrap_or(0.0);
     let discount_amount = input.discount_amount.unwrap_or(0.0);
 
-    // Generate invoice number
-    let invoice_count: i32 = conn
-        .query_row("SELECT COUNT(*) FROM invoices", [], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
-    let invoice_number = format!("INV-{:06}", invoice_count + 1);
+    // Generate invoice number - get the highest number and increment
+    let next_number: i32 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(CAST(SUBSTR(invoice_number, 5) AS INTEGER)), 0) + 1 FROM invoices WHERE invoice_number LIKE 'INV-%'",
+            [],
+            |row| row.get(0)
+        )
+        .unwrap_or(1);
+    let invoice_number = format!("INV-{:06}", next_number);
 
     // Start transaction
     let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
@@ -304,7 +308,34 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
     let conn = db.conn();
     let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    // Get invoice items before deletion to restore stock
+    // Get invoice data before deletion for audit trail
+    let invoice = conn.query_row(
+        "SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, destination_state, fy_year, gst_rate, igst_amount, language, origin_state, sgst_amount FROM invoices WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(Invoice {
+                id: row.get(0)?,
+                invoice_number: row.get(1)?,
+                customer_id: row.get(2)?,
+                total_amount: row.get(3)?,
+                tax_amount: row.get(4)?,
+                discount_amount: row.get(5)?,
+                payment_method: row.get(6)?,
+                created_at: row.get(7)?,
+                cgst_amount: row.get(8)?,
+                destination_state: row.get(9)?,
+                fy_year: row.get(10)?,
+                gst_rate: row.get(11)?,
+                igst_amount: row.get(12)?,
+                language: row.get(13)?,
+                origin_state: row.get(14)?,
+                sgst_amount: row.get(15)?,
+            })
+        },
+    )
+    .map_err(|e| format!("Invoice with id {} not found: {}", id, e))?;
+
+    // Get invoice items before deletion (scoped to release borrow before transaction)
     let items = {
         let mut stmt = conn
             .prepare("SELECT product_id, quantity FROM invoice_items WHERE invoice_id = ?1")
@@ -323,6 +354,15 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
 
     // Start transaction
     let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    // Save to deleted_items
+    let invoice_json = serde_json::to_string(&invoice).map_err(|e| format!("Failed to serialize invoice: {}", e))?;
+    let now = Utc::now().to_rfc3339();
+    tx.execute(
+        "INSERT INTO deleted_items (entity_type, entity_id, entity_data, deleted_at) VALUES (?1, ?2, ?3, ?4)",
+        ("invoice", id, &invoice_json, &now),
+    )
+    .map_err(|e| format!("Failed to save to trash: {}", e))?;
 
     // Restore stock for each item
     for (product_id, quantity) in items {
@@ -349,6 +389,6 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
     // Commit transaction
     tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
-    log::info!("Deleted invoice with id: {}", id);
+    log::info!("Deleted invoice with id: {} and saved to trash", id);
     Ok(())
 }
