@@ -6,7 +6,6 @@ export type Supplier = {
   email: string | null;
   comments: string | null;
   state: string | null;
-  place: string | null;
   district: string | null;
   town: string | null;
 };
