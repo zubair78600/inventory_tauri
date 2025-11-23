@@ -7,6 +7,12 @@ use tauri::State;
 pub struct CreateSupplierInput {
     pub name: String,
     pub contact_info: Option<String>,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub comments: Option<String>,
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,6 +20,12 @@ pub struct UpdateSupplierInput {
     pub id: i32,
     pub name: String,
     pub contact_info: Option<String>,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub comments: Option<String>,
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
 }
 
 /// Get all suppliers, optionally filtered by search query
@@ -30,7 +42,7 @@ pub fn get_suppliers(search: Option<String>, db: State<Database>) -> Result<Vec<
         // Search by name or contact info
         let search_pattern = format!("%{}%", search_term);
         let mut stmt = conn
-            .prepare("SELECT id, name, contact_info FROM suppliers WHERE name LIKE ?1 OR contact_info LIKE ?1 ORDER BY name")
+            .prepare("SELECT id, name, contact_info, address, email, comments, state, district, town FROM suppliers WHERE name LIKE ?1 OR contact_info LIKE ?1 ORDER BY name")
             .map_err(|e| e.to_string())?;
 
         let supplier_iter = stmt
@@ -39,6 +51,12 @@ pub fn get_suppliers(search: Option<String>, db: State<Database>) -> Result<Vec<
                     id: row.get(0)?,
                     name: row.get(1)?,
                     contact_info: row.get(2)?,
+                    address: row.get(3)?,
+                    email: row.get(4)?,
+                    comments: row.get(5)?,
+                    state: row.get(6)?,
+                    district: row.get(7)?,
+                    town: row.get(8)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -49,7 +67,7 @@ pub fn get_suppliers(search: Option<String>, db: State<Database>) -> Result<Vec<
     } else {
         // Get all suppliers
         let mut stmt = conn
-            .prepare("SELECT id, name, contact_info FROM suppliers ORDER BY name")
+            .prepare("SELECT id, name, contact_info, address, email, comments, state, district, town FROM suppliers ORDER BY name")
             .map_err(|e| e.to_string())?;
 
         let supplier_iter = stmt
@@ -58,6 +76,12 @@ pub fn get_suppliers(search: Option<String>, db: State<Database>) -> Result<Vec<
                     id: row.get(0)?,
                     name: row.get(1)?,
                     contact_info: row.get(2)?,
+                    address: row.get(3)?,
+                    email: row.get(4)?,
+                    comments: row.get(5)?,
+                    state: row.get(6)?,
+                    district: row.get(7)?,
+                    town: row.get(8)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -81,13 +105,19 @@ pub fn get_supplier(id: i32, db: State<Database>) -> Result<Supplier, String> {
 
     let supplier = conn
         .query_row(
-            "SELECT id, name, contact_info FROM suppliers WHERE id = ?1",
+            "SELECT id, name, contact_info, address, email, comments, state, district, town FROM suppliers WHERE id = ?1",
             [id],
             |row| {
                 Ok(Supplier {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     contact_info: row.get(2)?,
+                    address: row.get(3)?,
+                    email: row.get(4)?,
+                    comments: row.get(5)?,
+                    state: row.get(6)?,
+                    district: row.get(7)?,
+                    town: row.get(8)?,
                 })
             },
         )
@@ -105,8 +135,8 @@ pub fn create_supplier(input: CreateSupplierInput, db: State<Database>) -> Resul
     let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
     conn.execute(
-        "INSERT INTO suppliers (name, contact_info) VALUES (?1, ?2)",
-        (&input.name, &input.contact_info),
+        "INSERT INTO suppliers (name, contact_info, address, email, comments, state, district, town) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        (&input.name, &input.contact_info, &input.address, &input.email, &input.comments, &input.state, &input.district, &input.town),
     )
     .map_err(|e| format!("Failed to create supplier: {}", e))?;
 
@@ -116,6 +146,12 @@ pub fn create_supplier(input: CreateSupplierInput, db: State<Database>) -> Resul
         id,
         name: input.name,
         contact_info: input.contact_info,
+        address: input.address,
+        email: input.email,
+        comments: input.comments,
+        state: input.state,
+        district: input.district,
+        town: input.town,
     };
 
     log::info!("Created supplier with id: {}", id);
@@ -132,8 +168,8 @@ pub fn update_supplier(input: UpdateSupplierInput, db: State<Database>) -> Resul
 
     let rows_affected = conn
         .execute(
-            "UPDATE suppliers SET name = ?1, contact_info = ?2 WHERE id = ?3",
-            (&input.name, &input.contact_info, input.id),
+            "UPDATE suppliers SET name = ?1, contact_info = ?2, address = ?3, email = ?4, comments = ?5, state = ?6, district = ?7, town = ?8 WHERE id = ?9",
+            (&input.name, &input.contact_info, &input.address, &input.email, &input.comments, &input.state, &input.district, &input.town, input.id),
         )
         .map_err(|e| format!("Failed to update supplier: {}", e))?;
 
@@ -145,6 +181,12 @@ pub fn update_supplier(input: UpdateSupplierInput, db: State<Database>) -> Resul
         id: input.id,
         name: input.name,
         contact_info: input.contact_info,
+        address: input.address,
+        email: input.email,
+        comments: input.comments,
+        state: input.state,
+        district: input.district,
+        town: input.town,
     };
 
     log::info!("Updated supplier with id: {}", input.id);
@@ -161,13 +203,19 @@ pub fn delete_supplier(id: i32, db: State<Database>) -> Result<(), String> {
 
     // Get supplier data before deletion for audit trail
     let supplier = conn.query_row(
-        "SELECT id, name, contact_info FROM suppliers WHERE id = ?1",
+        "SELECT id, name, contact_info, address, email, comments, state, district, town FROM suppliers WHERE id = ?1",
         [id],
         |row| {
             Ok(Supplier {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 contact_info: row.get(2)?,
+                address: row.get(3)?,
+                email: row.get(4)?,
+                comments: row.get(5)?,
+                state: row.get(6)?,
+                district: row.get(7)?,
+                town: row.get(8)?,
             })
         },
     )

@@ -24,6 +24,12 @@ model Supplier {
   id          Int       @id @default(autoincrement())
   name        String
   contactInfo String?   @map("contact_info")
+  address     String?
+  email       String?
+  comments    String?
+  state       String?
+  district    String?
+  town        String?
   products    Product[]
 
   @@map("suppliers")
@@ -53,13 +59,13 @@ model Invoice {
   paymentMethod    String?       @map("payment_method")
   createdAt        DateTime      @default(now()) @map("created_at")
   cgstAmount       Float?        @map("cgst_amount")
-  destinationState String?       @map("destination_state")
   fyYear           String?       @map("fy_year")
   gstRate          Float?        @map("gst_rate")
   igstAmount       Float?        @map("igst_amount")
-  language         String?       @map("language")
-  originState      String?       @map("origin_state")
   sgstAmount       Float?        @map("sgst_amount")
+  state            String?
+  district         String?
+  town             String?
   items            InvoiceItem[] @relation("InvoiceItemsOnInvoice")
   customer         Customer?     @relation(fields: [customerId], references: [id])
 

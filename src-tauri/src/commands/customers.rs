@@ -247,7 +247,7 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
 
     // Get related invoices (scoped to release borrow before transaction)
     let invoices = {
-        let mut stmt = conn.prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, destination_state, fy_year, gst_rate, igst_amount, language, origin_state, sgst_amount FROM invoices WHERE customer_id = ?1").map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices WHERE customer_id = ?1").map_err(|e| e.to_string())?;
         let invoices_iter = stmt.query_map([id], |row| {
             Ok(crate::db::Invoice {
                 id: row.get(0)?,
@@ -259,13 +259,13 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
                 payment_method: row.get(6)?,
                 created_at: row.get(7)?,
                 cgst_amount: row.get(8)?,
-                destination_state: row.get(9)?,
-                fy_year: row.get(10)?,
-                gst_rate: row.get(11)?,
-                igst_amount: row.get(12)?,
-                language: row.get(13)?,
-                origin_state: row.get(14)?,
-                sgst_amount: row.get(15)?,
+                fy_year: row.get(9)?,
+                gst_rate: row.get(10)?,
+                igst_amount: row.get(11)?,
+                sgst_amount: row.get(12)?,
+                state: row.get(13)?,
+                district: row.get(14)?,
+                town: row.get(15)?,
             })
         }).map_err(|e| e.to_string())?;
 

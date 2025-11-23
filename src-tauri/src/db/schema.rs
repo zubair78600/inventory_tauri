@@ -17,7 +17,13 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS suppliers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    contact_info TEXT
+    contact_info TEXT,
+    address TEXT,
+    email TEXT,
+    comments TEXT,
+    state TEXT,
+    district TEXT,
+    town TEXT
 );
 
 -- Customers table
@@ -43,13 +49,13 @@ CREATE TABLE IF NOT EXISTS invoices (
     payment_method TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     cgst_amount REAL,
-    destination_state TEXT,
     fy_year TEXT,
     gst_rate REAL,
     igst_amount REAL,
-    language TEXT,
-    origin_state TEXT,
     sgst_amount REAL,
+    state TEXT,
+    district TEXT,
+    town TEXT,
     FOREIGN KEY (customer_id) REFERENCES customers(id)
 );
 
@@ -86,4 +92,27 @@ CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id
 CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id);
 CREATE INDEX IF NOT EXISTS idx_deleted_items_type ON deleted_items(entity_type);
 CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
+"#;
+
+/// Migration SQL to update existing tables
+/// These are run after table creation to handle schema updates
+pub const MIGRATION_SQL: &str = r#"
+-- Suppliers table migrations
+-- Add district column if it doesn't exist (replaces place)
+-- Add town column if it doesn't exist
+-- Note: SQLite doesn't support DROP COLUMN directly, so we keep place for backwards compatibility
+
+-- Check and add district column to suppliers
+-- SQLite doesn't have an elegant way to check if column exists, so we use a workaround
+-- This will fail silently if column already exists (which is fine)
+
+PRAGMA foreign_keys=off;
+
+-- For suppliers: Add new columns if they don't exist
+-- SQLite will error if column exists, but we handle this in Rust
+
+-- For invoices: Add new columns if they don't exist
+-- SQLite will error if column exists, but we handle this in Rust
+
+PRAGMA foreign_keys=on;
 "#;

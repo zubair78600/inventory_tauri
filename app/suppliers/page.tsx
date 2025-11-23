@@ -14,12 +14,20 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { SearchPill } from '@/components/shared/SearchPill';
+import { LocationSelector } from '@/components/shared/LocationSelector';
+import { useLocationDefaults } from '@/hooks/useLocationDefaults';
 import { supplierCommands } from '@/lib/tauri';
 import { ask } from '@tauri-apps/plugin-dialog';
 
 type NewSupplierForm = {
   name: string;
   contact_info: string;
+  address: string;
+  email: string;
+  comments: string;
+  state: string;
+  district: string;
+  town: string;
 };
 
 export default function Suppliers() {
@@ -27,9 +35,19 @@ export default function Suppliers() {
   const [loading, setLoading] = useState<boolean>(true);
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
+
+  // Location smart defaults
+  const { defaults, recordSelection } = useLocationDefaults('suppliers');
+
   const [newSupplier, setNewSupplier] = useState<NewSupplierForm>({
     name: '',
     contact_info: '',
+    address: '',
+    email: '',
+    comments: '',
+    state: defaults?.state || '',
+    district: defaults?.district || '',
+    town: defaults?.town || '',
   });
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -55,9 +73,25 @@ export default function Suppliers() {
       await supplierCommands.create({
         name: newSupplier.name,
         contact_info: newSupplier.contact_info || null,
+        address: newSupplier.address || null,
+        email: newSupplier.email || null,
+        comments: newSupplier.comments || null,
+        state: newSupplier.state || null,
+        district: newSupplier.district || null,
+        town: newSupplier.town || null,
       });
+
+      // Record location selection for smart defaults
+      if (newSupplier.state && newSupplier.district && newSupplier.town) {
+        recordSelection({
+          state: newSupplier.state,
+          district: newSupplier.district,
+          town: newSupplier.town,
+        });
+      }
+
       setShowAddForm(false);
-      setNewSupplier({ name: '', contact_info: '' });
+      setNewSupplier({ name: '', contact_info: '', address: '', email: '', comments: '', state: defaults?.state || '', district: defaults?.district || '', town: defaults?.town || '' });
       void fetchData();
     } catch (error) {
       console.error('Error creating supplier:', error);
@@ -73,6 +107,12 @@ export default function Suppliers() {
         id: editSupplier.id,
         name: editSupplier.name,
         contact_info: editSupplier.contact_info,
+        address: editSupplier.address,
+        email: editSupplier.email,
+        comments: editSupplier.comments,
+        state: editSupplier.state,
+        district: editSupplier.district,
+        town: editSupplier.town,
       });
       setEditSupplier(null);
       void fetchData();
@@ -163,22 +203,61 @@ export default function Suppliers() {
       {showAddForm && (
         <Card className="space-y-4 p-5">
           <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Name</label>
-                <Input
-                  value={newSupplier.name}
-                  onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
-                  required
-                />
+            <div className="space-y-3">
+              {/* Line 1: Name, Ph.No, Email */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="form-label">Name</label>
+                  <Input
+                    value={newSupplier.name}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Ph.No</label>
+                  <Input
+                    value={newSupplier.contact_info}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, contact_info: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Email</label>
+                  <Input
+                    type="email"
+                    value={newSupplier.email}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="form-label">Contact Info</label>
-                <Input
-                  value={newSupplier.contact_info}
-                  onChange={(e) => setNewSupplier({ ...newSupplier, contact_info: e.target.value })}
-                />
+
+              {/* Line 2: Address, Comments */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label">Address</label>
+                  <Input
+                    value={newSupplier.address}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Comments</label>
+                  <Input
+                    value={newSupplier.comments}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, comments: e.target.value })}
+                  />
+                </div>
               </div>
+
+              {/* Line 3: State, District, Town */}
+              <LocationSelector
+                value={{
+                  state: newSupplier.state,
+                  district: newSupplier.district,
+                  town: newSupplier.town,
+                }}
+                onChange={(location) => setNewSupplier({ ...newSupplier, ...location })}
+              />
             </div>
             <Button type="submit" className="mt-4">
               Save Supplier
@@ -196,24 +275,69 @@ export default function Suppliers() {
             </Button>
           </div>
           <form onSubmit={handleUpdate}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Name</label>
-                <Input
-                  value={editSupplier.name}
-                  onChange={(e) => setEditSupplier({ ...editSupplier, name: e.target.value })}
-                  required
-                />
+            <div className="space-y-3">
+              {/* Line 1: Name, Ph.No, Email */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="form-label">Name</label>
+                  <Input
+                    value={editSupplier.name}
+                    onChange={(e) => setEditSupplier({ ...editSupplier, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Ph.No</label>
+                  <Input
+                    value={editSupplier.contact_info || ''}
+                    onChange={(e) =>
+                      setEditSupplier({ ...editSupplier, contact_info: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Email</label>
+                  <Input
+                    type="email"
+                    value={editSupplier.email || ''}
+                    onChange={(e) =>
+                      setEditSupplier({ ...editSupplier, email: e.target.value })
+                    }
+                  />
+                </div>
               </div>
-              <div>
-                <label className="form-label">Contact Info</label>
-                <Input
-                  value={editSupplier.contact_info || ''}
-                  onChange={(e) =>
-                    setEditSupplier({ ...editSupplier, contact_info: e.target.value })
-                  }
-                />
+
+              {/* Line 2: Address, Comments */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label">Address</label>
+                  <Input
+                    value={editSupplier.address || ''}
+                    onChange={(e) =>
+                      setEditSupplier({ ...editSupplier, address: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Comments</label>
+                  <Input
+                    value={editSupplier.comments || ''}
+                    onChange={(e) =>
+                      setEditSupplier({ ...editSupplier, comments: e.target.value })
+                    }
+                  />
+                </div>
               </div>
+
+              {/* Line 3: State, District, Town */}
+              <LocationSelector
+                value={{
+                  state: editSupplier.state || '',
+                  district: editSupplier.district || '',
+                  town: editSupplier.town || '',
+                }}
+                onChange={(location) => setEditSupplier({ ...editSupplier, ...location })}
+              />
             </div>
             <div className="flex gap-3 mt-4">
               <Button type="submit">Update Supplier</Button>
@@ -231,6 +355,11 @@ export default function Suppliers() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Contact Info</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Address</TableHead>
+              <TableHead>State</TableHead>
+              <TableHead>District</TableHead>
+              <TableHead>Town</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -239,6 +368,11 @@ export default function Suppliers() {
               <TableRow key={supplier.id}>
                 <TableCell className="font-semibold">{supplier.name}</TableCell>
                 <TableCell>{supplier.contact_info}</TableCell>
+                <TableCell>{supplier.email}</TableCell>
+                <TableCell>{supplier.address}</TableCell>
+                <TableCell>{supplier.state}</TableCell>
+                <TableCell>{supplier.district}</TableCell>
+                <TableCell>{supplier.town}</TableCell>
                 <TableCell className="space-x-2">
                   <Button
                     variant="outline"

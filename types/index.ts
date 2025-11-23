@@ -2,6 +2,13 @@ export type Supplier = {
   id: number;
   name: string;
   contact_info: string | null;
+  address: string | null;
+  email: string | null;
+  comments: string | null;
+  state: string | null;
+  place: string | null;
+  district: string | null;
+  town: string | null;
 };
 
 export type Product = {
@@ -32,14 +39,14 @@ export type Invoice = {
   discount_amount: number;
   payment_method: string | null;
   created_at: string;
-  origin_state?: string | null;
-  destination_state?: string | null;
   gst_rate?: number | null;
   cgst_amount?: number | null;
   sgst_amount?: number | null;
   igst_amount?: number | null;
   fy_year?: string | null;
-  language?: string | null;
+  state?: string | null;
+  district?: string | null;
+  town?: string | null;
   customer_name?: string | null;
   customer_phone?: string | null;
   item_count?: number;

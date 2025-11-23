@@ -3,6 +3,8 @@
 import type { Product } from '@/types';
 import { useEffect, useState } from 'react';
 import { productCommands, customerCommands, invoiceCommands } from '@/lib/tauri';
+import { LocationSelector } from '@/components/shared/LocationSelector';
+import { useLocationDefaults } from '@/hooks/useLocationDefaults';
 
 type CartItem = {
   product_id: number;
@@ -29,9 +31,14 @@ export default function Billing() {
   const [taxRate, setTaxRate] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
-  const [originState, setOriginState] = useState<string>('KA');
-  const [destinationState, setDestinationState] = useState<string>('KA');
-  const [language, setLanguage] = useState<string>('en');
+
+  // Location state management with smart defaults
+  const { defaults, recordSelection } = useLocationDefaults('invoices');
+  const [location, setLocation] = useState({
+    state: defaults?.state || '',
+    district: defaults?.district || '',
+    town: defaults?.town || '',
+  });
 
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
 
@@ -174,9 +181,18 @@ export default function Billing() {
         tax_amount: taxAmount,
         discount_amount: discount,
         payment_method: paymentMethod,
+        state: location.state || undefined,
+        district: location.district || undefined,
+        town: location.town || undefined,
       };
 
       await invoiceCommands.create(invoiceInput);
+
+      // Record location selection for smart defaults
+      if (location.state && location.district && location.town) {
+        recordSelection(location);
+      }
+
       setShowSuccessModal(true);
       setCart([]);
       setDiscount(0);
@@ -335,35 +351,10 @@ export default function Billing() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="form-label">Origin State (GST)</label>
-              <input
-                className="form-input"
-                value={originState}
-                onChange={(e) => setOriginState(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="form-label">Destination State</label>
-              <input
-                className="form-input"
-                value={destinationState}
-                onChange={(e) => setDestinationState(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="form-label">Invoice Language</label>
-              <select
-                className="form-select"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-              >
-                <option value="en">English</option>
-                <option value="hi">Hindi</option>
-              </select>
-            </div>
-          </div>
+          <LocationSelector
+            value={location}
+            onChange={setLocation}
+          />
 
           <div className="border-t border-slate-200 pt-3 flex items-center justify-between text-lg font-semibold">
             <span>Total</span>

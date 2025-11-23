@@ -35,17 +35,36 @@ export interface Supplier {
   id: number;
   name: string;
   contact_info: string | null;
+  address: string | null;
+  email: string | null;
+  comments: string | null;
+  state: string | null;
+  place: string | null;
+  district: string | null;
+  town: string | null;
 }
 
 export interface CreateSupplierInput {
   name: string;
   contact_info: string | null;
+  address: string | null;
+  email: string | null;
+  comments: string | null;
+  state: string | null;
+  district: string | null;
+  town: string | null;
 }
 
 export interface UpdateSupplierInput {
   id: number;
   name: string;
   contact_info: string | null;
+  address: string | null;
+  email: string | null;
+  comments: string | null;
+  state: string | null;
+  district: string | null;
+  town: string | null;
 }
 
 export interface Customer {
@@ -111,13 +130,13 @@ export interface Invoice {
   payment_method: string | null;
   created_at: string;
   cgst_amount: number | null;
-  destination_state: string | null;
   fy_year: string | null;
   gst_rate: number | null;
   igst_amount: number | null;
-  language: string | null;
-  origin_state: string | null;
   sgst_amount: number | null;
+  state: string | null;
+  district: string | null;
+  town: string | null;
 }
 
 export interface InvoiceItemWithProduct {
@@ -149,6 +168,9 @@ export interface CreateInvoiceInput {
   tax_amount?: number;
   discount_amount?: number;
   payment_method?: string;
+  state?: string;
+  district?: string;
+  town?: string;
 }
 
 /**
@@ -406,6 +428,11 @@ export interface SearchSupplier {
   id: number;
   name: string;
   contact_info: string | null;
+  address: string | null;
+  email: string | null;
+  comments: string | null;
+  state: string | null;
+  place: string | null;
 }
 
 export interface SearchInvoice {

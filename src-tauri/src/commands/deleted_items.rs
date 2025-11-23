@@ -125,7 +125,7 @@ pub fn restore_customer(deleted_item_id: i32, db: State<Database>) -> Result<(),
         if let Ok(invoices) = serde_json::from_str::<Vec<Invoice>>(&invoices_json) {
             for invoice in invoices {
                 tx.execute(
-                    "INSERT INTO invoices (id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, destination_state, fy_year, gst_rate, igst_amount, language, origin_state, sgst_amount) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                    "INSERT INTO invoices (id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                     (
                         invoice.id,
                         &invoice.invoice_number,
@@ -136,13 +136,13 @@ pub fn restore_customer(deleted_item_id: i32, db: State<Database>) -> Result<(),
                         &invoice.payment_method,
                         &invoice.created_at,
                         invoice.cgst_amount,
-                        &invoice.destination_state,
                         &invoice.fy_year,
                         invoice.gst_rate,
                         invoice.igst_amount,
-                        &invoice.language,
-                        &invoice.origin_state,
                         invoice.sgst_amount,
+                        &invoice.state,
+                        &invoice.district,
+                        &invoice.town,
                     ),
                 )
                 .map_err(|e| format!("Failed to restore invoice: {}", e))?;

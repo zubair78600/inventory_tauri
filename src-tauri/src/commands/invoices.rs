@@ -17,6 +17,9 @@ pub struct CreateInvoiceInput {
     pub tax_amount: Option<f64>,
     pub discount_amount: Option<f64>,
     pub payment_method: Option<String>,
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,7 +51,7 @@ pub fn get_invoices(customer_id: Option<i32>, db: State<Database>) -> Result<Vec
 
     if let Some(cust_id) = customer_id {
         let mut stmt = conn
-            .prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, destination_state, fy_year, gst_rate, igst_amount, language, origin_state, sgst_amount FROM invoices WHERE customer_id = ?1 ORDER BY created_at DESC")
+            .prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices WHERE customer_id = ?1 ORDER BY created_at DESC")
             .map_err(|e| e.to_string())?;
 
         let invoice_iter = stmt
@@ -63,13 +66,13 @@ pub fn get_invoices(customer_id: Option<i32>, db: State<Database>) -> Result<Vec
                     payment_method: row.get(6)?,
                     created_at: row.get(7)?,
                     cgst_amount: row.get(8)?,
-                    destination_state: row.get(9)?,
-                    fy_year: row.get(10)?,
-                    gst_rate: row.get(11)?,
-                    igst_amount: row.get(12)?,
-                    language: row.get(13)?,
-                    origin_state: row.get(14)?,
-                    sgst_amount: row.get(15)?,
+                    fy_year: row.get(9)?,
+                    gst_rate: row.get(10)?,
+                    igst_amount: row.get(11)?,
+                    sgst_amount: row.get(12)?,
+                    state: row.get(13)?,
+                    district: row.get(14)?,
+                    town: row.get(15)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -79,7 +82,7 @@ pub fn get_invoices(customer_id: Option<i32>, db: State<Database>) -> Result<Vec
         }
     } else {
         let mut stmt = conn
-            .prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, destination_state, fy_year, gst_rate, igst_amount, language, origin_state, sgst_amount FROM invoices ORDER BY created_at DESC")
+            .prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices ORDER BY created_at DESC")
             .map_err(|e| e.to_string())?;
 
         let invoice_iter = stmt
@@ -94,13 +97,13 @@ pub fn get_invoices(customer_id: Option<i32>, db: State<Database>) -> Result<Vec
                     payment_method: row.get(6)?,
                     created_at: row.get(7)?,
                     cgst_amount: row.get(8)?,
-                    destination_state: row.get(9)?,
-                    fy_year: row.get(10)?,
-                    gst_rate: row.get(11)?,
-                    igst_amount: row.get(12)?,
-                    language: row.get(13)?,
-                    origin_state: row.get(14)?,
-                    sgst_amount: row.get(15)?,
+                    fy_year: row.get(9)?,
+                    gst_rate: row.get(10)?,
+                    igst_amount: row.get(11)?,
+                    sgst_amount: row.get(12)?,
+                    state: row.get(13)?,
+                    district: row.get(14)?,
+                    town: row.get(15)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -125,7 +128,7 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
     // Get invoice
     let invoice = conn
         .query_row(
-            "SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, destination_state, fy_year, gst_rate, igst_amount, language, origin_state, sgst_amount FROM invoices WHERE id = ?1",
+            "SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices WHERE id = ?1",
             [id],
             |row| {
                 Ok(Invoice {
@@ -138,13 +141,13 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
                     payment_method: row.get(6)?,
                     created_at: row.get(7)?,
                     cgst_amount: row.get(8)?,
-                    destination_state: row.get(9)?,
-                    fy_year: row.get(10)?,
-                    gst_rate: row.get(11)?,
-                    igst_amount: row.get(12)?,
-                    language: row.get(13)?,
-                    origin_state: row.get(14)?,
-                    sgst_amount: row.get(15)?,
+                    fy_year: row.get(9)?,
+                    gst_rate: row.get(10)?,
+                    igst_amount: row.get(11)?,
+                    sgst_amount: row.get(12)?,
+                    state: row.get(13)?,
+                    district: row.get(14)?,
+                    town: row.get(15)?,
                 })
             },
         )
@@ -250,8 +253,8 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
     // Create invoice
     let now = Utc::now().to_rfc3339();
     tx.execute(
-        "INSERT INTO invoices (invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        (&invoice_number, input.customer_id, total_amount, tax_amount, discount_amount, &input.payment_method, &now),
+        "INSERT INTO invoices (invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, state, district, town) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        (&invoice_number, input.customer_id, total_amount, tax_amount, discount_amount, &input.payment_method, &now, &input.state, &input.district, &input.town),
     )
     .map_err(|e| format!("Failed to create invoice: {}", e))?;
 
@@ -287,13 +290,13 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
         payment_method: input.payment_method.clone(),
         created_at: now,
         cgst_amount: None,
-        destination_state: None,
         fy_year: None,
         gst_rate: None,
         igst_amount: None,
-        language: None,
-        origin_state: None,
         sgst_amount: None,
+        state: input.state.clone(),
+        district: input.district.clone(),
+        town: input.town.clone(),
     };
 
     log::info!("Created invoice with id: {}", invoice_id);
@@ -310,7 +313,7 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
 
     // Get invoice data before deletion for audit trail
     let invoice = conn.query_row(
-        "SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, destination_state, fy_year, gst_rate, igst_amount, language, origin_state, sgst_amount FROM invoices WHERE id = ?1",
+        "SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices WHERE id = ?1",
         [id],
         |row| {
             Ok(Invoice {
@@ -323,13 +326,13 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
                 payment_method: row.get(6)?,
                 created_at: row.get(7)?,
                 cgst_amount: row.get(8)?,
-                destination_state: row.get(9)?,
-                fy_year: row.get(10)?,
-                gst_rate: row.get(11)?,
-                igst_amount: row.get(12)?,
-                language: row.get(13)?,
-                origin_state: row.get(14)?,
-                sgst_amount: row.get(15)?,
+                fy_year: row.get(9)?,
+                gst_rate: row.get(10)?,
+                igst_amount: row.get(11)?,
+                sgst_amount: row.get(12)?,
+                state: row.get(13)?,
+                district: row.get(14)?,
+                town: row.get(15)?,
             })
         },
     )

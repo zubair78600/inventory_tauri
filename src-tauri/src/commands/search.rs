@@ -32,6 +32,11 @@ pub struct SearchSupplier {
     pub id: i32,
     pub name: String,
     pub contact_info: Option<String>,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub comments: Option<String>,
+    pub state: Option<String>,
+    pub place: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -98,7 +103,7 @@ pub fn omnisearch(query: String, db: State<Database>) -> Result<SearchResult, St
     // Search suppliers
     let mut suppliers = Vec::new();
     let mut stmt = conn
-        .prepare("SELECT id, name, contact_info FROM suppliers WHERE name LIKE ?1 OR contact_info LIKE ?1 LIMIT 10")
+        .prepare("SELECT id, name, contact_info, address, email, comments, state, place FROM suppliers WHERE name LIKE ?1 OR contact_info LIKE ?1 OR email LIKE ?1 LIMIT 10")
         .map_err(|e| e.to_string())?;
 
     let supplier_iter = stmt
@@ -107,6 +112,11 @@ pub fn omnisearch(query: String, db: State<Database>) -> Result<SearchResult, St
                 id: row.get(0)?,
                 name: row.get(1)?,
                 contact_info: row.get(2)?,
+                address: row.get(3)?,
+                email: row.get(4)?,
+                comments: row.get(5)?,
+                state: row.get(6)?,
+                place: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;

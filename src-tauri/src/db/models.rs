@@ -17,6 +17,12 @@ pub struct Supplier {
     pub id: i32,
     pub name: String,
     pub contact_info: Option<String>,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub comments: Option<String>,
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
 }
 
 /// Customer model matching Prisma schema
@@ -45,13 +51,14 @@ pub struct Invoice {
     pub created_at: String,
     // GST fields
     pub cgst_amount: Option<f64>,
-    pub destination_state: Option<String>,
     pub fy_year: Option<String>,
     pub gst_rate: Option<f64>,
     pub igst_amount: Option<f64>,
-    pub language: Option<String>,
-    pub origin_state: Option<String>,
     pub sgst_amount: Option<f64>,
+    // Location fields
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
 }
 
 /// InvoiceItem model matching Prisma schema
