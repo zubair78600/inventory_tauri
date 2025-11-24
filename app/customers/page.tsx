@@ -294,12 +294,12 @@ export default function Customers() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Place</TableHead>
-                <TableHead>Last Billed</TableHead>
-                <TableHead>Invoices</TableHead>
-                <TableHead className="text-right pr-6">Actions</TableHead>
+                <TableHead className="text-center font-bold">Customer</TableHead>
+                <TableHead className="text-center font-bold">Contact</TableHead>
+                <TableHead className="text-center font-bold">Place</TableHead>
+                <TableHead className="text-center font-bold">Last Billed</TableHead>
+                <TableHead className="text-center font-bold">Invoices</TableHead>
+                <TableHead className="text-center font-bold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -309,30 +309,32 @@ export default function Customers() {
                   className={`hover:bg-sky-50/60 cursor-pointer ${selectedId === customer.id ? 'bg-sky-50' : ''}`}
                   onClick={() => router.push(`/customers/details?id=${customer.id}`)}
                 >
-                  <TableCell className="font-semibold space-y-1">
+                  <TableCell className="font-semibold text-center space-y-1">
                     <div className="text-slate-900 dark:text-slate-100">{customer.name}</div>
                     {customer.address && (
                       <div className="text-xs text-muted-foreground">{customer.address}</div>
                     )}
                   </TableCell>
-                  <TableCell className="space-y-1">
+                  <TableCell className="text-center space-y-1">
                     {customer.email && <div className="text-sm">{customer.email}</div>}
                     {customer.phone && (
                       <div className="text-sm text-muted-foreground">{customer.phone}</div>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm">{customer.place ?? '—'}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  <TableCell className="text-center text-sm">{customer.place ?? '—'}</TableCell>
+                  <TableCell className="text-center text-sm text-muted-foreground">
                     {customer.last_billed ? new Date(customer.last_billed).toLocaleString() : '—'}
                   </TableCell>
-                  <TableCell>
-                    <div
-                      className="inline-flex items-center justify-center px-2 py-1 rounded-full bg-sky-100 text-sky-700 text-xs font-medium"
-                    >
-                      {customer.invoice_count ?? 0}
+                  <TableCell className="text-center">
+                    <div className="flex justify-center">
+                      <div
+                        className="inline-flex items-center justify-center px-2 py-1 rounded-full bg-sky-100 text-sky-700 text-xs font-medium"
+                      >
+                        {customer.invoice_count ?? 0}
+                      </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right pr-4">
+                  <TableCell className="text-center">
                     <div className="flex items-center justify-end gap-2">
                       <Button
                         variant="outline"

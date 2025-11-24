@@ -129,29 +129,29 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="rounded-none">Invoice #</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="rounded-none text-center font-bold">Invoice #</TableHead>
+                    <TableHead className="text-center font-bold">Customer</TableHead>
+                    <TableHead className="text-center font-bold">Date</TableHead>
+                    <TableHead className="text-center font-bold">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {stats.recent_sales.map((sale) => (
                     <TableRow key={sale.id} className="group">
-                      <TableCell className="font-semibold text-slate-900 dark:text-slate-50">
+                      <TableCell className="font-semibold text-slate-900 dark:text-slate-50 text-center">
                         {sale.invoice_number}
                       </TableCell>
-                      <TableCell className="text-slate-700 dark:text-slate-200">
+                      <TableCell className="text-slate-700 dark:text-slate-200 text-center">
                         {sale.customer_name ?? 'Walk-in Customer'}
                       </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-300">
+                      <TableCell className="text-slate-600 dark:text-slate-300 text-center">
                         {new Date(sale.created_at).toLocaleDateString('en-GB', {
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric',
                         })}
                       </TableCell>
-                      <TableCell className="font-semibold text-slate-900 dark:text-slate-50 text-right">
+                      <TableCell className="font-semibold text-slate-900 dark:text-slate-50 text-center">
                         ₹{sale.total_amount.toFixed(2)}
                       </TableCell>
                     </TableRow>

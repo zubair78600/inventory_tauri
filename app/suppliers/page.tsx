@@ -356,14 +356,14 @@ export default function Suppliers() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Contact Info</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead>District</TableHead>
-              <TableHead>Town</TableHead>
-              <TableHead></TableHead>
+              <TableHead className="text-center font-bold">Name</TableHead>
+              <TableHead className="text-center font-bold">Contact Info</TableHead>
+              <TableHead className="text-center font-bold">Email</TableHead>
+              <TableHead className="text-center font-bold">Address</TableHead>
+              <TableHead className="text-center font-bold">State</TableHead>
+              <TableHead className="text-center font-bold">District</TableHead>
+              <TableHead className="text-center font-bold">Town</TableHead>
+              <TableHead className="text-center font-bold">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -373,14 +373,14 @@ export default function Suppliers() {
                 className="hover:bg-sky-50/60 cursor-pointer"
                 onClick={() => router.push(`/suppliers/details?id=${supplier.id}`)}
               >
-                <TableCell className="font-semibold">{supplier.name}</TableCell>
-                <TableCell>{supplier.contact_info}</TableCell>
-                <TableCell>{supplier.email}</TableCell>
-                <TableCell>{supplier.address}</TableCell>
-                <TableCell>{supplier.state}</TableCell>
-                <TableCell>{supplier.district}</TableCell>
-                <TableCell>{supplier.town}</TableCell>
-                <TableCell className="space-x-2">
+                <TableCell className="font-semibold text-center">{supplier.name}</TableCell>
+                <TableCell className="text-center">{supplier.contact_info}</TableCell>
+                <TableCell className="text-center">{supplier.email}</TableCell>
+                <TableCell className="text-center">{supplier.address}</TableCell>
+                <TableCell className="text-center">{supplier.state}</TableCell>
+                <TableCell className="text-center">{supplier.district}</TableCell>
+                <TableCell className="text-center">{supplier.town}</TableCell>
+                <TableCell className="text-center space-x-2">
                   <Button
                     variant="outline"
                     size="sm"

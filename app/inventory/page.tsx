@@ -348,12 +348,12 @@ export default function Inventory() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>SKU</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Unit Price / Sale Price / Stock</TableHead>
-              <TableHead>Supplier</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead></TableHead>
+              <TableHead className="text-center font-bold">SKU</TableHead>
+              <TableHead className="text-center font-bold">Name</TableHead>
+              <TableHead className="text-center font-bold">Unit Price / Sale Price / Stock</TableHead>
+              <TableHead className="text-center font-bold">Supplier</TableHead>
+              <TableHead className="text-center font-bold">Status</TableHead>
+              <TableHead className="text-center font-bold">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -363,10 +363,10 @@ export default function Inventory() {
                 className="hover:bg-sky-50/60 cursor-pointer"
                 onClick={() => router.push(`/inventory/details?id=${product.id}`)}
               >
-                <TableCell className="font-semibold">{product.sku}</TableCell>
-                <TableCell>{product.name}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-3 text-sm">
+                <TableCell className="font-semibold text-center">{product.sku}</TableCell>
+                <TableCell className="text-center">{product.name}</TableCell>
+                <TableCell className="text-center">
+                  <div className="flex items-center justify-center gap-3 text-sm">
                     <span className="text-slate-600">
                       <span className="text-xs text-slate-400">Unit:</span> ₹{product.price.toFixed(2)}
                     </span>
@@ -380,17 +380,19 @@ export default function Inventory() {
                     </span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="text-center">
                   {suppliers.find((s) => s.id === product.supplier_id)?.name ?? '-'}
                 </TableCell>
-                <TableCell>
-                  {product.stock_quantity < 10 ? (
-                    <Badge className="bg-red-100 text-red-700">Low Stock</Badge>
-                  ) : (
-                    <Badge className="bg-emerald-100 text-emerald-700">In Stock</Badge>
-                  )}
+                <TableCell className="text-center">
+                  <div className="flex justify-center">
+                    {product.stock_quantity < 10 ? (
+                      <Badge className="bg-red-100 text-red-700">Low Stock</Badge>
+                    ) : (
+                      <Badge className="bg-emerald-100 text-emerald-700">In Stock</Badge>
+                    )}
+                  </div>
                 </TableCell>
-                <TableCell className="space-x-2">
+                <TableCell className="text-center space-x-2">
                   <Button
                     variant="outline"
                     size="sm"

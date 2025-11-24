@@ -8,6 +8,8 @@ export type Supplier = {
   state: string | null;
   district: string | null;
   town: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Product = {
@@ -15,8 +17,12 @@ export type Product = {
   name: string;
   sku: string;
   price: number;
+  selling_price: number | null;
+  initial_stock: number | null;
   stock_quantity: number;
   supplier_id: number | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Customer = {
