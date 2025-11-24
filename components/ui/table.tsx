@@ -24,7 +24,7 @@ export function TableRow({ className, ...props }: React.HTMLAttributes<HTMLTable
   return (
     <tr
       className={cn(
-        'transition-colors hover:bg-sky-50/60 dark:hover:bg-slate-800/80 last:[&>td]:border-b-0 last:[&>th]:border-b-0',
+        'transition-colors hover:bg-sky-50/60 dark:hover:bg-slate-800/80',
         className
       )}
       {...props}
@@ -47,7 +47,7 @@ export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTa
 export function TableCell({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) {
   return (
     <td
-      className={cn('px-4 py-3 border-b border-slate-100 dark:border-slate-700/60', className)}
+      className={cn('px-4 py-3 border-b border-slate-200/80 dark:border-slate-700/60', className)}
       {...props}
     />
   );

@@ -360,9 +360,7 @@ export default function Suppliers() {
               <TableHead className="text-center font-bold text-black">Contact Info</TableHead>
               <TableHead className="text-center font-bold text-black">Email</TableHead>
               <TableHead className="text-center font-bold text-black">Address</TableHead>
-              <TableHead className="text-center font-bold text-black">State</TableHead>
               <TableHead className="text-center font-bold text-black">District</TableHead>
-              <TableHead className="text-center font-bold text-black">Town</TableHead>
               <TableHead className="text-center font-bold text-black">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -377,9 +375,7 @@ export default function Suppliers() {
                 <TableCell className="text-center">{supplier.contact_info}</TableCell>
                 <TableCell className="text-center">{supplier.email}</TableCell>
                 <TableCell className="text-center">{supplier.address}</TableCell>
-                <TableCell className="text-center">{supplier.state}</TableCell>
                 <TableCell className="text-center">{supplier.district}</TableCell>
-                <TableCell className="text-center">{supplier.town}</TableCell>
                 <TableCell className="text-center">
                   <div className="flex justify-center gap-2">
                     <Button

@@ -119,15 +119,15 @@ function CustomerDetailsContent() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Spent</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{stats.total_spent.toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{stats.total_spent.toFixed(1)}</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Invoices</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{stats.invoice_count}</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Last Billed</div>
                     <div className="text-xl font-semibold text-slate-900 mt-1">
                         {invoices[0] ? new Date(invoices[0].created_at).toLocaleDateString() : 'Never'}
@@ -139,12 +139,12 @@ function CustomerDetailsContent() {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-slate-900">Invoice History</h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[2fr,1.5fr,1fr,1fr,1fr,0.5fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <div className="grid grid-cols-[2fr,1.5fr,1fr,1fr,1fr,0.5fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
                         <div>Invoice</div>
                         <div>Date</div>
-                        <div className="text-right">Amount</div>
-                        <div className="text-right">Items</div>
-                        <div className="text-right">Discount</div>
+                        <div>Amount</div>
+                        <div>Items</div>
+                        <div>Discount</div>
                         <div></div>
                     </div>
 
@@ -155,27 +155,27 @@ function CustomerDetailsContent() {
                                     className={`grid grid-cols-[2fr,1.5fr,1fr,1fr,1fr,0.5fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer ${expandedInvoiceId === invoice.id ? 'bg-slate-50' : ''}`}
                                     onClick={() => toggleInvoice(invoice.id)}
                                 >
-                                    <div className="font-medium text-slate-900 flex items-center gap-2">
+                                    <div className="font-medium text-slate-900 flex items-center justify-center gap-2">
                                         <FileText className="w-4 h-4 text-slate-400" />
                                         {invoice.invoice_number}
                                     </div>
-                                    <div className="text-slate-500 text-sm">
+                                    <div className="text-slate-500 text-sm text-center">
                                         {new Date(invoice.created_at).toLocaleString()}
                                     </div>
-                                    <div className="text-right font-medium text-slate-900">
-                                        ₹{invoice.total_amount.toFixed(2)}
+                                    <div className="text-center font-medium text-slate-900">
+                                        ₹{invoice.total_amount.toFixed(1)}
                                     </div>
-                                    <div className="text-right text-slate-500">
+                                    <div className="text-center text-slate-500">
                                         {invoice.item_count}
                                     </div>
-                                    <div className="text-right text-slate-500">
-                                        {invoice.discount_amount > 0 ? `₹${invoice.discount_amount.toFixed(2)}` : '-'}
+                                    <div className="text-center text-slate-500">
+                                        {invoice.discount_amount > 0 ? `₹${invoice.discount_amount.toFixed(1)}` : '-'}
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-center">
                                         {expandedInvoiceId === invoice.id ? (
-                                            <ChevronUp className="w-4 h-4 text-slate-400" />
+                                            <ChevronUp className="w-4 h-4 text-slate-400 mx-auto" />
                                         ) : (
-                                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                                            <ChevronDown className="w-4 h-4 text-slate-400 mx-auto" />
                                         )}
                                     </div>
                                 </div>
@@ -196,10 +196,10 @@ function CustomerDetailsContent() {
                                                                 {item.product_name}
                                                             </div>
                                                             <div className="text-slate-500">
-                                                                {item.quantity} x ₹{item.unit_price.toFixed(2)}
+                                                                {item.quantity} x ₹{item.unit_price.toFixed(1)}
                                                             </div>
                                                             <div className="text-right font-medium text-slate-900">
-                                                                ₹{(item.quantity * item.unit_price).toFixed(2)}
+                                                                ₹{(item.quantity * item.unit_price).toFixed(1)}
                                                             </div>
                                                         </div>
                                                     ))}

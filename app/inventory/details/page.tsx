@@ -97,34 +97,34 @@ function InventoryDetailsContent() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Stock Purchased</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{product.initial_stock || product.stock_quantity}</div>
                     <div className="text-xs text-slate-400 mt-1">Units</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Stock Amount</div>
-                    <div className="text-2xl font-bold text-indigo-600 mt-1">₹{((product.initial_stock || product.stock_quantity) * product.price).toFixed(2)}</div>
-                    <div className="text-xs text-slate-400 mt-1">Purchase value</div>
+                    <div className="text-2xl font-bold text-indigo-600 mt-1">₹{product.selling_price ? ((product.initial_stock || product.stock_quantity) * product.selling_price).toFixed(1) : '-'}</div>
+                    <div className="text-xs text-slate-400 mt-1">Selling value</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Current Stock</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{product.stock_quantity}</div>
                     <div className="text-xs text-slate-400 mt-1">Units</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Selling Price</div>
-                    <div className="text-2xl font-bold text-emerald-600 mt-1">₹{product.selling_price ? product.selling_price.toFixed(2) : '-'}</div>
+                    <div className="text-2xl font-bold text-emerald-600 mt-1">₹{product.selling_price ? product.selling_price.toFixed(1) : '-'}</div>
                     <div className="text-xs text-slate-400 mt-1">Per unit</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Sales Count</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{totalInvoices}</div>
                     <div className="text-xs text-slate-400 mt-1">Invoices</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Amount Sold</div>
-                    <div className="text-2xl font-bold text-sky-600 mt-1">₹{invoices.reduce((sum, inv) => sum + inv.total_amount, 0).toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-sky-600 mt-1">₹{invoices.reduce((sum, inv) => sum + inv.total_amount, 0).toFixed(1)}</div>
                     <div className="text-xs text-slate-400 mt-1">Revenue</div>
                 </Card>
             </div>
@@ -133,11 +133,11 @@ function InventoryDetailsContent() {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-slate-900">Sales History</h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
                         <div>Sale Date</div>
                         <div>Invoice</div>
-                        <div className="text-right">Total Amount</div>
-                        <div className="text-right">Payment</div>
+                        <div>Total Amount</div>
+                        <div>Payment</div>
                     </div>
 
                     <div className="divide-y divide-slate-100">
@@ -148,17 +148,17 @@ function InventoryDetailsContent() {
                             // We don't have a dedicated invoice details page yet, but maybe we can link to billing or sales?
                             // For now just visual
                             >
-                                <div className="text-slate-500 text-sm">
+                                <div className="text-slate-500 text-sm text-center">
                                     {new Date(invoice.created_at).toLocaleString()}
                                 </div>
-                                <div className="font-medium text-slate-900 flex items-center gap-2">
+                                <div className="font-medium text-slate-900 flex items-center justify-center gap-2">
                                     <FileText className="w-4 h-4 text-slate-400" />
                                     {invoice.invoice_number}
                                 </div>
-                                <div className="text-right font-medium text-slate-900">
-                                    ₹{invoice.total_amount.toFixed(2)}
+                                <div className="text-center font-medium text-slate-900">
+                                    ₹{invoice.total_amount.toFixed(1)}
                                 </div>
-                                <div className="text-right text-slate-500 capitalize">
+                                <div className="text-center text-slate-500 capitalize">
                                     {invoice.payment_method || '-'}
                                 </div>
                             </div>

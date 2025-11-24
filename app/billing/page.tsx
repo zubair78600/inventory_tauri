@@ -115,7 +115,7 @@ export default function Billing() {
         {
           product_id: product.id,
           name: product.name,
-          unit_price: product.price,
+          unit_price: product.selling_price || product.price,
           quantity: 1,
           max_stock: product.stock_quantity,
         },
@@ -392,7 +392,7 @@ export default function Billing() {
                 <div className="font-semibold">{product.name}</div>
                 <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
                 <div className="flex justify-between mt-2 text-sm">
-                  <span>₹{product.price.toFixed(2)}</span>
+                  <span>₹{(product.selling_price || product.price).toFixed(2)}</span>
                   <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
                     Stock: {product.stock_quantity}
                   </span>
@@ -417,7 +417,7 @@ export default function Billing() {
               <div className="font-semibold">{product.name}</div>
               <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
               <div className="flex justify-between mt-2 text-sm">
-                <span>₹{product.price.toFixed(2)}</span>
+                <span>₹{(product.selling_price || product.price).toFixed(2)}</span>
                 <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
                   Stock: {product.stock_quantity}
                 </span>

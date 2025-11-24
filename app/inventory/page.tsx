@@ -205,7 +205,7 @@ export default function Inventory() {
                 />
               </div>
               <div>
-                <label className="form-label">Unit Price (Purchase Price)</label>
+                <label className="form-label">Actual Price (Purchase Price)</label>
                 <Input
                   type="number"
                   step="0.01"
@@ -281,7 +281,7 @@ export default function Inventory() {
                 />
               </div>
               <div>
-                <label className="form-label">Unit Price (Purchase Price)</label>
+                <label className="form-label">Actual Price (Purchase Price)</label>
                 <Input
                   type="number"
                   step="0.01"
@@ -350,7 +350,7 @@ export default function Inventory() {
             <TableRow>
               <TableHead className="text-center font-bold text-black">SKU</TableHead>
               <TableHead className="text-center font-bold text-black">Name</TableHead>
-              <TableHead className="text-center font-bold text-black">Unit Price / Sale Price / Stock</TableHead>
+              <TableHead className="text-center font-bold text-black">Actual Price / Sale Price / Stock</TableHead>
               <TableHead className="text-center font-bold text-black">Supplier</TableHead>
               <TableHead className="text-center font-bold text-black">Status</TableHead>
               <TableHead className="text-center font-bold text-black">Actions</TableHead>
@@ -368,11 +368,11 @@ export default function Inventory() {
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-3 text-sm">
                     <span className="text-slate-600">
-                      <span className="text-xs text-slate-400">Unit:</span> ₹{product.price.toFixed(2)}
+                      <span className="text-xs text-slate-400">Actual:</span> ₹{product.price.toFixed(1)}
                     </span>
                     <span className="text-slate-300">|</span>
                     <span className="text-emerald-600 font-medium">
-                      <span className="text-xs text-slate-400">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(2) : '-'}
+                      <span className="text-xs text-slate-400">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(1) : '-'}
                     </span>
                     <span className="text-slate-300">|</span>
                     <span className="text-slate-700 font-medium">

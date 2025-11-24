@@ -71,9 +71,10 @@ function SupplierDetailsContent() {
                     </Button>
                     <h1 className="text-3xl font-bold text-slate-900">{supplier.name}</h1>
                     <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
-                        {supplier.town && (
+                        {(supplier.state || supplier.district || supplier.town) && (
                             <div className="flex items-center gap-1">
-                                <MapPin className="w-4 h-4" /> {supplier.town}, {supplier.state}
+                                <MapPin className="w-4 h-4" />
+                                {[supplier.town, supplier.district, supplier.state].filter(Boolean).join(', ')}
                             </div>
                         )}
                         {supplier.contact_info && (
@@ -103,17 +104,17 @@ function SupplierDetailsContent() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Products</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{products.length}</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Stock</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{totalStock}</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Stock Value</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{totalValue.toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{totalValue.toFixed(1)}</div>
                 </Card>
             </div>
 
@@ -121,12 +122,12 @@ function SupplierDetailsContent() {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-slate-900">Supplied Products</h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
                         <div>Purchased Date</div>
                         <div>Product</div>
                         <div>SKU</div>
-                        <div className="text-right">Price</div>
-                        <div className="text-right">Stock</div>
+                        <div>Price</div>
+                        <div>Stock</div>
                     </div>
 
                     <div className="divide-y divide-slate-100">
@@ -136,20 +137,20 @@ function SupplierDetailsContent() {
                                 className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
                                 onClick={() => router.push(`/inventory/details?id=${product.id}`)}
                             >
-                                <div className="text-slate-500 text-sm">
+                                <div className="text-slate-500 text-sm text-center">
                                     {new Date(product.created_at).toLocaleString()}
                                 </div>
-                                <div className="font-medium text-slate-900 flex items-center gap-2">
+                                <div className="font-medium text-slate-900 flex items-center justify-center gap-2">
                                     <Package className="w-4 h-4 text-slate-400" />
                                     {product.name}
                                 </div>
-                                <div className="text-slate-500 text-sm">
+                                <div className="text-slate-500 text-sm text-center">
                                     {product.sku}
                                 </div>
-                                <div className="text-right font-medium text-slate-900">
-                                    ₹{product.price.toFixed(2)}
+                                <div className="text-center font-medium text-slate-900">
+                                    ₹{product.price.toFixed(1)}
                                 </div>
-                                <div className="text-right text-slate-500">
+                                <div className="text-center text-slate-500">
                                     {product.stock_quantity}
                                 </div>
                             </div>
