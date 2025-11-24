@@ -335,11 +335,11 @@ export default function Customers() {
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex justify-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 px-2 lg:px-3"
+                        className="text-xs h-7 px-2"
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditCustomer(customer);
@@ -350,7 +350,7 @@ export default function Customers() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 px-2 lg:px-3 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                        className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
                         onClick={async (e) => {
                           e.stopPropagation();
                           e.preventDefault();

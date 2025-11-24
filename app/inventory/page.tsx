@@ -392,29 +392,32 @@ export default function Inventory() {
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="text-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditProduct(product);
-                    }}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      await handleDelete(product.id);
-                    }}
-                  >
-                    Delete
-                  </Button>
+                <TableCell className="text-center">
+                  <div className="flex justify-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7 px-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditProduct(product);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        await handleDelete(product.id);
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
