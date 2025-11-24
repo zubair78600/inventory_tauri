@@ -7,6 +7,8 @@ pub struct Product {
     pub name: String,
     pub sku: String,
     pub price: f64,
+    pub selling_price: Option<f64>,
+    pub initial_stock: Option<i32>,
     pub stock_quantity: i32,
     pub supplier_id: Option<i32>,
     pub created_at: String,

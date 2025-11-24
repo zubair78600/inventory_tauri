@@ -96,18 +96,27 @@ function InventoryDetailsContent() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                    <div className="text-sm text-slate-500 font-medium">Stock Purchased</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">{product.initial_stock || 0}</div>
+                </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm">
                     <div className="text-sm text-slate-500 font-medium">Current Stock</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{product.stock_quantity}</div>
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm">
-                    <div className="text-sm text-slate-500 font-medium">Unit Price</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{product.price.toFixed(2)}</div>
+                    <div className="text-sm text-slate-500 font-medium">Selling Price</div>
+                    <div className="text-2xl font-bold text-emerald-600 mt-1">₹{product.selling_price ? product.selling_price.toFixed(2) : '-'}</div>
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm">
-                    <div className="text-sm text-slate-500 font-medium">Sales Count</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{totalInvoices} <span className="text-sm font-normal text-slate-400">invoices</span></div>
+                    <div className="text-sm text-slate-500 font-medium">Total Sales Count</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">{totalInvoices}</div>
+                </Card>
+                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                    <div className="text-sm text-slate-500 font-medium">Total Amount Sold</div>
+                    <div className="text-2xl font-bold text-sky-600 mt-1">₹{invoices.reduce((sum, inv) => sum + inv.total_amount, 0).toFixed(2)}</div>
+                    <div className="text-xs text-slate-400 mt-1">From {totalInvoices} invoices</div>
                 </Card>
             </div>
 
@@ -115,9 +124,9 @@ function InventoryDetailsContent() {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-slate-900">Sales History</h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[2fr,1.5fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <div>Sale Date</div>
                         <div>Invoice</div>
-                        <div>Date</div>
                         <div className="text-right">Total Amount</div>
                         <div className="text-right">Payment</div>
                     </div>
@@ -126,16 +135,16 @@ function InventoryDetailsContent() {
                         {invoices.map((invoice) => (
                             <div
                                 key={invoice.id}
-                                className="grid grid-cols-[2fr,1.5fr,1fr,1fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
+                                className="grid grid-cols-[1.2fr,2fr,1fr,1fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
                             // We don't have a dedicated invoice details page yet, but maybe we can link to billing or sales?
                             // For now just visual
                             >
+                                <div className="text-slate-500 text-sm">
+                                    {new Date(invoice.created_at).toLocaleString()}
+                                </div>
                                 <div className="font-medium text-slate-900 flex items-center gap-2">
                                     <FileText className="w-4 h-4 text-slate-400" />
                                     {invoice.invoice_number}
-                                </div>
-                                <div className="text-slate-500 text-sm">
-                                    {new Date(invoice.created_at).toLocaleString()}
                                 </div>
                                 <div className="text-right font-medium text-slate-900">
                                     ₹{invoice.total_amount.toFixed(2)}

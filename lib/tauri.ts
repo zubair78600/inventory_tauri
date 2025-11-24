@@ -10,6 +10,8 @@ export interface Product {
   name: string;
   sku: string;
   price: number;
+  selling_price: number | null;
+  initial_stock: number | null;
   stock_quantity: number;
   supplier_id: number | null;
   created_at: string;
@@ -20,6 +22,7 @@ export interface CreateProductInput {
   name: string;
   sku: string;
   price: number;
+  selling_price: number | null;
   stock_quantity: number;
   supplier_id: number | null;
 }
@@ -29,6 +32,7 @@ export interface UpdateProductInput {
   name: string;
   sku: string;
   price: number;
+  selling_price: number | null;
   stock_quantity: number;
   supplier_id: number | null;
 }

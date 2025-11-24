@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS products (
     name TEXT NOT NULL,
     sku TEXT NOT NULL UNIQUE,
     price REAL NOT NULL,
+    selling_price REAL,
+    initial_stock INTEGER,
     stock_quantity INTEGER NOT NULL,
     supplier_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -127,6 +129,9 @@ PRAGMA foreign_keys=off;
 -- SQLite will error if column exists, but we handle this in Rust
 
 -- For invoices: Add new columns if they don't exist
+-- SQLite will error if column exists, but we handle this in Rust
+
+-- For products: Add selling_price and initial_stock columns if they don't exist
 -- SQLite will error if column exists, but we handle this in Rust
 
 PRAGMA foreign_keys=on;

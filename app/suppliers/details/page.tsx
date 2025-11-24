@@ -121,7 +121,8 @@ function SupplierDetailsContent() {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-slate-900">Supplied Products</h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[2fr,1fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <div>Purchased Date</div>
                         <div>Product</div>
                         <div>SKU</div>
                         <div className="text-right">Price</div>
@@ -132,9 +133,12 @@ function SupplierDetailsContent() {
                         {products.map((product) => (
                             <div
                                 key={product.id}
-                                className="grid grid-cols-[2fr,1fr,1fr,1fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
+                                className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
                                 onClick={() => router.push(`/inventory/details?id=${product.id}`)}
                             >
+                                <div className="text-slate-500 text-sm">
+                                    {new Date(product.created_at).toLocaleString()}
+                                </div>
                                 <div className="font-medium text-slate-900 flex items-center gap-2">
                                     <Package className="w-4 h-4 text-slate-400" />
                                     {product.name}

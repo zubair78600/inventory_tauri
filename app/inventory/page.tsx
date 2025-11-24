@@ -23,6 +23,7 @@ type NewProductFormState = {
   name: string;
   sku: string;
   price: string;
+  selling_price: string;
   stock_quantity: string;
   supplier_id: string;
 };
@@ -40,6 +41,7 @@ export default function Inventory() {
     name: '',
     sku: '',
     price: '',
+    selling_price: '',
     stock_quantity: '',
     supplier_id: '',
   });
@@ -72,11 +74,12 @@ export default function Inventory() {
         name: newProduct.name,
         sku: newProduct.sku,
         price: parseFloat(newProduct.price),
+        selling_price: newProduct.selling_price ? parseFloat(newProduct.selling_price) : null,
         stock_quantity: parseInt(newProduct.stock_quantity, 10),
         supplier_id: newProduct.supplier_id ? Number(newProduct.supplier_id) : null,
       });
       setShowAddForm(false);
-      setNewProduct({ name: '', sku: '', price: '', stock_quantity: '', supplier_id: '' });
+      setNewProduct({ name: '', sku: '', price: '', selling_price: '', stock_quantity: '', supplier_id: '' });
       void fetchData();
     } catch (error) {
       console.error('Error creating product:', error);
@@ -93,6 +96,7 @@ export default function Inventory() {
         name: editProduct.name,
         sku: editProduct.sku,
         price: editProduct.price,
+        selling_price: editProduct.selling_price,
         stock_quantity: editProduct.stock_quantity,
         supplier_id: editProduct.supplier_id,
       });
@@ -201,13 +205,22 @@ export default function Inventory() {
                 />
               </div>
               <div>
-                <label className="form-label">Price</label>
+                <label className="form-label">Unit Price (Purchase Price)</label>
                 <Input
                   type="number"
                   step="0.01"
                   value={newProduct.price}
                   onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
                   required
+                />
+              </div>
+              <div>
+                <label className="form-label">Selling Price</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newProduct.selling_price}
+                  onChange={(e) => setNewProduct({ ...newProduct, selling_price: e.target.value })}
                 />
               </div>
               <div>
@@ -268,7 +281,7 @@ export default function Inventory() {
                 />
               </div>
               <div>
-                <label className="form-label">Price</label>
+                <label className="form-label">Unit Price (Purchase Price)</label>
                 <Input
                   type="number"
                   step="0.01"
@@ -277,6 +290,17 @@ export default function Inventory() {
                     setEditProduct({ ...editProduct, price: Number(e.target.value) })
                   }
                   required
+                />
+              </div>
+              <div>
+                <label className="form-label">Selling Price</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editProduct.selling_price ?? ''}
+                  onChange={(e) =>
+                    setEditProduct({ ...editProduct, selling_price: e.target.value ? Number(e.target.value) : null })
+                  }
                 />
               </div>
               <div>
@@ -326,8 +350,7 @@ export default function Inventory() {
             <TableRow>
               <TableHead>SKU</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Stock</TableHead>
+              <TableHead>Unit Price / Sale Price / Stock</TableHead>
               <TableHead>Supplier</TableHead>
               <TableHead>Status</TableHead>
               <TableHead></TableHead>
@@ -342,8 +365,21 @@ export default function Inventory() {
               >
                 <TableCell className="font-semibold">{product.sku}</TableCell>
                 <TableCell>{product.name}</TableCell>
-                <TableCell>₹{product.price.toFixed(2)}</TableCell>
-                <TableCell>{product.stock_quantity}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-slate-600">
+                      <span className="text-xs text-slate-400">Unit:</span> ₹{product.price.toFixed(2)}
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-emerald-600 font-medium">
+                      <span className="text-xs text-slate-400">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(2) : '-'}
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-slate-700 font-medium">
+                      <span className="text-xs text-slate-400">Stock:</span> {product.stock_quantity}
+                    </span>
+                  </div>
+                </TableCell>
                 <TableCell>
                   {suppliers.find((s) => s.id === product.supplier_id)?.name ?? '-'}
                 </TableCell>

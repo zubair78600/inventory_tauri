@@ -8,6 +8,7 @@ pub struct CreateProductInput {
     pub name: String,
     pub sku: String,
     pub price: f64,
+    pub selling_price: Option<f64>,
     pub stock_quantity: i32,
     pub supplier_id: Option<i32>,
 }
@@ -18,6 +19,7 @@ pub struct UpdateProductInput {
     pub name: String,
     pub sku: String,
     pub price: f64,
+    pub selling_price: Option<f64>,
     pub stock_quantity: i32,
     pub supplier_id: Option<i32>,
 }
@@ -36,7 +38,7 @@ pub fn get_products(search: Option<String>, db: State<Database>) -> Result<Vec<P
         // Search by name or SKU
         let search_pattern = format!("%{}%", search_term);
         let mut stmt = conn
-            .prepare("SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE name LIKE ?1 OR sku LIKE ?1 ORDER BY name")
+            .prepare("SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE name LIKE ?1 OR sku LIKE ?1 ORDER BY name")
             .map_err(|e| e.to_string())?;
 
         let product_iter = stmt
@@ -46,10 +48,12 @@ pub fn get_products(search: Option<String>, db: State<Database>) -> Result<Vec<P
                     name: row.get(1)?,
                     sku: row.get(2)?,
                     price: row.get(3)?,
-                    stock_quantity: row.get(4)?,
-                    supplier_id: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    selling_price: row.get(4)?,
+                    initial_stock: row.get(5)?,
+                    stock_quantity: row.get(6)?,
+                    supplier_id: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -60,7 +64,7 @@ pub fn get_products(search: Option<String>, db: State<Database>) -> Result<Vec<P
     } else {
         // Get all products
         let mut stmt = conn
-            .prepare("SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products ORDER BY name")
+            .prepare("SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products ORDER BY name")
             .map_err(|e| e.to_string())?;
 
         let product_iter = stmt
@@ -70,10 +74,12 @@ pub fn get_products(search: Option<String>, db: State<Database>) -> Result<Vec<P
                     name: row.get(1)?,
                     sku: row.get(2)?,
                     price: row.get(3)?,
-                    stock_quantity: row.get(4)?,
-                    supplier_id: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    selling_price: row.get(4)?,
+                    initial_stock: row.get(5)?,
+                    stock_quantity: row.get(6)?,
+                    supplier_id: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -97,7 +103,7 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
 
     let product = conn
         .query_row(
-            "SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+            "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
             [id],
             |row| {
                 Ok(Product {
@@ -105,10 +111,12 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
                     name: row.get(1)?,
                     sku: row.get(2)?,
                     price: row.get(3)?,
-                    stock_quantity: row.get(4)?,
-                    supplier_id: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    selling_price: row.get(4)?,
+                    initial_stock: row.get(5)?,
+                    stock_quantity: row.get(6)?,
+                    supplier_id: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
                 })
             },
         )
@@ -129,7 +137,7 @@ pub fn get_products_by_supplier(
     let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
     let mut stmt = conn
-        .prepare("SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE supplier_id = ?1 ORDER BY name")
+        .prepare("SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE supplier_id = ?1 ORDER BY name")
         .map_err(|e| e.to_string())?;
 
     let product_iter = stmt
@@ -139,10 +147,12 @@ pub fn get_products_by_supplier(
                 name: row.get(1)?,
                 sku: row.get(2)?,
                 price: row.get(3)?,
-                stock_quantity: row.get(4)?,
-                supplier_id: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                selling_price: row.get(4)?,
+                initial_stock: row.get(5)?,
+                stock_quantity: row.get(6)?,
+                supplier_id: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -179,11 +189,13 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
     }
 
     conn.execute(
-        "INSERT INTO products (name, sku, price, stock_quantity, supplier_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), datetime('now'))",
+        "INSERT INTO products (name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), datetime('now'))",
         (
             &input.name,
             &input.sku,
             input.price,
+            input.selling_price,
+            input.stock_quantity, // initial_stock is same as stock_quantity on creation
             input.stock_quantity,
             input.supplier_id,
         ),
@@ -194,7 +206,7 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
 
     // Fetch the created product to get timestamps
     let product = conn.query_row(
-        "SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
         [id],
         |row| {
             Ok(Product {
@@ -202,10 +214,12 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
                 name: row.get(1)?,
                 sku: row.get(2)?,
                 price: row.get(3)?,
-                stock_quantity: row.get(4)?,
-                supplier_id: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                selling_price: row.get(4)?,
+                initial_stock: row.get(5)?,
+                stock_quantity: row.get(6)?,
+                supplier_id: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         },
     ).map_err(|e| format!("Failed to fetch created product: {}", e))?;
@@ -238,11 +252,12 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 
     let rows_affected = conn
         .execute(
-            "UPDATE products SET name = ?1, sku = ?2, price = ?3, stock_quantity = ?4, supplier_id = ?5, updated_at = datetime('now') WHERE id = ?6",
+            "UPDATE products SET name = ?1, sku = ?2, price = ?3, selling_price = ?4, stock_quantity = ?5, supplier_id = ?6, updated_at = datetime('now') WHERE id = ?7",
             (
                 &input.name,
                 &input.sku,
                 input.price,
+                input.selling_price,
                 input.stock_quantity,
                 input.supplier_id,
                 input.id,
@@ -256,7 +271,7 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 
     // Fetch updated product to get new timestamp
     let product = conn.query_row(
-        "SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
         [input.id],
         |row| {
             Ok(Product {
@@ -264,10 +279,12 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
                 name: row.get(1)?,
                 sku: row.get(2)?,
                 price: row.get(3)?,
-                stock_quantity: row.get(4)?,
-                supplier_id: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                selling_price: row.get(4)?,
+                initial_stock: row.get(5)?,
+                stock_quantity: row.get(6)?,
+                supplier_id: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         },
     ).map_err(|e| format!("Failed to fetch updated product: {}", e))?;
@@ -302,7 +319,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
 
     // Get product data before deletion for audit trail
     let product = conn.query_row(
-        "SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
         [id],
         |row| {
             Ok(Product {
@@ -310,10 +327,12 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
                 name: row.get(1)?,
                 sku: row.get(2)?,
                 price: row.get(3)?,
-                stock_quantity: row.get(4)?,
-                supplier_id: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                selling_price: row.get(4)?,
+                initial_stock: row.get(5)?,
+                stock_quantity: row.get(6)?,
+                supplier_id: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         },
     )

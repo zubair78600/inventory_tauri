@@ -281,6 +281,34 @@ impl Database {
         // Always update NULL values (in case migration was interrupted)
         conn.execute("UPDATE suppliers SET updated_at = datetime('now') WHERE updated_at IS NULL", [])?;
 
+        // Migration: Add selling_price column to products
+        let selling_price_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('products') WHERE name = 'selling_price'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !selling_price_exists {
+            log::info!("Migrating: Adding selling_price column to products table");
+            conn.execute("ALTER TABLE products ADD COLUMN selling_price REAL", [])?;
+        }
+
+        // Migration: Add initial_stock column to products
+        let initial_stock_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('products') WHERE name = 'initial_stock'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !initial_stock_exists {
+            log::info!("Migrating: Adding initial_stock column to products table");
+            conn.execute("ALTER TABLE products ADD COLUMN initial_stock INTEGER", [])?;
+        }
+
         Ok(())
     }
 
