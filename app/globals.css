@@ -56,8 +56,8 @@ body {
 }
 
 .sidebar {
-  background: linear-gradient(180deg, #ffffff, #f5f8ff);
-  @apply hidden md:flex w-64 flex-col border-r border-slate-200/70 dark:border-slate-700/50 backdrop-blur-xl shadow-[0_15px_45px_-38px_rgba(15,23,42,0.5)] relative;
+  @apply hidden md:flex w-64 flex-col border-r border-slate-200/70 dark:border-slate-700/50 backdrop-blur-xl relative bg-gradient-to-b from-white to-slate-50 dark:from-slate-900 dark:to-slate-950;
+  box-shadow: 0 15px 45px -38px rgba(15, 23, 42, 0.5);
 }
 
 .sidebar-header {
@@ -70,7 +70,8 @@ body {
 }
 
 .nav-link.active {
-  @apply text-primary bg-gradient-to-r from-sky-100 via-cyan-50 to-white shadow-[0_12px_35px_-25px_rgba(14,165,233,0.6)] dark:bg-slate-700;
+  @apply text-primary bg-gradient-to-r from-sky-100 via-cyan-50 to-white dark:bg-slate-700;
+  box-shadow: 0 12px 35px -25px rgba(14, 165, 233, 0.6);
 }
 
 .nav-link::before {
@@ -96,7 +97,8 @@ body {
 }
 
 .topbar {
-  @apply sticky top-0 z-10 flex h-[50px] items-center justify-between bg-white/95 dark:bg-slate-800/80 backdrop-blur-xl px-5 border-b border-slate-200/80 dark:border-slate-700/60 shadow-[0_8px_30px_-28px_rgba(15,23,42,0.5)];
+  @apply sticky top-0 z-10 flex h-[50px] items-center justify-between bg-white/95 dark:bg-slate-800/80 backdrop-blur-xl px-5 border-b border-slate-200/80 dark:border-slate-700/60;
+  box-shadow: 0 8px 30px -28px rgba(15, 23, 42, 0.5);
 }
 
 .main {
@@ -108,7 +110,8 @@ body {
 }
 
 .card {
-  @apply rounded-2xl bg-white dark:bg-slate-800/85 border border-slate-200/80 dark:border-slate-700/70 p-5 shadow-[0_12px_30px_-20px_rgba(15,23,42,0.22),0_1px_6px_-2px_rgba(15,23,42,0.12)] backdrop-blur-0;
+  @apply rounded-2xl bg-white dark:bg-slate-800/85 border border-slate-200/80 dark:border-slate-700/70 p-5 backdrop-blur-0;
+  box-shadow: 0 12px 30px -20px rgba(15, 23, 42, 0.22), 0 1px 6px -2px rgba(15, 23, 42, 0.12);
 }
 
 .btn {
@@ -116,11 +119,17 @@ body {
 }
 
 .btn-primary {
-  @apply bg-gradient-to-r from-sky-500 via-cyan-500 to-emerald-400 text-white px-4 py-2 shadow-[0_15px_35px_-18px_rgba(34,211,238,0.65)] hover:-translate-y-0.5 hover:shadow-[0_20px_45px_-20px_rgba(14,165,233,0.75)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-sky-300;
+  @apply bg-gradient-to-r from-sky-500 via-cyan-500 to-emerald-400 text-white px-4 py-2 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-sky-300;
+  box-shadow: 0 15px 35px -18px rgba(34, 211, 238, 0.65);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 20px 45px -20px rgba(14, 165, 233, 0.75);
 }
 
 .btn-ghost {
-  @apply bg-white/90 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 border border-slate-200/80 dark:border-slate-600 hover:bg-slate-50/90 dark:hover:bg-slate-600 shadow-[0_10px_30px_-22px_rgba(15,23,42,0.5)];
+  @apply bg-white/90 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 border border-slate-200/80 dark:border-slate-600 hover:bg-slate-50/90 dark:hover:bg-slate-600;
+  box-shadow: 0 10px 30px -22px rgba(15, 23, 42, 0.5);
 }
 
 .badge {
@@ -139,9 +148,17 @@ body {
   @apply text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 block;
 }
 
-.form-input,
-.form-select {
+.form-input {
   @apply w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm shadow-inner focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary;
+}
+
+.form-select {
+  @apply w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm shadow-inner focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary appearance-none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
 }
 
 .table-container {

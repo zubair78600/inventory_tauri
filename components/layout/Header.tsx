@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ModeToggle } from '@/components/shared/ModeToggle';
 import { useEffect, useState } from 'react';
 import { OmniSearch } from '@/components/shared/OmniSearch';
 
@@ -9,8 +8,11 @@ interface HeaderProps {
   userEmail: string;
 }
 
+import { useAuth } from '@/contexts/AuthContext';
+
 export function Header({ userEmail }: HeaderProps) {
   const router = useRouter();
+  const { hasPermission } = useAuth();
   const [currentDate, setCurrentDate] = useState('');
 
   useEffect(() => {
@@ -47,7 +49,6 @@ export function Header({ userEmail }: HeaderProps) {
         <button className="btn btn-primary h-9 px-4" onClick={handleNewInvoice}>
           New Invoice
         </button>
-        <ModeToggle />
       </div>
     </header>
   );

@@ -36,7 +36,7 @@ pub fn get_products(search: Option<String>, db: State<Database>) -> Result<Vec<P
         // Search by name or SKU
         let search_pattern = format!("%{}%", search_term);
         let mut stmt = conn
-            .prepare("SELECT id, name, sku, price, stock_quantity, supplier_id FROM products WHERE name LIKE ?1 OR sku LIKE ?1 ORDER BY name")
+            .prepare("SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE name LIKE ?1 OR sku LIKE ?1 ORDER BY name")
             .map_err(|e| e.to_string())?;
 
         let product_iter = stmt
@@ -48,6 +48,8 @@ pub fn get_products(search: Option<String>, db: State<Database>) -> Result<Vec<P
                     price: row.get(3)?,
                     stock_quantity: row.get(4)?,
                     supplier_id: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -58,7 +60,7 @@ pub fn get_products(search: Option<String>, db: State<Database>) -> Result<Vec<P
     } else {
         // Get all products
         let mut stmt = conn
-            .prepare("SELECT id, name, sku, price, stock_quantity, supplier_id FROM products ORDER BY name")
+            .prepare("SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products ORDER BY name")
             .map_err(|e| e.to_string())?;
 
         let product_iter = stmt
@@ -70,6 +72,8 @@ pub fn get_products(search: Option<String>, db: State<Database>) -> Result<Vec<P
                     price: row.get(3)?,
                     stock_quantity: row.get(4)?,
                     supplier_id: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -93,7 +97,7 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
 
     let product = conn
         .query_row(
-            "SELECT id, name, sku, price, stock_quantity, supplier_id FROM products WHERE id = ?1",
+            "SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
             [id],
             |row| {
                 Ok(Product {
@@ -103,12 +107,53 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
                     price: row.get(3)?,
                     stock_quantity: row.get(4)?,
                     supplier_id: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             },
         )
         .map_err(|e| format!("Product not found: {}", e))?;
 
     Ok(product)
+}
+
+/// Get all products for a specific supplier
+#[tauri::command]
+pub fn get_products_by_supplier(
+    supplier_id: i32,
+    db: State<Database>
+) -> Result<Vec<Product>, String> {
+    log::info!("get_products_by_supplier called with supplier_id: {}", supplier_id);
+
+    let conn = db.conn();
+    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    let mut stmt = conn
+        .prepare("SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE supplier_id = ?1 ORDER BY name")
+        .map_err(|e| e.to_string())?;
+
+    let product_iter = stmt
+        .query_map([supplier_id], |row| {
+            Ok(Product {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                sku: row.get(2)?,
+                price: row.get(3)?,
+                stock_quantity: row.get(4)?,
+                supplier_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut products = Vec::new();
+    for product in product_iter {
+        products.push(product.map_err(|e| e.to_string())?);
+    }
+
+    log::info!("Returning {} products for supplier {}", products.len(), supplier_id);
+    Ok(products)
 }
 
 /// Create a new product
@@ -134,7 +179,7 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
     }
 
     conn.execute(
-        "INSERT INTO products (name, sku, price, stock_quantity, supplier_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO products (name, sku, price, stock_quantity, supplier_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), datetime('now'))",
         (
             &input.name,
             &input.sku,
@@ -147,14 +192,23 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
 
     let id = conn.last_insert_rowid() as i32;
 
-    let product = Product {
-        id,
-        name: input.name,
-        sku: input.sku,
-        price: input.price,
-        stock_quantity: input.stock_quantity,
-        supplier_id: input.supplier_id,
-    };
+    // Fetch the created product to get timestamps
+    let product = conn.query_row(
+        "SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(Product {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                sku: row.get(2)?,
+                price: row.get(3)?,
+                stock_quantity: row.get(4)?,
+                supplier_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        },
+    ).map_err(|e| format!("Failed to fetch created product: {}", e))?;
 
     log::info!("Created product with id: {}", id);
     Ok(product)
@@ -184,7 +238,7 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 
     let rows_affected = conn
         .execute(
-            "UPDATE products SET name = ?1, sku = ?2, price = ?3, stock_quantity = ?4, supplier_id = ?5 WHERE id = ?6",
+            "UPDATE products SET name = ?1, sku = ?2, price = ?3, stock_quantity = ?4, supplier_id = ?5, updated_at = datetime('now') WHERE id = ?6",
             (
                 &input.name,
                 &input.sku,
@@ -200,14 +254,23 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
         return Err(format!("Product with id {} not found", input.id));
     }
 
-    let product = Product {
-        id: input.id,
-        name: input.name,
-        sku: input.sku,
-        price: input.price,
-        stock_quantity: input.stock_quantity,
-        supplier_id: input.supplier_id,
-    };
+    // Fetch updated product to get new timestamp
+    let product = conn.query_row(
+        "SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+        [input.id],
+        |row| {
+            Ok(Product {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                sku: row.get(2)?,
+                price: row.get(3)?,
+                stock_quantity: row.get(4)?,
+                supplier_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        },
+    ).map_err(|e| format!("Failed to fetch updated product: {}", e))?;
 
     log::info!("Updated product with id: {}", input.id);
     Ok(product)
@@ -239,7 +302,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
 
     // Get product data before deletion for audit trail
     let product = conn.query_row(
-        "SELECT id, name, sku, price, stock_quantity, supplier_id FROM products WHERE id = ?1",
+        "SELECT id, name, sku, price, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
         [id],
         |row| {
             Ok(Product {
@@ -249,6 +312,8 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
                 price: row.get(3)?,
                 stock_quantity: row.get(4)?,
                 supplier_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         },
     )

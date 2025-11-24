@@ -1,14 +1,12 @@
 /**
  * LocationSelector Component
- * Cascading dropdowns for State, District, and Town selection
+ * Cascading dropdowns for State and District selection
  * Includes smart defaults that auto-fill after 3 identical selections
  */
 
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Select } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
 import type { LocationData, LocationValue } from '@/types/location';
 
 type LocationSelectorProps = {
@@ -23,7 +21,7 @@ type LocationSelectorProps = {
 };
 
 /**
- * LocationSelector component with cascading State > District > Town dropdowns
+ * LocationSelector component with cascading State > District dropdowns
  *
  * @example
  * ```tsx
@@ -77,7 +75,7 @@ export function LocationSelector({
     onChange({
       state: e.target.value,
       district: '', // Reset district when state changes
-      town: '', // Reset town when state changes
+      town: '', // Keep town empty
     });
   };
 
@@ -86,14 +84,6 @@ export function LocationSelector({
     onChange({
       ...value,
       district: e.target.value,
-    });
-  };
-
-  // Handle town change
-  const handleTownChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange({
-      ...value,
-      town: e.target.value,
     });
   };
 
@@ -119,13 +109,14 @@ export function LocationSelector({
 
   return (
     <div className={className}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* State Dropdown */}
         <div>
-          <label className="form-label block text-sm font-medium text-slate-700 mb-1.5">
+          <label className="form-label">
             State <span className="text-red-500">*</span>
           </label>
-          <Select
+          <select
+            className="form-select"
             value={value.state}
             onChange={handleStateChange}
             disabled={disabled}
@@ -137,15 +128,16 @@ export function LocationSelector({
                 {state}
               </option>
             ))}
-          </Select>
+          </select>
         </div>
 
         {/* District Dropdown */}
         <div>
-          <label className="form-label block text-sm font-medium text-slate-700 mb-1.5">
+          <label className="form-label">
             District <span className="text-red-500">*</span>
           </label>
-          <Select
+          <select
+            className="form-select"
             value={value.district}
             onChange={handleDistrictChange}
             disabled={disabled || !value.state}
@@ -159,21 +151,7 @@ export function LocationSelector({
                 {district}
               </option>
             ))}
-          </Select>
-        </div>
-
-        {/* Town Input */}
-        <div>
-          <label className="form-label block text-sm font-medium text-slate-700 mb-1.5">
-            Town / City
-          </label>
-          <Input
-            value={value.town}
-            onChange={handleTownChange}
-            disabled={disabled}
-            placeholder="Enter town or city name"
-            type="text"
-          />
+          </select>
         </div>
       </div>
       {!value.state && (

@@ -33,11 +33,24 @@ pub fn run() {
       // Create Application submenu (appears under app name on macOS)
       let app_submenu = SubmenuBuilder::new(app, "Inventory System")
         .item(&settings_item)
+        .quit()
+        .build()?;
+
+      // Create Edit submenu
+      let edit_submenu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
         .build()?;
 
       // Create the menu bar
       let menu = MenuBuilder::new(app)
         .item(&app_submenu)
+        .item(&edit_submenu)
         .build()?;
 
       app.set_menu(menu)?;
@@ -58,6 +71,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       commands::get_products,
       commands::get_product,
+      commands::get_products_by_supplier,
       commands::create_product,
       commands::update_product,
       commands::delete_product,
@@ -79,6 +93,7 @@ pub fn run() {
       commands::customer_search,
       commands::get_customer_report,
       commands::get_invoices,
+      commands::get_invoices_by_product,
       commands::get_invoice,
       commands::create_invoice,
       commands::delete_invoice,
@@ -90,7 +105,14 @@ pub fn run() {
       commands::restore_product,
       commands::restore_supplier,
       commands::permanently_delete_item,
+      commands::restore_supplier,
+      commands::permanently_delete_item,
       commands::clear_trash,
+      commands::login,
+      commands::get_users,
+      commands::create_user,
+      commands::update_user,
+      commands::delete_user,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

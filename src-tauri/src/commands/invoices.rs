@@ -117,6 +117,56 @@ pub fn get_invoices(customer_id: Option<i32>, db: State<Database>) -> Result<Vec
     Ok(invoices)
 }
 
+/// Get all invoices containing a specific product
+#[tauri::command]
+pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<Vec<Invoice>, String> {
+    log::info!("get_invoices_by_product called with product_id: {}", product_id);
+
+    let conn = db.conn();
+    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT i.id, i.invoice_number, i.customer_id, i.total_amount, i.tax_amount, i.discount_amount, i.payment_method, i.created_at, i.cgst_amount, i.fy_year, i.gst_rate, i.igst_amount, i.sgst_amount, i.state, i.district, i.town
+             FROM invoices i
+             JOIN invoice_items ii ON i.id = ii.invoice_id
+             WHERE ii.product_id = ?1
+             ORDER BY i.created_at DESC"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let invoice_iter = stmt
+        .query_map([product_id], |row| {
+            Ok(Invoice {
+                id: row.get(0)?,
+                invoice_number: row.get(1)?,
+                customer_id: row.get(2)?,
+                total_amount: row.get(3)?,
+                tax_amount: row.get(4)?,
+                discount_amount: row.get(5)?,
+                payment_method: row.get(6)?,
+                created_at: row.get(7)?,
+                cgst_amount: row.get(8)?,
+                fy_year: row.get(9)?,
+                gst_rate: row.get(10)?,
+                igst_amount: row.get(11)?,
+                sgst_amount: row.get(12)?,
+                state: row.get(13)?,
+                district: row.get(14)?,
+                town: row.get(15)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut invoices = Vec::new();
+    for invoice in invoice_iter {
+        invoices.push(invoice.map_err(|e| e.to_string())?);
+    }
+
+    log::info!("Returning {} invoices for product {}", invoices.len(), product_id);
+    Ok(invoices)
+}
+
 /// Get a single invoice with its items
 #[tauri::command]
 pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, String> {

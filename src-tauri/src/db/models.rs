@@ -9,6 +9,8 @@ pub struct Product {
     pub price: f64,
     pub stock_quantity: i32,
     pub supplier_id: Option<i32>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 /// Supplier model matching Prisma schema
@@ -23,6 +25,8 @@ pub struct Supplier {
     pub state: Option<String>,
     pub district: Option<String>,
     pub town: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 /// Customer model matching Prisma schema
@@ -93,4 +97,14 @@ pub struct DeletedItem {
     pub related_data: Option<String>,
     pub deleted_at: String,
     pub deleted_by: Option<String>,
+}
+
+/// User model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: i32,
+    pub username: String,
+    pub role: String,
+    pub permissions: String, // JSON string
+    pub created_at: String,
 }

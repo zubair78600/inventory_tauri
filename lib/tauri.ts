@@ -12,6 +12,8 @@ export interface Product {
   price: number;
   stock_quantity: number;
   supplier_id: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CreateProductInput {
@@ -42,6 +44,8 @@ export interface Supplier {
   place: string | null;
   district: string | null;
   town: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CreateSupplierInput {
@@ -189,6 +193,13 @@ export const productCommands = {
    */
   getById: async (id: number): Promise<Product> => {
     return await invoke<Product>('get_product', { id });
+  },
+
+  /**
+   * Get all products for a specific supplier
+   */
+  getBySupplier: async (supplierId: number): Promise<Product[]> => {
+    return await invoke<Product[]>('get_products_by_supplier', { supplierId });
   },
 
   /**
@@ -384,7 +395,14 @@ export const invoiceCommands = {
    * Get all invoices, optionally filtered by customer
    */
   getAll: async (customerId?: number): Promise<Invoice[]> => {
-    return await invoke<Invoice[]>('get_invoices', { customer_id: customerId });
+    return await invoke<Invoice[]>('get_invoices', { customerId });
+  },
+
+  /**
+   * Get all invoices containing a specific product
+   */
+  getByProduct: async (productId: number): Promise<Invoice[]> => {
+    return await invoke<Invoice[]>('get_invoices_by_product', { productId });
   },
 
   /**

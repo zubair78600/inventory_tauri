@@ -27,7 +27,10 @@ type NewProductFormState = {
   supplier_id: string;
 };
 
+import { useRouter } from 'next/navigation';
+
 export default function Inventory() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -332,7 +335,11 @@ export default function Inventory() {
           </TableHeader>
           <TableBody>
             {displayed.map((product) => (
-              <TableRow key={product.id}>
+              <TableRow
+                key={product.id}
+                className="hover:bg-sky-50/60 cursor-pointer"
+                onClick={() => router.push(`/inventory/details?id=${product.id}`)}
+              >
                 <TableCell className="font-semibold">{product.sku}</TableCell>
                 <TableCell>{product.name}</TableCell>
                 <TableCell>₹{product.price.toFixed(2)}</TableCell>

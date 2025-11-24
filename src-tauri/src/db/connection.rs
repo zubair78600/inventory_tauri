@@ -191,7 +191,95 @@ impl Database {
         if !invoice_town_exists {
             log::info!("Migrating: Adding town column to invoices table");
             conn.execute("ALTER TABLE invoices ADD COLUMN town TEXT", [])?;
+            log::info!("Migrating: Adding town column to invoices table");
+            conn.execute("ALTER TABLE invoices ADD COLUMN town TEXT", [])?;
         }
+
+        // Migration: Create users table if it doesn't exist (handled by init_tables but good to be safe or for specific updates)
+        // Seed default admin user if users table is empty
+        let user_count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        if user_count == 0 {
+            log::info!("Seeding default admin user");
+            conn.execute(
+                "INSERT INTO users (username, password, role, permissions) VALUES (?1, ?2, ?3, ?4)",
+                (
+                    "Admin",
+                    "1014209932",
+                    "admin",
+                    "[\"*\"]" // Wildcard for all permissions
+                ),
+            )?;
+        }
+
+        // Migration: Add created_at and updated_at to products
+        let product_created_at_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('products') WHERE name = 'created_at'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !product_created_at_exists {
+            log::info!("Migrating: Adding created_at column to products table");
+            // Add as nullable first, then update with current timestamp
+            conn.execute("ALTER TABLE products ADD COLUMN created_at TEXT", [])?;
+        }
+        
+        // Always update NULL values (in case migration was interrupted)
+        conn.execute("UPDATE products SET created_at = datetime('now') WHERE created_at IS NULL", [])?;
+
+        let product_updated_at_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('products') WHERE name = 'updated_at'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !product_updated_at_exists {
+            log::info!("Migrating: Adding updated_at column to products table");
+            conn.execute("ALTER TABLE products ADD COLUMN updated_at TEXT", [])?;
+        }
+        
+        // Always update NULL values (in case migration was interrupted)
+        conn.execute("UPDATE products SET updated_at = datetime('now') WHERE updated_at IS NULL", [])?;
+
+        // Migration: Add created_at and updated_at to suppliers
+        let supplier_created_at_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('suppliers') WHERE name = 'created_at'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !supplier_created_at_exists {
+            log::info!("Migrating: Adding created_at column to suppliers table");
+            conn.execute("ALTER TABLE suppliers ADD COLUMN created_at TEXT", [])?;
+        }
+        
+        // Always update NULL values (in case migration was interrupted)
+        conn.execute("UPDATE suppliers SET created_at = datetime('now') WHERE created_at IS NULL", [])?;
+
+        let supplier_updated_at_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('suppliers') WHERE name = 'updated_at'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !supplier_updated_at_exists {
+            log::info!("Migrating: Adding updated_at column to suppliers table");
+            conn.execute("ALTER TABLE suppliers ADD COLUMN updated_at TEXT", [])?;
+        }
+        
+        // Always update NULL values (in case migration was interrupted)
+        conn.execute("UPDATE suppliers SET updated_at = datetime('now') WHERE updated_at IS NULL", [])?;
 
         Ok(())
     }

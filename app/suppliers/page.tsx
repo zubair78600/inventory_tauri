@@ -30,7 +30,10 @@ type NewSupplierForm = {
   town: string;
 };
 
+import { useRouter } from 'next/navigation';
+
 export default function Suppliers() {
+  const router = useRouter();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
@@ -365,7 +368,11 @@ export default function Suppliers() {
           </TableHeader>
           <TableBody>
             {displayed.map((supplier) => (
-              <TableRow key={supplier.id}>
+              <TableRow
+                key={supplier.id}
+                className="hover:bg-sky-50/60 cursor-pointer"
+                onClick={() => router.push(`/suppliers/details?id=${supplier.id}`)}
+              >
                 <TableCell className="font-semibold">{supplier.name}</TableCell>
                 <TableCell>{supplier.contact_info}</TableCell>
                 <TableCell>{supplier.email}</TableCell>

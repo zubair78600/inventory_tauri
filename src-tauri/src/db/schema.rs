@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS products (
     price REAL NOT NULL,
     stock_quantity INTEGER NOT NULL,
     supplier_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
@@ -23,7 +25,9 @@ CREATE TABLE IF NOT EXISTS suppliers (
     comments TEXT,
     state TEXT,
     district TEXT,
-    town TEXT
+    town TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Customers table
@@ -92,6 +96,17 @@ CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id
 CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id);
 CREATE INDEX IF NOT EXISTS idx_deleted_items_type ON deleted_items(entity_type);
 CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
+
+    -- Users table
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL,
+        permissions TEXT NOT NULL, -- JSON string of allowed paths/modules
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
 "#;
 
 /// Migration SQL to update existing tables

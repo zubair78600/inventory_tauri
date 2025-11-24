@@ -289,7 +289,7 @@ export default function Billing() {
                       onChange={(e) =>
                         updateQuantity(item.product_id, parseInt(e.target.value, 10))
                       }
-                      className="w-14 md:w-16 justify-self-center rounded-md border border-slate-200 px-2 py-1 text-center dark:bg-slate-800 dark:border-slate-700"
+                      className="w-14 md:w-16 justify-self-center form-input text-center"
                     />
                     <span className="text-slate-700 dark:text-slate-200 text-center">
                       ₹{item.unit_price.toFixed(2)}

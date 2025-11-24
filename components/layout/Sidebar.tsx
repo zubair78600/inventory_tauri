@@ -16,19 +16,24 @@ import {
   Receipt,
 } from 'lucide-react';
 
+import { useAuth } from '@/contexts/AuthContext';
+
 export default function Sidebar() {
   const pathname = usePathname() ?? '';
+  const { hasPermission } = useAuth();
 
-  type NavLink = { href: string; label: string; icon: React.ElementType };
-  const links: NavLink[] = [
-    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/billing', label: 'Billing', icon: CreditCard },
-    { href: '/sales', label: 'Sales', icon: Receipt },
-    { href: '/customers', label: 'Customers', icon: Users },
-    { href: '/inventory', label: 'Inventory', icon: Boxes },
-    { href: '/suppliers', label: 'Suppliers', icon: Truck },
-    { href: '/reports', label: 'Reports', icon: BarChart3 },
+  type NavLink = { href: string; label: string; icon: React.ElementType; permission: string };
+  const allLinks: NavLink[] = [
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard' },
+    { href: '/billing', label: 'Billing', icon: CreditCard, permission: 'billing' },
+    { href: '/sales', label: 'Sales', icon: Receipt, permission: 'sales' },
+    { href: '/customers', label: 'Customers', icon: Users, permission: 'customers' },
+    { href: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory' },
+    { href: '/suppliers', label: 'Suppliers', icon: Truck, permission: 'suppliers' },
+    { href: '/reports', label: 'Reports', icon: BarChart3, permission: 'reports' },
   ];
+
+  const links = allLinks.filter(link => hasPermission(link.permission));
 
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
@@ -45,9 +50,8 @@ export default function Sidebar() {
       </button>
 
       <aside
-        className={`sidebar fixed md:static inset-y-0 left-0 z-20 transform transition-all duration-300 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        } ${isCollapsed ? 'md:w-20' : 'md:w-64'}`}
+        className={`sidebar fixed md:static inset-y-0 left-0 z-20 transform transition-all duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          } ${isCollapsed ? 'md:w-20' : 'md:w-64'}`}
       >
         <div className="sidebar-header">
           {isCollapsed ? (
@@ -78,14 +82,16 @@ export default function Sidebar() {
         <nav className="flex-1 space-y-1 px-3">
           {links.map((link) => {
             const Icon = link.icon;
-            const active = pathname === link.href;
+            const active =
+              link.href === '/'
+                ? pathname === '/'
+                : pathname.startsWith(link.href);
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`nav-link ${active ? 'active' : ''} ${
-                  isCollapsed ? 'justify-center px-3' : ''
-                }`}
+                className={`nav-link ${active ? 'active' : ''} ${isCollapsed ? 'justify-center px-3' : ''
+                  }`}
                 onClick={() => setIsOpen(false)}
                 title={isCollapsed ? link.label : undefined}
               >

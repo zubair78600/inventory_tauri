@@ -107,20 +107,20 @@ export default function Sales() {
                 <button
                   key={sale.id}
                   className={`w-full text-left px-4 py-3 flex items-center justify-between transition ${selected?.id === sale.id
-                      ? 'bg-sky-50 border-l-4 border-sky-400'
-                      : 'hover:bg-slate-50'
+                    ? 'bg-sky-50 border-l-4 border-sky-400'
+                    : 'hover:bg-slate-50'
                     }`}
                   onClick={() => setSelected(sale)}
                 >
                   <div className="space-y-1">
-                    <p className="font-semibold text-slate-900">{sale.invoice_number}</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{sale.invoice_number}</p>
                     <p className="text-xs text-muted-foreground">
                       {sale.customer_name ?? 'Walk-in'} •{' '}
                       {new Date(sale.created_at).toLocaleString()}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-slate-900">₹{sale.total_amount.toFixed(2)}</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">₹{sale.total_amount.toFixed(2)}</p>
                     <p className="text-xs text-muted-foreground">
                       {sale.item_count ? `${sale.item_count} items` : ''}
                     </p>
@@ -185,12 +185,12 @@ export default function Sales() {
               {items.map((item) => (
                 <div key={item.id} className="px-4 py-3 flex items-center justify-between text-sm">
                   <div>
-                    <p className="font-semibold text-slate-900">{item.product_name}</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{item.product_name}</p>
                     <p className="text-xs text-muted-foreground">
                       ₹{item.unit_price.toFixed(2)} • Qty {item.quantity}
                     </p>
                   </div>
-                  <p className="font-semibold text-slate-900">₹{item.total.toFixed(2)}</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">₹{item.total.toFixed(2)}</p>
                 </div>
               ))}
               {!selected && (

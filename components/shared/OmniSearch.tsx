@@ -42,7 +42,7 @@ const categories: Category[] = [
         title: c.name,
         subtitle: c.phone ?? c.email ?? '',
         meta: 'Customer',
-        href: '/customers',
+        href: `/customers/details?id=${c.id}`,
       }));
     },
   },
@@ -57,7 +57,7 @@ const categories: Category[] = [
         title: p.name,
         subtitle: `SKU: ${p.sku} • Stock: ${p.stock_quantity}`,
         meta: `₹${p.price.toFixed(2)}`,
-        href: '/inventory',
+        href: `/inventory/details?id=${p.id}`,
       }));
     },
   },
@@ -72,7 +72,7 @@ const categories: Category[] = [
         title: s.name,
         subtitle: s.contact_info ?? 'No contact info',
         meta: 'Supplier',
-        href: '/suppliers',
+        href: `/suppliers/details?id=${s.id}`,
       }));
     },
   },
@@ -117,7 +117,7 @@ const categories: Category[] = [
         title: p.name,
         subtitle: `SKU: ${p.sku} • Stock: ${p.stock_quantity}`,
         meta: `₹${p.price.toFixed(2)}`,
-        href: '/inventory',
+        href: `/inventory/details?id=${p.id}`,
       }));
     },
   },
@@ -125,7 +125,7 @@ const categories: Category[] = [
 
 export function OmniSearch() {
   // Keep router/pathname handy for future navigation needs (currently not used)
-  const _router = useRouter();
+  const router = useRouter();
   const _pathname = usePathname();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -295,6 +295,12 @@ export function OmniSearch() {
     setOpen(false);
     setShowCategories(false);
     setQuery('');
+
+    if (['customers', 'suppliers', 'items', 'inventory'].includes(activeCategory.id)) {
+      router.push(item.href);
+      return;
+    }
+
     void loadDetail(item);
   };
 

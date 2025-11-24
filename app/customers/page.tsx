@@ -310,7 +310,7 @@ export default function Customers() {
                   onClick={() => router.push(`/customers/details?id=${customer.id}`)}
                 >
                   <TableCell className="font-semibold space-y-1">
-                    <div className="text-slate-900">{customer.name}</div>
+                    <div className="text-slate-900 dark:text-slate-100">{customer.name}</div>
                     {customer.address && (
                       <div className="text-xs text-muted-foreground">{customer.address}</div>
                     )}
