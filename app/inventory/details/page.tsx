@@ -96,27 +96,36 @@ function InventoryDetailsContent() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <Card className="p-4 bg-white border-slate-200 shadow-sm">
                     <div className="text-sm text-slate-500 font-medium">Stock Purchased</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{product.initial_stock || 0}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">{product.initial_stock || product.stock_quantity}</div>
+                    <div className="text-xs text-slate-400 mt-1">Units</div>
+                </Card>
+                <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                    <div className="text-sm text-slate-500 font-medium">Stock Amount</div>
+                    <div className="text-2xl font-bold text-indigo-600 mt-1">₹{((product.initial_stock || product.stock_quantity) * product.price).toFixed(2)}</div>
+                    <div className="text-xs text-slate-400 mt-1">Purchase value</div>
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm">
                     <div className="text-sm text-slate-500 font-medium">Current Stock</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{product.stock_quantity}</div>
+                    <div className="text-xs text-slate-400 mt-1">Units</div>
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm">
                     <div className="text-sm text-slate-500 font-medium">Selling Price</div>
                     <div className="text-2xl font-bold text-emerald-600 mt-1">₹{product.selling_price ? product.selling_price.toFixed(2) : '-'}</div>
+                    <div className="text-xs text-slate-400 mt-1">Per unit</div>
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm">
                     <div className="text-sm text-slate-500 font-medium">Total Sales Count</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{totalInvoices}</div>
+                    <div className="text-xs text-slate-400 mt-1">Invoices</div>
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm">
                     <div className="text-sm text-slate-500 font-medium">Total Amount Sold</div>
                     <div className="text-2xl font-bold text-sky-600 mt-1">₹{invoices.reduce((sum, inv) => sum + inv.total_amount, 0).toFixed(2)}</div>
-                    <div className="text-xs text-slate-400 mt-1">From {totalInvoices} invoices</div>
+                    <div className="text-xs text-slate-400 mt-1">Revenue</div>
                 </Card>
             </div>
 
