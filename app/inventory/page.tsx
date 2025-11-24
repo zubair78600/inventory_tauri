@@ -348,12 +348,12 @@ export default function Inventory() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-center font-bold">SKU</TableHead>
-              <TableHead className="text-center font-bold">Name</TableHead>
-              <TableHead className="text-center font-bold">Unit Price / Sale Price / Stock</TableHead>
-              <TableHead className="text-center font-bold">Supplier</TableHead>
-              <TableHead className="text-center font-bold">Status</TableHead>
-              <TableHead className="text-center font-bold">Actions</TableHead>
+              <TableHead className="text-center font-bold text-black">SKU</TableHead>
+              <TableHead className="text-center font-bold text-black">Name</TableHead>
+              <TableHead className="text-center font-bold text-black">Unit Price / Sale Price / Stock</TableHead>
+              <TableHead className="text-center font-bold text-black">Supplier</TableHead>
+              <TableHead className="text-center font-bold text-black">Status</TableHead>
+              <TableHead className="text-center font-bold text-black">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -294,12 +294,12 @@ export default function Customers() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-center font-bold">Customer</TableHead>
-                <TableHead className="text-center font-bold">Contact</TableHead>
-                <TableHead className="text-center font-bold">Place</TableHead>
-                <TableHead className="text-center font-bold">Last Billed</TableHead>
-                <TableHead className="text-center font-bold">Invoices</TableHead>
-                <TableHead className="text-center font-bold">Actions</TableHead>
+                <TableHead className="text-center font-bold text-black">Customer</TableHead>
+                <TableHead className="text-center font-bold text-black">Contact</TableHead>
+                <TableHead className="text-center font-bold text-black">Place</TableHead>
+                <TableHead className="text-center font-bold text-black">Last Billed</TableHead>
+                <TableHead className="text-center font-bold text-black">Invoices</TableHead>
+                <TableHead className="text-center font-bold text-black">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

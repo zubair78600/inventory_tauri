@@ -129,10 +129,10 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="rounded-none text-center font-bold">Invoice #</TableHead>
-                    <TableHead className="text-center font-bold">Customer</TableHead>
-                    <TableHead className="text-center font-bold">Date</TableHead>
-                    <TableHead className="text-center font-bold">Amount</TableHead>
+                    <TableHead className="rounded-none text-center font-bold text-black">Invoice #</TableHead>
+                    <TableHead className="text-center font-bold text-black">Customer</TableHead>
+                    <TableHead className="text-center font-bold text-black">Date</TableHead>
+                    <TableHead className="text-center font-bold text-black">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

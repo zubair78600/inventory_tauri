@@ -356,14 +356,14 @@ export default function Suppliers() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-center font-bold">Name</TableHead>
-              <TableHead className="text-center font-bold">Contact Info</TableHead>
-              <TableHead className="text-center font-bold">Email</TableHead>
-              <TableHead className="text-center font-bold">Address</TableHead>
-              <TableHead className="text-center font-bold">State</TableHead>
-              <TableHead className="text-center font-bold">District</TableHead>
-              <TableHead className="text-center font-bold">Town</TableHead>
-              <TableHead className="text-center font-bold">Actions</TableHead>
+              <TableHead className="text-center font-bold text-black">Name</TableHead>
+              <TableHead className="text-center font-bold text-black">Contact Info</TableHead>
+              <TableHead className="text-center font-bold text-black">Email</TableHead>
+              <TableHead className="text-center font-bold text-black">Address</TableHead>
+              <TableHead className="text-center font-bold text-black">State</TableHead>
+              <TableHead className="text-center font-bold text-black">District</TableHead>
+              <TableHead className="text-center font-bold text-black">Town</TableHead>
+              <TableHead className="text-center font-bold text-black">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
