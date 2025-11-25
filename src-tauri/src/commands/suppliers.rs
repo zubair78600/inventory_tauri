@@ -1,4 +1,4 @@
-use crate::db::{Database, Supplier};
+use crate::db::{Database, Supplier, SupplierPayment};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -26,6 +26,24 @@ pub struct UpdateSupplierInput {
     pub state: Option<String>,
     pub district: Option<String>,
     pub town: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateSupplierPaymentInput {
+    pub supplier_id: i32,
+    pub product_id: Option<i32>,
+    pub amount: f64,
+    pub payment_method: Option<String>,
+    pub note: Option<String>,
+    /// Optional explicit paid_at timestamp (RFC3339). If None, current time is used.
+    pub paid_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SupplierPaymentSummary {
+    pub total_payable: f64,
+    pub total_paid: f64,
+    pub pending_amount: f64,
 }
 
 /// Get all suppliers, optionally filtered by search query
@@ -295,6 +313,185 @@ pub fn delete_supplier(id: i32, db: State<Database>) -> Result<(), String> {
 
     log::info!("Deleted supplier with id: {} and saved to trash", id);
     Ok(())
+}
+
+/// Create a payment record for a supplier
+#[tauri::command]
+pub fn create_supplier_payment(
+    input: CreateSupplierPaymentInput,
+    db: State<Database>,
+) -> Result<SupplierPayment, String> {
+    log::info!(
+        "create_supplier_payment called for supplier_id: {}, amount: {}",
+        input.supplier_id,
+        input.amount
+    );
+
+    if input.amount <= 0.0 {
+        return Err("Amount must be greater than zero".into());
+    }
+
+    let conn = db.conn();
+    let conn = conn
+        .lock()
+        .map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    let paid_at = input
+        .paid_at
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+
+    conn.execute(
+        "INSERT INTO supplier_payments (supplier_id, product_id, amount, payment_method, note, paid_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))",
+        (
+            input.supplier_id,
+            input.product_id,
+            input.amount,
+            input.payment_method.as_deref(),
+            input.note.as_deref(),
+            &paid_at,
+        ),
+    )
+    .map_err(|e| format!("Failed to create supplier payment: {}", e))?;
+
+    let id = conn.last_insert_rowid() as i32;
+
+    let payment = conn
+        .query_row(
+            "SELECT id, supplier_id, product_id, amount, payment_method, note, paid_at, created_at FROM supplier_payments WHERE id = ?1",
+            [id],
+            |row| {
+                Ok(SupplierPayment {
+                    id: row.get(0)?,
+                    supplier_id: row.get(1)?,
+                    product_id: row.get(2)?,
+                    amount: row.get(3)?,
+                    payment_method: row.get(4)?,
+                    note: row.get(5)?,
+                    paid_at: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            },
+        )
+        .map_err(|e| format!("Failed to fetch created supplier payment: {}", e))?;
+
+    Ok(payment)
+}
+
+/// Get all payments for a supplier
+#[tauri::command]
+pub fn get_supplier_payments(
+    supplier_id: i32,
+    product_id: i32,
+    db: State<Database>,
+) -> Result<Vec<SupplierPayment>, String> {
+    log::info!(
+        "get_supplier_payments called for supplier_id: {}",
+        supplier_id
+    );
+
+    let conn = db.conn();
+    let conn = conn
+        .lock()
+        .map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, supplier_id, product_id, amount, payment_method, note, paid_at, created_at
+             FROM supplier_payments
+             WHERE supplier_id = ?1 AND product_id = ?2
+             ORDER BY paid_at DESC, id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let payment_iter = stmt
+        .query_map((supplier_id, product_id), |row| {
+            Ok(SupplierPayment {
+                id: row.get(0)?,
+                supplier_id: row.get(1)?,
+                product_id: row.get(2)?,
+                amount: row.get(3)?,
+                payment_method: row.get(4)?,
+                note: row.get(5)?,
+                paid_at: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut payments = Vec::new();
+    for payment in payment_iter {
+        payments.push(payment.map_err(|e| e.to_string())?);
+    }
+
+    Ok(payments)
+}
+
+/// Delete a single supplier payment by ID
+#[tauri::command]
+pub fn delete_supplier_payment(id: i32, db: State<Database>) -> Result<(), String> {
+    log::info!("delete_supplier_payment called with id: {}", id);
+
+    let conn = db.conn();
+    let conn = conn
+        .lock()
+        .map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    let rows_affected = conn
+        .execute("DELETE FROM supplier_payments WHERE id = ?1", [id])
+        .map_err(|e| format!("Failed to delete supplier payment: {}", e))?;
+
+    if rows_affected == 0 {
+        return Err(format!("Supplier payment with id {} not found", id));
+    }
+
+    Ok(())
+}
+
+/// Get payment summary for a supplier (total payable, total paid, pending)
+#[tauri::command]
+pub fn get_supplier_payment_summary(
+    supplier_id: i32,
+    product_id: i32,
+    db: State<Database>,
+) -> Result<SupplierPaymentSummary, String> {
+    log::info!(
+        "get_supplier_payment_summary called for supplier_id: {}, product_id: {}",
+        supplier_id, product_id
+    );
+
+    let conn = db.conn();
+    let conn = conn
+        .lock()
+        .map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    // Total payable is the purchase value for this specific product.
+    // We use initial_stock when available, otherwise current stock_quantity.
+    let (price, initial_stock, stock_quantity): (f64, Option<i32>, i32) = conn
+        .query_row(
+            "SELECT price, initial_stock, stock_quantity FROM products WHERE id = ?1 AND supplier_id = ?2",
+            (product_id, supplier_id),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap_or((0.0, None, 0));
+
+    let units = initial_stock.unwrap_or(stock_quantity) as f64;
+    let total_payable: f64 = price * units;
+
+    let total_paid: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM supplier_payments WHERE supplier_id = ?1 AND product_id = ?2",
+            (supplier_id, product_id),
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+
+    let pending = (total_payable - total_paid).max(0.0);
+
+    Ok(SupplierPaymentSummary {
+        total_payable,
+        total_paid,
+        pending_amount: pending,
+    })
 }
 
 /// Add mock supplier data for testing

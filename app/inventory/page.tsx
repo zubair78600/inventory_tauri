@@ -348,9 +348,11 @@ export default function Inventory() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-center font-bold text-black">SKU</TableHead>
               <TableHead className="text-center font-bold text-black">Name</TableHead>
-              <TableHead className="text-center font-bold text-black">Actual Price / Sale Price / Stock</TableHead>
+              <TableHead className="text-center font-bold text-black">SKU</TableHead>
+              <TableHead className="text-center font-bold text-black">Stock Amount</TableHead>
+              <TableHead className="text-center font-bold text-black">Amount Sold</TableHead>
+              <TableHead className="text-center font-bold text-black">Stock / Actual Price / Sale Price</TableHead>
               <TableHead className="text-center font-bold text-black">Supplier</TableHead>
               <TableHead className="text-center font-bold text-black">Status</TableHead>
               <TableHead className="text-center font-bold text-black">Actions</TableHead>
@@ -363,20 +365,43 @@ export default function Inventory() {
                 className="hover:bg-sky-50/60 cursor-pointer"
                 onClick={() => router.push(`/inventory/details?id=${product.id}`)}
               >
-                <TableCell className="font-semibold text-center">{product.sku}</TableCell>
-                <TableCell className="text-center">{product.name}</TableCell>
+                <TableCell className="font-semibold text-center">{product.name}</TableCell>
+                <TableCell className="text-center">{product.sku}</TableCell>
+                <TableCell className="text-center">
+                  {product.selling_price ? (
+                    <span className="font-medium text-slate-700">
+                      ₹{((product.initial_stock ?? product.stock_quantity) * product.selling_price).toFixed(0)}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">-</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-center">
+                  {product.selling_price ? (
+                    <span className="font-medium text-slate-700">
+                      ₹{Math.max(
+                        0,
+                        ((product.initial_stock ?? product.stock_quantity) - product.stock_quantity) *
+                          product.selling_price
+                      ).toFixed(0)}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">-</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-3 text-sm">
+                    <span className="text-slate-700 font-medium">
+                      <span className="text-xs text-slate-400">Stock:</span>{' '}
+                      {product.initial_stock ?? product.stock_quantity}
+                    </span>
+                    <span className="text-slate-300">|</span>
                     <span className="text-slate-600">
-                      <span className="text-xs text-slate-400">Actual:</span> ₹{product.price.toFixed(1)}
+                      <span className="text-xs text-slate-400">Actual:</span> ₹{product.price.toFixed(0)}
                     </span>
                     <span className="text-slate-300">|</span>
                     <span className="text-emerald-600 font-medium">
-                      <span className="text-xs text-slate-400">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(1) : '-'}
-                    </span>
-                    <span className="text-slate-300">|</span>
-                    <span className="text-slate-700 font-medium">
-                      <span className="text-xs text-slate-400">Stock:</span> {product.stock_quantity}
+                      <span className="text-xs text-slate-400">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(0) : '-'}
                     </span>
                   </div>
                 </TableCell>
@@ -384,12 +409,17 @@ export default function Inventory() {
                   {suppliers.find((s) => s.id === product.supplier_id)?.name ?? '-'}
                 </TableCell>
                 <TableCell className="text-center">
-                  <div className="flex justify-center">
-                    {product.stock_quantity < 10 ? (
-                      <Badge className="bg-red-100 text-red-700">Low Stock</Badge>
-                    ) : (
-                      <Badge className="bg-emerald-100 text-emerald-700">In Stock</Badge>
-                    )}
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="flex justify-center">
+                      {product.stock_quantity < 10 ? (
+                        <Badge className="bg-red-100 text-red-700">Low Stock</Badge>
+                      ) : (
+                        <Badge className="bg-emerald-100 text-emerald-700">In Stock</Badge>
+                      )}
+                    </div>
+                    <div className="text-[11px] leading-none text-slate-500">
+                      Current: {product.stock_quantity}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-center">

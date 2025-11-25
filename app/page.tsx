@@ -32,7 +32,7 @@ export default function Dashboard() {
   const statCards = [
     {
       title: 'Total Revenue',
-      value: `₹${stats.total_revenue.toFixed(2)}`,
+      value: `₹${stats.total_revenue.toFixed(0)}`,
       helper: 'Overall billed amount',
       icon: TrendingUp,
       gradient: 'from-sky-500 via-cyan-400 to-emerald-400',
@@ -59,7 +59,7 @@ export default function Dashboard() {
     },
     {
       title: 'Inventory Value',
-      value: `₹${stats.total_valuation.toFixed(2)}`,
+      value: `₹${stats.total_valuation.toFixed(0)}`,
       helper: 'Current stock worth',
       icon: Package,
       gradient: 'from-emerald-500 via-sky-500 to-indigo-500',
@@ -152,7 +152,7 @@ export default function Dashboard() {
                         })}
                       </TableCell>
                       <TableCell className="font-semibold text-slate-900 dark:text-slate-50 text-center">
-                        ₹{sale.total_amount.toFixed(2)}
+                        ₹{sale.total_amount.toFixed(0)}
                       </TableCell>
                     </TableRow>
                   ))}

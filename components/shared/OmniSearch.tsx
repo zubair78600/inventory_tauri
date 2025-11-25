@@ -56,7 +56,7 @@ const categories: Category[] = [
         id: p.id,
         title: p.name,
         subtitle: `SKU: ${p.sku} • Stock: ${p.stock_quantity}`,
-        meta: `₹${p.price.toFixed(2)}`,
+        meta: `₹${p.price.toFixed(0)}`,
         href: `/inventory/details?id=${p.id}`,
       }));
     },
@@ -86,7 +86,7 @@ const categories: Category[] = [
         id: inv.id,
         title: inv.invoice_number,
         subtitle: 'Invoice', // search result doesn't have customer name, using generic
-        meta: `₹${inv.total_amount.toFixed(2)}`,
+        meta: `₹${inv.total_amount.toFixed(0)}`,
         href: '/billing',
       }));
     },
@@ -101,7 +101,7 @@ const categories: Category[] = [
         id: inv.id,
         title: inv.invoice_number,
         subtitle: 'Invoice',
-        meta: `₹${inv.total_amount.toFixed(2)}`,
+        meta: `₹${inv.total_amount.toFixed(0)}`,
         href: '/sales',
       }));
     },
@@ -116,7 +116,7 @@ const categories: Category[] = [
         id: p.id,
         title: p.name,
         subtitle: `SKU: ${p.sku} • Stock: ${p.stock_quantity}`,
-        meta: `₹${p.price.toFixed(2)}`,
+        meta: `₹${p.price.toFixed(0)}`,
         href: `/inventory/details?id=${p.id}`,
       }));
     },
@@ -179,7 +179,7 @@ export function OmniSearch() {
                     <div key={inv.id} className="px-3 py-2 flex justify-between">
                       <span className="font-semibold">{inv.invoice_number}</span>
                       <span className="text-muted-foreground text-xs">
-                        ₹{inv.total_amount.toFixed(2)}
+                        ₹{inv.total_amount.toFixed(0)}
                       </span>
                     </div>
                   )) || <p className="px-3 py-2">No invoices</p>}
@@ -210,7 +210,7 @@ export function OmniSearch() {
                     <div key={it.id} className="px-3 py-2 flex justify-between">
                       <span>{it.product_name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {it.quantity} × ₹{it.unit_price.toFixed(2)}
+                        {it.quantity} × ₹{it.unit_price.toFixed(0)}
                       </span>
                     </div>
                   ))}

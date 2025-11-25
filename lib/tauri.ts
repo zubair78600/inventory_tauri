@@ -52,6 +52,23 @@ export interface Supplier {
   updated_at: string;
 }
 
+export interface SupplierPayment {
+  id: number;
+  supplier_id: number;
+  product_id: number | null;
+  amount: number;
+  payment_method: string | null;
+  note: string | null;
+  paid_at: string;
+  created_at: string;
+}
+
+export interface SupplierPaymentSummary {
+  total_payable: number;
+  total_paid: number;
+  pending_amount: number;
+}
+
 export interface CreateSupplierInput {
   name: string;
   contact_info: string | null;
@@ -145,6 +162,12 @@ export interface Invoice {
   state: string | null;
   district: string | null;
   town: string | null;
+}
+
+export interface ProductSalesSummary {
+  total_quantity: number;
+  total_amount: number;
+  invoice_count: number;
 }
 
 export interface InvoiceItemWithProduct {
@@ -280,6 +303,51 @@ export const supplierCommands = {
   addMockData: async (): Promise<string> => {
     return await invoke<string>('add_mock_suppliers');
   },
+
+  /**
+   * Get all payment records for a supplier
+   */
+  getPayments: async (supplierId: number, productId: number): Promise<SupplierPayment[]> => {
+    return await invoke<SupplierPayment[]>('get_supplier_payments', { supplierId, productId });
+  },
+
+  /**
+   * Create a payment entry for a supplier
+   */
+  addPayment: async (input: {
+    supplier_id: number;
+    product_id: number;
+    amount: number;
+    payment_method?: string | null;
+    note?: string | null;
+    paid_at?: string | null;
+  }): Promise<SupplierPayment> => {
+    return await invoke<SupplierPayment>('create_supplier_payment', {
+      input: {
+        ...input,
+        payment_method: input.payment_method ?? null,
+        note: input.note ?? null,
+        paid_at: input.paid_at ?? null,
+      },
+    });
+  },
+
+  /**
+   * Delete a payment entry
+   */
+  deletePayment: async (id: number): Promise<void> => {
+    return await invoke<void>('delete_supplier_payment', { id });
+  },
+
+  /**
+   * Get payment summary (total payable, total paid, pending) for a supplier
+   */
+  getPaymentSummary: async (supplierId: number, productId: number): Promise<SupplierPaymentSummary> => {
+    return await invoke<SupplierPaymentSummary>('get_supplier_payment_summary', {
+      supplierId,
+      productId,
+    });
+  },
 };
 
 export const customerCommands = {
@@ -414,6 +482,13 @@ export const invoiceCommands = {
    */
   getById: async (id: number): Promise<InvoiceWithItems> => {
     return await invoke<InvoiceWithItems>('get_invoice', { id });
+  },
+
+  /**
+   * Get aggregated sales summary for a product
+   */
+  getProductSalesSummary: async (productId: number): Promise<ProductSalesSummary> => {
+    return await invoke<ProductSalesSummary>('get_product_sales_summary', { productId });
   },
 
   /**

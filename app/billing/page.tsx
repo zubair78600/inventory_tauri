@@ -292,10 +292,10 @@ export default function Billing() {
                       className="w-14 md:w-16 justify-self-center form-input text-center"
                     />
                     <span className="text-slate-700 dark:text-slate-200 text-center">
-                      ₹{item.unit_price.toFixed(2)}
+                      ₹{item.unit_price.toFixed(0)}
                     </span>
                     <span className="font-semibold text-slate-900 dark:text-slate-50 text-center">
-                      ₹{(item.unit_price * item.quantity).toFixed(2)}
+                      ₹{(item.unit_price * item.quantity).toFixed(0)}
                     </span>
                     <button
                       className="text-danger text-xl justify-self-center font-semibold leading-none"
@@ -358,7 +358,7 @@ export default function Billing() {
 
           <div className="border-t border-slate-200 pt-3 flex items-center justify-between text-lg font-semibold">
             <span>Total</span>
-            <span>₹{calculateTotal().toFixed(2)}</span>
+            <span>₹{calculateTotal().toFixed(0)}</span>
           </div>
 
           <button className="btn btn-primary w-full" onClick={handleCheckout}>
@@ -392,7 +392,7 @@ export default function Billing() {
                 <div className="font-semibold">{product.name}</div>
                 <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
                 <div className="flex justify-between mt-2 text-sm">
-                  <span>₹{(product.selling_price || product.price).toFixed(2)}</span>
+                  <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
                   <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
                     Stock: {product.stock_quantity}
                   </span>
@@ -417,7 +417,7 @@ export default function Billing() {
               <div className="font-semibold">{product.name}</div>
               <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
               <div className="flex justify-between mt-2 text-sm">
-                <span>₹{(product.selling_price || product.price).toFixed(2)}</span>
+                <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
                 <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
                   Stock: {product.stock_quantity}
                 </span>

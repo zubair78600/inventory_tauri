@@ -39,6 +39,13 @@ pub struct InvoiceWithItems {
     pub items: Vec<InvoiceItemWithProduct>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProductSalesSummary {
+    pub total_quantity: i32,
+    pub total_amount: f64,
+    pub invoice_count: i32,
+}
+
 /// Get all invoices, optionally filtered by customer
 #[tauri::command]
 pub fn get_invoices(customer_id: Option<i32>, db: State<Database>) -> Result<Vec<Invoice>, String> {
@@ -233,6 +240,51 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
     }
 
     Ok(InvoiceWithItems { invoice, items })
+}
+
+/// Get aggregated sales summary for a specific product
+#[tauri::command]
+pub fn get_product_sales_summary(
+    product_id: i32,
+    db: State<Database>,
+) -> Result<ProductSalesSummary, String> {
+    log::info!(
+        "get_product_sales_summary called for product_id: {}",
+        product_id
+    );
+
+    let conn = db.conn();
+    let conn = conn
+        .lock()
+        .map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    // Total quantity and total amount for this product across all invoices
+    let (total_qty, total_amount): (i64, f64) = conn
+        .query_row(
+            "SELECT
+                COALESCE(SUM(quantity), 0) AS total_qty,
+                COALESCE(SUM(quantity * unit_price), 0.0) AS total_amount
+             FROM invoice_items
+             WHERE product_id = ?1",
+            [product_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap_or((0, 0.0));
+
+    // Number of distinct invoices that contain this product
+    let invoice_count: i32 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT invoice_id) FROM invoice_items WHERE product_id = ?1",
+            [product_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    Ok(ProductSalesSummary {
+        total_quantity: total_qty as i32,
+        total_amount,
+        invoice_count,
+    })
 }
 
 /// Create a new invoice with items and update stock

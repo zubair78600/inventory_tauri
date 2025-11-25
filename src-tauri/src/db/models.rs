@@ -89,6 +89,19 @@ pub struct InvoiceItemWithProduct {
     pub total: f64,
 }
 
+/// Supplier payment tracking for amounts paid to suppliers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SupplierPayment {
+    pub id: i32,
+    pub supplier_id: i32,
+    pub product_id: Option<i32>,
+    pub amount: f64,
+    pub payment_method: Option<String>,
+    pub note: Option<String>,
+    pub paid_at: String,
+    pub created_at: String,
+}
+
 /// Deleted Item model for audit trail
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeletedItem {
