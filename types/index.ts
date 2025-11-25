@@ -12,6 +12,23 @@ export type Supplier = {
   updated_at: string;
 };
 
+export type SupplierPayment = {
+  id: number;
+  supplier_id: number;
+  product_id: number | null;
+  amount: number;
+  payment_method: string | null;
+  note: string | null;
+  paid_at: string;
+  created_at: string;
+};
+
+export type SupplierPaymentSummary = {
+  total_payable: number;
+  total_paid: number;
+  pending_amount: number;
+};
+
 export type Product = {
   id: number;
   name: string;

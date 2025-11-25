@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { supplierCommands, productCommands, Supplier, Product } from '@/lib/tauri';
+import { supplierCommands, productCommands, Supplier, Product, SupplierPaymentSummary } from '@/lib/tauri';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Calendar, MapPin, Phone, Mail, Package, FileText, ChevronDown, ChevronUp, Building } from 'lucide-react';
@@ -14,6 +14,7 @@ function SupplierDetailsContent() {
 
     const [supplier, setSupplier] = useState<Supplier | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
+    const [paymentSummaries, setPaymentSummaries] = useState<Record<number, SupplierPaymentSummary | null>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -27,10 +28,27 @@ function SupplierDetailsContent() {
             setLoading(true);
             const [supplierData, productsData] = await Promise.all([
                 supplierCommands.getById(id),
-                productCommands.getBySupplier(id)
+                productCommands.getBySupplier(id),
             ]);
             setSupplier(supplierData);
             setProducts(productsData);
+
+            if (productsData.length > 0) {
+                const entries = await Promise.all(
+                    productsData.map(async (product) => {
+                        try {
+                            const summary = await supplierCommands.getPaymentSummary(id, product.id);
+                            return [product.id, summary] as const;
+                        } catch (err) {
+                            console.error('Failed to load payment summary for product', product.id, err);
+                            return [product.id, null] as const;
+                        }
+                    }),
+                );
+                setPaymentSummaries(Object.fromEntries(entries));
+            } else {
+                setPaymentSummaries({});
+            }
         } catch (err) {
             console.error(err);
             setError('Failed to load supplier details');
@@ -114,7 +132,7 @@ function SupplierDetailsContent() {
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Stock Value</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{totalValue.toFixed(1)}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{totalValue.toFixed(0)}</div>
                 </Card>
             </div>
 
@@ -122,19 +140,20 @@ function SupplierDetailsContent() {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-slate-900">Supplied Products</h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
+                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr,1.4fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
                         <div>Purchased Date</div>
                         <div>Product</div>
                         <div>SKU</div>
-                        <div>Price</div>
                         <div>Stock</div>
+                        <div>Price</div>
+                        <div>Stock Amount</div>
                     </div>
 
                     <div className="divide-y divide-slate-100">
                         {products.map((product) => (
                             <div
                                 key={product.id}
-                                className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
+                                className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr,1.4fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
                                 onClick={() => router.push(`/inventory/details?id=${product.id}`)}
                             >
                                 <div className="text-slate-500 text-sm text-center">
@@ -148,10 +167,35 @@ function SupplierDetailsContent() {
                                     {product.sku}
                                 </div>
                                 <div className="text-center font-medium text-slate-900">
-                                    ₹{product.price.toFixed(1)}
+                                    ₹{product.price.toFixed(0)}
                                 </div>
                                 <div className="text-center text-slate-500">
                                     {product.stock_quantity}
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-sm font-semibold text-slate-900">
+                                        ₹{((product.initial_stock ?? product.stock_quantity) * product.price).toFixed(0)}
+                                    </div>
+                                    <div className="text-[11px] mt-0.5">
+                                        {(() => {
+                                            const summary = paymentSummaries[product.id];
+                                            if (!summary) {
+                                                return <span className="text-slate-400">-</span>;
+                                            }
+                                            if (summary.pending_amount > 0) {
+                                                return (
+                                                    <span className="text-red-600 font-semibold">
+                                                        Pending: ₹{summary.pending_amount.toFixed(0)}
+                                                    </span>
+                                                );
+                                            }
+                                            return (
+                                                <span className="text-emerald-600 font-semibold">
+                                                    Cleared
+                                                </span>
+                                            );
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
                         ))}

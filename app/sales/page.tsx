@@ -120,7 +120,7 @@ export default function Sales() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">₹{sale.total_amount.toFixed(2)}</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">₹{sale.total_amount.toFixed(0)}</p>
                     <p className="text-xs text-muted-foreground">
                       {sale.item_count ? `${sale.item_count} items` : ''}
                     </p>
@@ -162,13 +162,13 @@ export default function Sales() {
                 <div>
                   <p className="text-xs text-muted-foreground">GST / Discount</p>
                   <p className="font-semibold">
-                    GST: ₹{selected.tax_amount.toFixed(2)} | Disc: ₹
-                    {selected.discount_amount.toFixed(2)}
+                    GST: ₹{selected.tax_amount.toFixed(0)} | Disc: ₹
+                    {selected.discount_amount.toFixed(0)}
                   </p>
                 </div>
                 <div className="col-span-2">
                   <p className="text-xs text-muted-foreground">Total</p>
-                  <p className="text-lg font-semibold">₹{selected.total_amount.toFixed(2)}</p>
+                  <p className="text-lg font-semibold">₹{selected.total_amount.toFixed(0)}</p>
                 </div>
               </div>
             )}
@@ -187,10 +187,10 @@ export default function Sales() {
                   <div>
                     <p className="font-semibold text-slate-900 dark:text-slate-100">{item.product_name}</p>
                     <p className="text-xs text-muted-foreground">
-                      ₹{item.unit_price.toFixed(2)} • Qty {item.quantity}
+                      ₹{item.unit_price.toFixed(0)} • Qty {item.quantity}
                     </p>
                   </div>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">₹{item.total.toFixed(2)}</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">₹{item.total.toFixed(0)}</p>
                 </div>
               ))}
               {!selected && (

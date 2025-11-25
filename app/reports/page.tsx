@@ -69,7 +69,7 @@ export default function Reports() {
           <CardContent className="space-y-2">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total Revenue</span>
-              <span className="font-semibold">₹{stats.total_revenue.toFixed(2)}</span>
+              <span className="font-semibold">₹{stats.total_revenue.toFixed(0)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total Orders</span>
@@ -85,7 +85,7 @@ export default function Reports() {
           <CardContent className="space-y-2">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total Valuation</span>
-              <span className="font-semibold">₹{stats.total_valuation.toFixed(2)}</span>
+              <span className="font-semibold">₹{stats.total_valuation.toFixed(0)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Low Stock Items</span>
@@ -104,11 +104,11 @@ export default function Reports() {
             <CardContent className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Revenue</span>
-                <span className="font-semibold">₹{analytics.revenue.toFixed(2)}</span>
+                <span className="font-semibold">₹{analytics.revenue.toFixed(0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tax Collected</span>
-                <span className="font-semibold">₹{analytics.taxCollected.toFixed(2)}</span>
+                <span className="font-semibold">₹{analytics.taxCollected.toFixed(0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Invoices</span>
@@ -137,7 +137,7 @@ export default function Reports() {
                   {analytics.topCustomers.map(c => (
                     <div key={c.id} className="flex justify-between text-sm">
                       <span>{c.name}</span>
-                      <Badge>₹{c.spent.toFixed(2)}</Badge>
+                      <Badge>₹{c.spent.toFixed(0)}</Badge>
                     </div>
                   ))}
                   {analytics.topCustomers.length === 0 && <div className="text-muted-foreground text-sm">No data</div>}
@@ -175,7 +175,7 @@ export default function Reports() {
                     <div className="text-muted-foreground text-sm">{result.customer.phone ?? 'No Phone'}</div>
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold text-success">Total Spent: ₹{result.stats.total_spent.toFixed(2)}</div>
+                    <div className="font-semibold text-success">Total Spent: ₹{result.stats.total_spent.toFixed(0)}</div>
                     <div className="text-muted-foreground text-sm">Orders: {result.stats.invoice_count}</div>
                   </div>
                 </div>

@@ -309,6 +309,30 @@ impl Database {
             conn.execute("ALTER TABLE products ADD COLUMN initial_stock INTEGER", [])?;
         }
 
+        // Migration: Add product_id column to supplier_payments (for per-product payment tracking)
+        let supplier_payments_product_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('supplier_payments') WHERE name = 'product_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !supplier_payments_product_exists {
+            log::info!("Migrating: Adding product_id column to supplier_payments table");
+            conn.execute("ALTER TABLE supplier_payments ADD COLUMN product_id INTEGER", [])?;
+        }
+
+        // Ensure indexes for supplier_payments with product_id exist (now that column is present)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_supplier_payments_product ON supplier_payments(product_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier_product ON supplier_payments(supplier_id, product_id)",
+            [],
+        )?;
+
         Ok(())
     }
 

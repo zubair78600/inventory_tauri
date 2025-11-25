@@ -87,6 +87,20 @@ CREATE TABLE IF NOT EXISTS deleted_items (
     deleted_by TEXT
 );
 
+-- Supplier Payments table
+CREATE TABLE IF NOT EXISTS supplier_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER NOT NULL,
+    product_id INTEGER,
+    amount REAL NOT NULL,
+    payment_method TEXT,
+    note TEXT,
+    paid_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id);
@@ -99,6 +113,8 @@ CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id
 CREATE INDEX IF NOT EXISTS idx_deleted_items_type ON deleted_items(entity_type);
 CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
     CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_paid_at ON supplier_payments(paid_at);
 
     -- Users table
     CREATE TABLE IF NOT EXISTS users (

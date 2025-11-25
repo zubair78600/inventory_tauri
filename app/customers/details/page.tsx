@@ -121,7 +121,7 @@ function CustomerDetailsContent() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Spent</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{stats.total_spent.toFixed(1)}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">₹{stats.total_spent.toFixed(0)}</div>
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Invoices</div>
@@ -163,13 +163,13 @@ function CustomerDetailsContent() {
                                         {new Date(invoice.created_at).toLocaleString()}
                                     </div>
                                     <div className="text-center font-medium text-slate-900">
-                                        ₹{invoice.total_amount.toFixed(1)}
+                                        ₹{invoice.total_amount.toFixed(0)}
                                     </div>
                                     <div className="text-center text-slate-500">
                                         {invoice.item_count}
                                     </div>
                                     <div className="text-center text-slate-500">
-                                        {invoice.discount_amount > 0 ? `₹${invoice.discount_amount.toFixed(1)}` : '-'}
+                                        {invoice.discount_amount > 0 ? `₹${invoice.discount_amount.toFixed(0)}` : '-'}
                                     </div>
                                     <div className="text-center">
                                         {expandedInvoiceId === invoice.id ? (
@@ -196,10 +196,10 @@ function CustomerDetailsContent() {
                                                                 {item.product_name}
                                                             </div>
                                                             <div className="text-slate-500">
-                                                                {item.quantity} x ₹{item.unit_price.toFixed(1)}
+                                                                {item.quantity} x ₹{item.unit_price.toFixed(0)}
                                                             </div>
                                                             <div className="text-right font-medium text-slate-900">
-                                                                ₹{(item.quantity * item.unit_price).toFixed(1)}
+                                                                ₹{(item.quantity * item.unit_price).toFixed(0)}
                                                             </div>
                                                         </div>
                                                     ))}
