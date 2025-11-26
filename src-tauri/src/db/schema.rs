@@ -152,3 +152,9 @@ PRAGMA foreign_keys=off;
 
 PRAGMA foreign_keys=on;
 "#;
+
+// Include the purchase order migration module
+pub mod purchase_order_migration {
+    /// Migration SQL for Purchase Order and FIFO Inventory System
+    pub const PURCHASE_ORDER_MIGRATION_SQL: &str = include_str!("migration_purchase_orders.sql");
+}

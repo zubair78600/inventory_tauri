@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod services;
 
 use db::Database;
 use tauri::{Manager, menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder}};
@@ -118,6 +119,16 @@ pub fn run() {
       commands::create_user,
       commands::update_user,
       commands::delete_user,
+      commands::create_purchase_order,
+      commands::get_purchase_orders,
+      commands::get_purchase_order_by_id,
+      commands::update_purchase_order_status,
+      commands::add_payment_to_purchase_order,
+      commands::get_product_purchase_summary,
+      commands::get_product_purchase_history,
+      commands::migrate_existing_products,
+      commands::check_migration_status,
+      commands::validate_migration,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

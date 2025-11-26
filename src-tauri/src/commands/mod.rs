@@ -6,6 +6,8 @@ pub mod invoices;
 pub mod search;
 pub mod deleted_items;
 pub mod auth;
+pub mod purchase_orders;
+pub mod migration;
 
 pub use products::*;
 pub use suppliers::*;
@@ -15,3 +17,5 @@ pub use invoices::*;
 pub use search::*;
 pub use deleted_items::*;
 pub use auth::*;
+pub use purchase_orders::*;
+pub use migration::*;

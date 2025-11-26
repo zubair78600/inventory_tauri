@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use super::schema::CREATE_TABLES_SQL;
+use super::schema::purchase_order_migration::PURCHASE_ORDER_MIGRATION_SQL;
 
 /// Database wrapper with thread-safe connection
 #[derive(Clone)]
@@ -332,6 +333,25 @@ impl Database {
             "CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier_product ON supplier_payments(supplier_id, product_id)",
             [],
         )?;
+
+        // Migration: Add po_id column to supplier_payments (for linking payments to purchase orders)
+        let supplier_payments_po_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('supplier_payments') WHERE name = 'po_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !supplier_payments_po_exists {
+            log::info!("Migrating: Adding po_id column to supplier_payments table");
+            conn.execute("ALTER TABLE supplier_payments ADD COLUMN po_id INTEGER REFERENCES purchase_orders(id)", [])?;
+        }
+
+        // Migration: Run Purchase Order and FIFO Inventory System migration
+        log::info!("Running Purchase Order and FIFO migration...");
+        conn.execute_batch(PURCHASE_ORDER_MIGRATION_SQL)?;
+        log::info!("Purchase Order and FIFO migration completed successfully");
 
         Ok(())
     }

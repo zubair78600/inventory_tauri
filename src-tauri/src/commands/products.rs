@@ -1,4 +1,5 @@
 use crate::db::{Database, Product};
+use crate::services::inventory_service;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -175,6 +176,9 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
     let conn = db.conn();
     let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
+    let initial_qty = input.stock_quantity;
+    let purchase_date = Utc::now().format("%Y-%m-%d").to_string();
+
     // Check if SKU already exists
     let sku_exists: bool = conn
         .query_row(
@@ -196,8 +200,8 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
             &input.sku,
             input.price,
             input.selling_price,
-            input.stock_quantity, // initial_stock is same as stock_quantity on creation
-            input.stock_quantity,
+            initial_qty, // capture the intended purchased stock
+            0,           // start at 0 to avoid double-counting; batch will set real stock
             input.supplier_id,
         ),
     )
@@ -228,6 +232,25 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
             )
             .map_err(|e| format!("Failed to record initial supplier payment: {}", e))?;
         }
+    }
+
+    // Create an initial FIFO batch if starting stock > 0
+    if initial_qty > 0 {
+        inventory_service::record_purchase(
+            &conn,
+            id,
+            initial_qty,
+            input.price,
+            None,
+            &purchase_date,
+        )?;
+
+        // Update product stock to match the created batch
+        conn.execute(
+            "UPDATE products SET stock_quantity = ?, updated_at = datetime('now') WHERE id = ?",
+            (initial_qty, id),
+        )
+        .map_err(|e| format!("Failed to update product stock after batch creation: {}", e))?;
     }
 
     // Fetch the created product to get timestamps

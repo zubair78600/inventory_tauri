@@ -1,4 +1,5 @@
 use crate::db::{Database, Invoice};
+use crate::services::inventory_service;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -362,7 +363,9 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
 
     let invoice_id = tx.last_insert_rowid() as i32;
 
-    // Create invoice items and update stock
+    // Create invoice items, update stock, and record FIFO sales
+    let sale_date = Utc::now().format("%Y-%m-%d").to_string();
+
     for item in &input.items {
         // Insert invoice item
         tx.execute(
@@ -377,6 +380,16 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
             (item.quantity, item.product_id),
         )
         .map_err(|e| format!("Failed to update product stock: {}", e))?;
+
+        // Record FIFO sale (updates batches and creates transaction)
+        // This will calculate COGS automatically using FIFO
+        inventory_service::record_sale_fifo(
+            &tx,
+            item.product_id,
+            item.quantity,
+            &sale_date,
+            invoice_id,
+        ).map_err(|e| format!("Failed to record FIFO sale: {}", e))?;
     }
 
     // Commit transaction
