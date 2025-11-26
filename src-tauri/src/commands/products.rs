@@ -11,6 +11,7 @@ pub struct CreateProductInput {
     pub selling_price: Option<f64>,
     pub stock_quantity: i32,
     pub supplier_id: Option<i32>,
+    pub amount_paid: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -203,6 +204,31 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
     .map_err(|e| format!("Failed to create product: {}", e))?;
 
     let id = conn.last_insert_rowid() as i32;
+
+    // If an amount_paid was provided and supplier exists, record an initial payment
+    if let (Some(supplier_id), Some(amount_paid)) = (input.supplier_id, input.amount_paid) {
+        if amount_paid > 0.0 {
+            log::info!(
+                "Recording initial supplier payment of {} for product {} to supplier {}",
+                amount_paid,
+                id,
+                supplier_id
+            );
+
+            conn.execute(
+                "INSERT INTO supplier_payments (supplier_id, product_id, amount, payment_method, note, paid_at, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), datetime('now'))",
+                (
+                    supplier_id,
+                    id,
+                    amount_paid,
+                    Some(String::from("Initial Stock")),
+                    Option::<String>::None,
+                ),
+            )
+            .map_err(|e| format!("Failed to record initial supplier payment: {}", e))?;
+        }
+    }
 
     // Fetch the created product to get timestamps
     let product = conn.query_row(

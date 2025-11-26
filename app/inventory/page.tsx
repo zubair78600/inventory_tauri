@@ -26,6 +26,7 @@ type NewProductFormState = {
   selling_price: string;
   stock_quantity: string;
   supplier_id: string;
+  amount_paid: string;
 };
 
 import { useRouter } from 'next/navigation';
@@ -44,6 +45,7 @@ export default function Inventory() {
     selling_price: '',
     stock_quantity: '',
     supplier_id: '',
+    amount_paid: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -77,9 +79,18 @@ export default function Inventory() {
         selling_price: newProduct.selling_price ? parseFloat(newProduct.selling_price) : null,
         stock_quantity: parseInt(newProduct.stock_quantity, 10),
         supplier_id: newProduct.supplier_id ? Number(newProduct.supplier_id) : null,
+        amount_paid: newProduct.amount_paid ? parseFloat(newProduct.amount_paid) : null,
       });
       setShowAddForm(false);
-      setNewProduct({ name: '', sku: '', price: '', selling_price: '', stock_quantity: '', supplier_id: '' });
+      setNewProduct({
+        name: '',
+        sku: '',
+        price: '',
+        selling_price: '',
+        stock_quantity: '',
+        supplier_id: '',
+        amount_paid: '',
+      });
       void fetchData();
     } catch (error) {
       console.error('Error creating product:', error);
@@ -230,6 +241,30 @@ export default function Inventory() {
                   value={newProduct.stock_quantity}
                   onChange={(e) => setNewProduct({ ...newProduct, stock_quantity: e.target.value })}
                   required
+                />
+              </div>
+              <div>
+                <label className="form-label">
+                  Amount Paid
+                  {newProduct.price && newProduct.stock_quantity && (
+                    <span className="ml-2 text-xs text-slate-400">
+                      Stock Amount (
+                      ₹
+                      {(
+                        parseFloat(newProduct.price || '0') *
+                        parseInt(newProduct.stock_quantity || '0', 10)
+                      ).toFixed(0)}
+                      )
+                    </span>
+                  )}
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newProduct.amount_paid}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, amount_paid: e.target.value })
+                  }
                 />
               </div>
               <div>
