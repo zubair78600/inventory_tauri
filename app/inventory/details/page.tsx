@@ -2,13 +2,13 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { productCommands, invoiceCommands, supplierCommands, Product, Invoice, SupplierPayment, SupplierPaymentSummary, ProductSalesSummary } from '@/lib/tauri';
+import { productCommands, invoiceCommands, supplierCommands, purchaseOrderCommands, Product, Invoice, SupplierPayment, SupplierPaymentSummary, ProductSalesSummary, PurchaseOrderItemWithProduct, ProductPurchaseSummary } from '@/lib/tauri';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ask } from '@tauri-apps/plugin-dialog';
-import { ArrowLeft, Calendar, Package, Tag, BarChart3, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Calendar, Package, Tag, BarChart3, FileText, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
 
 function InventoryDetailsContent() {
     const searchParams = useSearchParams();
@@ -17,11 +17,13 @@ function InventoryDetailsContent() {
 
     const [product, setProduct] = useState<Product | null>(null);
     const [invoices, setInvoices] = useState<Invoice[]>([]);
+    const [purchaseHistory, setPurchaseHistory] = useState<PurchaseOrderItemWithProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [payments, setPayments] = useState<SupplierPayment[]>([]);
     const [paymentSummary, setPaymentSummary] = useState<SupplierPaymentSummary | null>(null);
     const [salesSummary, setSalesSummary] = useState<ProductSalesSummary | null>(null);
+    const [purchaseSummary, setPurchaseSummary] = useState<ProductPurchaseSummary | null>(null);
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [newPayment, setNewPayment] = useState<{ amount: string; payment_method: string; note: string }>({
         amount: '',
@@ -38,14 +40,18 @@ function InventoryDetailsContent() {
     const loadData = async () => {
         try {
             setLoading(true);
-            const [productData, invoicesData, salesData] = await Promise.all([
+            const [productData, invoicesData, salesData, purchasesData, purchaseSummaryData] = await Promise.all([
                 productCommands.getById(id),
                 invoiceCommands.getByProduct(id),
                 invoiceCommands.getProductSalesSummary(id),
+                purchaseOrderCommands.getProductPurchaseHistory(id),
+                invoiceCommands.getProductPurchaseSummary(id),
             ]);
             setProduct(productData);
             setInvoices(invoicesData);
             setSalesSummary(salesData);
+            setPurchaseHistory(purchasesData);
+            setPurchaseSummary(purchaseSummaryData);
 
             if (productData.supplier_id) {
                 try {
@@ -132,6 +138,40 @@ function InventoryDetailsContent() {
         !!paymentSummary &&
         paymentSummary.pending_amount <= 0;
 
+    type PurchaseRow = {
+        key: string;
+        type: 'initial' | 'po';
+        date: string;
+        quantity: number;
+        unit_cost: number;
+        total_cost: number;
+        po_id?: number;
+    };
+
+    const displayPurchaseHistory: PurchaseRow[] = [
+        ...(product.initial_stock && product.initial_stock > 0
+            ? [
+                {
+                    key: `initial-${product.id}`,
+                    type: 'initial',
+                    date: product.created_at,
+                    quantity: product.initial_stock,
+                    unit_cost: product.price,
+                    total_cost: product.initial_stock * product.price,
+                } satisfies PurchaseRow,
+            ]
+            : []),
+        ...purchaseHistory.map<PurchaseRow>((purchase) => ({
+            key: `po-${purchase.id}`,
+            type: 'po',
+            date: purchase.created_at,
+            quantity: purchase.quantity,
+            unit_cost: purchase.unit_cost,
+            total_cost: purchase.total_cost,
+            po_id: purchase.po_id,
+        })),
+    ];
+
     // To get accurate "Total Sold" and "Revenue from this product", we would need to inspect invoice items
     // Since we only have the invoice list, we can show "Invoices containing this item"
 
@@ -167,13 +207,16 @@ function InventoryDetailsContent() {
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Stock Purchased</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{product.initial_stock || product.stock_quantity}</div>
-                    <div className="text-xs text-slate-400 mt-1">Units</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                        {purchaseSummary?.total_quantity ?? product.initial_stock ?? product.stock_quantity}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">Units (all POs)</div>
                 </Card>
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Stock Amount</div>
                     <div className="text-2xl font-bold text-indigo-600 mt-1">
-                        ₹{((product.initial_stock || product.stock_quantity) * product.price).toFixed(0)}
+                        ₹{(purchaseSummary?.total_value ??
+                            ((product.initial_stock ?? product.stock_quantity) * product.price)).toFixed(0)}
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
                         {product.supplier_id && paymentSummary ? (
@@ -264,12 +307,7 @@ function InventoryDetailsContent() {
                                         Amount
                                         <span className="ml-2 text-xs text-slate-400">
                                             Stock Amount (
-                                            ₹
-                                            {(
-                                                (product.initial_stock ?? product.stock_quantity) *
-                                                product.price
-                                            ).toFixed(0)}
-                                            )
+                                            ₹{(purchaseSummary?.total_value ?? 0).toFixed(0)})
                                         </span>
                                     </label>
                                     <Input
@@ -379,6 +417,74 @@ function InventoryDetailsContent() {
                     </div>
                 </div>
             )}
+
+            {/* Purchase History Section */}
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5" />
+                    Purchase History
+                </h2>
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="grid grid-cols-[1.2fr,1.5fr,1fr,1fr,1fr,0.8fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
+                        <div>Purchase Date</div>
+                        <div>PO Number</div>
+                        <div>Quantity</div>
+                        <div>Unit Cost</div>
+                        <div>Total Cost</div>
+                        <div>View</div>
+                    </div>
+
+                    <div className="divide-y divide-slate-100">
+                        {displayPurchaseHistory.map((purchase) => (
+                            <div
+                                key={purchase.key}
+                                className="grid grid-cols-[1.2fr,1.5fr,1fr,1fr,1fr,0.8fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors"
+                            >
+                                <div className="text-slate-500 text-sm text-center">
+                                    {new Date(purchase.date).toLocaleDateString('en-IN', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                    })}
+                                </div>
+                                <div className={`font-medium text-center ${purchase.type === 'po' ? 'text-blue-600' : 'text-slate-600'}`}>
+                                    {purchase.type === 'po' && purchase.po_id
+                                        ? `PO-${purchase.po_id.toString().padStart(3, '0')}`
+                                        : 'Initial Stock'}
+                                </div>
+                                <div className="text-center font-medium text-slate-900">
+                                    {purchase.quantity}
+                                </div>
+                                <div className="text-center text-slate-700">
+                                    ₹{purchase.unit_cost.toFixed(2)}
+                                </div>
+                                <div className="text-center font-semibold text-emerald-600">
+                                    ₹{purchase.total_cost.toFixed(2)}
+                                </div>
+                                <div className="text-center">
+                                    {purchase.type === 'po' && purchase.po_id ? (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs"
+                                            onClick={() => router.push(`/purchase-orders/details?id=${purchase.po_id}`)}
+                                        >
+                                            View PO
+                                        </Button>
+                                    ) : (
+                                        <span className="text-xs text-slate-400">-</span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {displayPurchaseHistory.length === 0 && (
+                            <div className="p-8 text-center text-slate-500">
+                                No purchase history found. Stock may have been added before the Purchase Order system was implemented.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             {/* Sales History Section */}
             <div className="space-y-4">

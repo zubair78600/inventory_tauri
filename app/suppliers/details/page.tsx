@@ -77,7 +77,14 @@ function SupplierDetailsContent() {
     }
 
     const totalStock = products.reduce((acc, p) => acc + p.stock_quantity, 0);
-    const totalValue = products.reduce((acc, p) => acc + (p.price * p.stock_quantity), 0);
+    const totalValue = products.reduce(
+        (acc, p) => acc + p.price * (p.initial_stock ?? p.stock_quantity),
+        0,
+    );
+    const totalPending = Object.values(paymentSummaries).reduce((sum, summary) => {
+        if (!summary) return sum;
+        return sum + Math.max(0, summary.pending_amount);
+    }, 0);
 
     return (
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -121,7 +128,7 @@ function SupplierDetailsContent() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Products</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{products.length}</div>
@@ -133,6 +140,12 @@ function SupplierDetailsContent() {
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Stock Value</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">₹{totalValue.toFixed(0)}</div>
+                </Card>
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
+                    <div className="text-sm text-slate-500 font-medium">Pending Amount</div>
+                    <div className={`text-2xl font-bold mt-1 ${totalPending > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                        ₹{totalPending.toFixed(0)}
+                    </div>
                 </Card>
             </div>
 
@@ -167,10 +180,10 @@ function SupplierDetailsContent() {
                                     {product.sku}
                                 </div>
                                 <div className="text-center font-medium text-slate-900">
-                                    ₹{product.price.toFixed(0)}
+                                    {product.initial_stock ?? product.stock_quantity}
                                 </div>
                                 <div className="text-center text-slate-500">
-                                    {product.stock_quantity}
+                                    ₹{product.price.toFixed(0)}
                                 </div>
                                 <div className="text-center">
                                     <div className="text-sm font-semibold text-slate-900">

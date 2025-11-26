@@ -464,18 +464,30 @@ pub fn get_supplier_payment_summary(
         .lock()
         .map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    // Total payable is the purchase value for this specific product.
-    // We use initial_stock when available, otherwise current stock_quantity.
-    let (price, initial_stock, stock_quantity): (f64, Option<i32>, i32) = conn
+    // Total payable is the purchase value for this specific product from this supplier.
+    // Use purchase_order_items to sum actual quantities and costs, plus initial stock value.
+    let (po_total_value, _po_total_qty): (f64, i64) = conn
         .query_row(
-            "SELECT price, initial_stock, stock_quantity FROM products WHERE id = ?1 AND supplier_id = ?2",
+            "SELECT
+                COALESCE(SUM(poi.quantity * poi.unit_cost), 0.0),
+                COALESCE(SUM(poi.quantity), 0)
+             FROM purchase_order_items poi
+             JOIN purchase_orders po ON po.id = poi.po_id
+             WHERE poi.product_id = ?1 AND po.supplier_id = ?2",
             (product_id, supplier_id),
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
-        .unwrap_or((0.0, None, 0));
+        .unwrap_or((0.0, 0));
 
-    let units = initial_stock.unwrap_or(stock_quantity) as f64;
-    let total_payable: f64 = price * units;
+    let (initial_stock, price): (i64, f64) = conn
+        .query_row(
+            "SELECT COALESCE(initial_stock, 0), price FROM products WHERE id = ?1",
+            [product_id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?)),
+        )
+        .unwrap_or((0, 0.0));
+
+    let total_payable: f64 = po_total_value + (initial_stock as f64 * price);
 
     let total_paid: f64 = conn
         .query_row(

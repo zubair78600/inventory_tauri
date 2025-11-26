@@ -171,6 +171,12 @@ export interface ProductSalesSummary {
   invoice_count: number;
 }
 
+export interface ProductPurchaseSummary {
+  total_quantity: number;
+  total_value: number;
+  purchase_orders: number;
+}
+
 export interface InvoiceItemWithProduct {
   id: number;
   invoice_id: number;
@@ -493,6 +499,13 @@ export const invoiceCommands = {
   },
 
   /**
+   * Get aggregated purchase summary for a product
+   */
+  getProductPurchaseSummary: async (productId: number): Promise<ProductPurchaseSummary> => {
+    return await invoke<ProductPurchaseSummary>('get_product_purchase_summary', { productId });
+  },
+
+  /**
    * Create a new invoice with items (updates stock)
    */
   create: async (input: CreateInvoiceInput): Promise<Invoice> => {
@@ -570,5 +583,270 @@ export const searchCommands = {
    */
   exportCustomersCSV: async (): Promise<string> => {
     return await invoke<string>('export_customers_csv');
+  },
+};
+
+// =============================================
+// PURCHASE ORDER TYPES
+// =============================================
+
+export interface PurchaseOrder {
+  id: number;
+  po_number: string;
+  supplier_id: number;
+  order_date: string;
+  expected_delivery_date: string | null;
+  received_date: string | null;
+  status: 'draft' | 'ordered' | 'received' | 'cancelled';
+  total_amount: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseOrderWithDetails {
+  id: number;
+  po_number: string;
+  supplier_id: number;
+  supplier_name: string;
+  order_date: string;
+  expected_delivery_date: string | null;
+  received_date: string | null;
+  status: 'draft' | 'ordered' | 'received' | 'cancelled';
+  total_amount: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  items_count: number;
+  total_paid: number;
+  total_pending: number;
+}
+
+export interface PurchaseOrderItemWithProduct {
+  id: number;
+  po_id: number;
+  product_id: number;
+  product_name: string;
+  sku: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+  created_at: string;
+}
+
+export interface PurchaseOrderComplete {
+  purchase_order: PurchaseOrder;
+  supplier: Supplier;
+  items: PurchaseOrderItemWithProduct[];
+  payments: SupplierPayment[];
+  total_paid: number;
+  total_pending: number;
+}
+
+export interface PurchaseOrderItemInput {
+  product_id: number;
+  quantity: number;
+  unit_cost: number;
+}
+
+export interface CreatePurchaseOrderInput {
+  supplier_id: number;
+  items: PurchaseOrderItemInput[];
+  order_date?: string | null;
+  expected_delivery_date?: string | null;
+  notes?: string | null;
+}
+
+// =============================================
+// FIFO INVENTORY TYPES
+// =============================================
+
+export interface InventoryBatch {
+  id: number;
+  product_id: number;
+  po_item_id: number | null;
+  quantity_remaining: number;
+  unit_cost: number;
+  purchase_date: string;
+  created_at: string;
+}
+
+export interface InventoryBatchWithDetails {
+  id: number;
+  product_id: number;
+  po_item_id: number | null;
+  po_number: string | null;
+  quantity_remaining: number;
+  unit_cost: number;
+  batch_value: number;
+  purchase_date: string;
+  created_at: string;
+}
+
+export interface InventoryTransaction {
+  id: number;
+  product_id: number;
+  transaction_type: 'purchase' | 'sale' | 'adjustment';
+  quantity_change: number;
+  unit_cost: number | null;
+  reference_type: string | null;
+  reference_id: number | null;
+  balance_after: number;
+  transaction_date: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface FifoCostBreakdown {
+  batch_id: number;
+  quantity_used: number;
+  unit_cost: number;
+  subtotal: number;
+}
+
+export interface FifoSaleResult {
+  total_cogs: number;
+  breakdown: FifoCostBreakdown[];
+  batches_depleted: number[];
+}
+
+// =============================================
+// PURCHASE ORDER COMMANDS
+// =============================================
+
+/**
+ * Purchase Order Commands
+ */
+export const purchaseOrderCommands = {
+  /**
+   * Create a new purchase order with items
+   */
+  create: async (input: CreatePurchaseOrderInput): Promise<PurchaseOrder> => {
+    return await invoke<PurchaseOrder>('create_purchase_order', { input });
+  },
+
+  /**
+   * Get all purchase orders, optionally filtered by supplier or status
+   */
+  getAll: async (supplierId?: number, status?: string): Promise<PurchaseOrderWithDetails[]> => {
+    return await invoke<PurchaseOrderWithDetails[]>('get_purchase_orders', {
+      supplierId: supplierId ?? null,
+      status: status ?? null,
+    });
+  },
+
+  /**
+   * Get a single purchase order with complete details
+   */
+  getById: async (poId: number): Promise<PurchaseOrderComplete> => {
+    return await invoke<PurchaseOrderComplete>('get_purchase_order_by_id', { poId });
+  },
+
+  /**
+   * Update purchase order status
+   */
+  updateStatus: async (
+    poId: number,
+    status: 'draft' | 'ordered' | 'received' | 'cancelled',
+    receivedDate?: string | null
+  ): Promise<PurchaseOrder> => {
+    return await invoke<PurchaseOrder>('update_purchase_order_status', {
+      poId,
+      status,
+      receivedDate: receivedDate ?? null,
+    });
+  },
+
+  /**
+   * Add a payment to a purchase order
+   */
+  addPayment: async (input: {
+    po_id: number;
+    amount: number;
+    payment_method?: string | null;
+    note?: string | null;
+    paid_at?: string | null;
+  }): Promise<number> => {
+    return await invoke<number>('add_payment_to_purchase_order', {
+      poId: input.po_id,
+      amount: input.amount,
+      paymentMethod: input.payment_method ?? null,
+      note: input.note ?? null,
+      paidAt: input.paid_at ?? null,
+    });
+  },
+
+  /**
+   * Get purchase history for a specific product
+   */
+  getProductPurchaseHistory: async (productId: number): Promise<PurchaseOrderItemWithProduct[]> => {
+    return await invoke<PurchaseOrderItemWithProduct[]>('get_product_purchase_history', {
+      productId,
+    });
+  },
+};
+
+// =============================================
+// DATA MIGRATION TYPES & COMMANDS
+// =============================================
+
+export interface MigrationResult {
+  products_migrated: number;
+  purchase_orders_created: number;
+  batches_created: number;
+  transactions_created: number;
+  errors: string[];
+  details: string[];
+}
+
+export interface MigrationStatus {
+  total_products: number;
+  products_with_batches: number;
+  products_needing_migration: number;
+  migration_supplier_exists: boolean;
+  migration_required: boolean;
+}
+
+export interface InconsistentProduct {
+  id: number;
+  name: string;
+  sku: string;
+  stock_quantity: number;
+  batch_total: number;
+  difference: number;
+}
+
+export interface ValidationResult {
+  total_products_checked: number;
+  consistent_products: number;
+  inconsistent_products: InconsistentProduct[];
+}
+
+/**
+ * Data Migration Commands
+ * Used to migrate existing products to the new Purchase Order and FIFO system
+ */
+export const migrationCommands = {
+  /**
+   * Migrate existing products with stock to the new PO/FIFO system
+   * Creates migration POs and inventory batches for products with stock
+   */
+  migrateExistingProducts: async (): Promise<MigrationResult> => {
+    return await invoke<MigrationResult>('migrate_existing_products');
+  },
+
+  /**
+   * Check migration status - see which products need migration
+   */
+  checkMigrationStatus: async (): Promise<MigrationStatus> => {
+    return await invoke<MigrationStatus>('check_migration_status');
+  },
+
+  /**
+   * Validate data consistency after migration
+   * Checks if stock quantities match batch totals
+   */
+  validateMigration: async (): Promise<ValidationResult> => {
+    return await invoke<ValidationResult>('validate_migration');
   },
 };
