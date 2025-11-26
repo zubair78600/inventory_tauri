@@ -243,22 +243,35 @@ function InventoryDetailsContent() {
                     {showPaymentForm && (
                         <Card className="p-4 bg-white border-slate-200 shadow-sm">
                             {paymentSummary && (
-                                <div className="mb-3 text-xs text-slate-500">
-                                    Already paid:{' '}
-                                    <span className="font-semibold text-slate-700">
-                                        ₹{paymentSummary.total_paid.toFixed(0)}
-                                    </span>{' '}
-                                    of ₹{paymentSummary.total_payable.toFixed(0)}{' '}
+                                <div className="mb-3 text-xs text-slate-500 space-y-1">
+                                    <div>
+                                        Already paid:{' '}
+                                        <span className="font-semibold text-slate-700">
+                                            ₹{paymentSummary.total_paid.toFixed(0)}
+                                        </span>{' '}
+                                        of ₹{paymentSummary.total_payable.toFixed(0)}
+                                    </div>
                                     {paymentSummary.pending_amount > 0 && (
-                                        <span className="text-red-600 font-semibold">
-                                            (Pending: ₹{paymentSummary.pending_amount.toFixed(0)})
-                                        </span>
+                                        <div className="text-red-600 font-semibold">
+                                            Pending: ₹{paymentSummary.pending_amount.toFixed(0)}
+                                        </div>
                                     )}
                                 </div>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
-                                    <label className="form-label">Amount</label>
+                                    <label className="form-label">
+                                        Amount
+                                        <span className="ml-2 text-xs text-slate-400">
+                                            Stock Amount (
+                                            ₹
+                                            {(
+                                                (product.initial_stock ?? product.stock_quantity) *
+                                                product.price
+                                            ).toFixed(0)}
+                                            )
+                                        </span>
+                                    </label>
                                     <Input
                                         type="number"
                                         value={newPayment.amount}

@@ -25,6 +25,7 @@ export interface CreateProductInput {
   selling_price: number | null;
   stock_quantity: number;
   supplier_id: number | null;
+  amount_paid?: number | null;
 }
 
 export interface UpdateProductInput {
