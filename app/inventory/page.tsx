@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { SearchPill } from '@/components/shared/SearchPill';
 import { productCommands, supplierCommands } from '@/lib/tauri';
 import { ask } from '@tauri-apps/plugin-dialog';
+import { useRouter } from 'next/navigation';
 
 type NewProductFormState = {
   name: string;
@@ -29,14 +30,14 @@ type NewProductFormState = {
   amount_paid: string;
 };
 
-import { useRouter } from 'next/navigation';
-
 export default function Inventory() {
   const router = useRouter();
+  const [showAddProduct, setShowAddProduct] = useState<boolean>(false);
+
+  // Products state
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [newProduct, setNewProduct] = useState<NewProductFormState>({
     name: '',
@@ -55,15 +56,14 @@ export default function Inventory() {
 
   const fetchData = async () => {
     try {
-      // Use Tauri command to get products
       const prodData = await productCommands.getAll();
       setProducts(prodData);
 
       const suppData = await supplierCommands.getAll();
       setSuppliers(suppData);
     } catch (error) {
-      console.error('Error fetching products:', error);
-      alert('Failed to fetch products');
+      console.error('Error fetching data:', error);
+      alert('Failed to fetch data');
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,6 @@ export default function Inventory() {
         supplier_id: newProduct.supplier_id ? Number(newProduct.supplier_id) : null,
         amount_paid: newProduct.amount_paid ? parseFloat(newProduct.amount_paid) : null,
       });
-      setShowAddForm(false);
       setNewProduct({
         name: '',
         sku: '',
@@ -92,6 +91,8 @@ export default function Inventory() {
         amount_paid: '',
       });
       void fetchData();
+      setShowAddProduct(false);
+      alert('Product created successfully!');
     } catch (error) {
       console.error('Error creating product:', error);
       alert(`Error saving product: ${error}`);
@@ -157,12 +158,12 @@ export default function Inventory() {
 
   if (loading) return <div>Loading...</div>;
 
-  const filtered = products.filter((p) => {
+  const filteredProducts = products.filter((p) => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return true;
     return p.name.toLowerCase().includes(term) || p.sku.toLowerCase().includes(term);
   });
-  const displayed = searchTerm ? filtered : filtered.slice(0, 10);
+  const displayedProducts = searchTerm ? filteredProducts : filteredProducts.slice(0, 10);
 
   return (
     <div className="space-y-5">
@@ -181,22 +182,25 @@ export default function Inventory() {
               Load Sample Data
             </Button>
           )}
-          <Button variant="ghost" onClick={() => fetchData()}>
-            Refresh
+          <Button
+            variant="outline"
+            onClick={() => router.push('/purchase-orders')}
+          >
+            Purchase Orders
           </Button>
           <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditProduct(null);
-            }}
+            variant={showAddProduct ? 'default' : 'outline'}
+            onClick={() => setShowAddProduct(!showAddProduct)}
           >
-            {showAddForm ? 'Cancel' : 'Add Product'}
+            Add Product
           </Button>
         </div>
       </div>
 
-      {showAddForm && (
+      {/* Add Product Form */}
+      {showAddProduct && (
         <Card className="space-y-4 p-5">
+          <h2 className="text-lg font-semibold">Add New Product</h2>
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -289,6 +293,7 @@ export default function Inventory() {
         </Card>
       )}
 
+      {/* Edit Product Form */}
       {editProduct && (
         <Card className="space-y-4 p-5">
           <div className="flex items-center justify-between">
@@ -379,6 +384,7 @@ export default function Inventory() {
         </Card>
       )}
 
+      {/* Products Table - Always Visible */}
       <Card className="table-container p-0">
         <Table>
           <TableHeader>
@@ -394,7 +400,7 @@ export default function Inventory() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {displayed.map((product) => (
+            {displayedProducts.map((product) => (
               <TableRow
                 key={product.id}
                 className="hover:bg-sky-50/60 cursor-pointer"
