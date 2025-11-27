@@ -14,7 +14,6 @@ import {
   Truck,
   Users,
   Receipt,
-  ShoppingCart,
 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,7 +30,6 @@ export default function Sidebar() {
     { href: '/customers', label: 'Customers', icon: Users, permission: 'customers' },
     { href: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory' },
     { href: '/suppliers', label: 'Suppliers', icon: Truck, permission: 'suppliers' },
-    { href: '/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart, permission: 'suppliers' },
     { href: '/reports', label: 'Reports', icon: BarChart3, permission: 'reports' },
   ];
 

@@ -206,8 +206,8 @@ export default function PurchaseOrders() {
             <option value="received">Received</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <Button variant="ghost" onClick={() => fetchData()}>
-            Refresh
+          <Button variant="ghost" onClick={() => router.push('/inventory')}>
+            Back to Inventory
           </Button>
           <Button
             onClick={() => {
