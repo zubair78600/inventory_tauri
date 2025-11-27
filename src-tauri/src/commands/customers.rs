@@ -1,4 +1,5 @@
 use crate::db::{Database, Customer};
+use crate::commands::PaginatedResult;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use chrono::Utc;
@@ -30,15 +31,24 @@ pub struct CustomerWithStats {
     pub last_billed: Option<String>,
 }
 
-/// Get all customers, optionally filtered by search query
+/// Get all customers, optionally filtered by search query, with pagination
 #[tauri::command]
-pub fn get_customers(search: Option<String>, db: State<Database>) -> Result<Vec<CustomerWithStats>, String> {
-    log::info!("get_customers called with search: {:?}", search);
+pub fn get_customers(
+    search: Option<String>,
+    page: i32,
+    page_size: i32,
+    db: State<Database>
+) -> Result<PaginatedResult<CustomerWithStats>, String> {
+    log::info!("get_customers called with search: {:?}, page: {}, page_size: {}", search, page, page_size);
 
     let conn = db.conn();
     let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
+    let offset = (page - 1) * page_size;
+    let limit = page_size;
+
     let mut customers = Vec::new();
+    let total_count: i64;
 
     let base_query = "
         SELECT c.id, c.name, c.email, c.phone, c.address, c.place, c.created_at, c.updated_at,
@@ -48,16 +58,27 @@ pub fn get_customers(search: Option<String>, db: State<Database>) -> Result<Vec<
         LEFT JOIN invoices i ON c.id = i.customer_id
     ";
 
+    let count_query = "SELECT COUNT(*) FROM customers c";
+
     let group_by = "GROUP BY c.id ORDER BY c.name";
 
     if let Some(search_term) = search {
         let search_pattern = format!("%{}%", search_term);
-        let query = format!("{} WHERE c.name LIKE ?1 OR c.email LIKE ?1 OR c.phone LIKE ?1 OR c.place LIKE ?1 {}", base_query, group_by);
+        let where_clause = "WHERE c.name LIKE ?1 OR c.email LIKE ?1 OR c.phone LIKE ?1 OR c.place LIKE ?1";
+        
+        // Get total count
+        let count_sql = format!("{} {}", count_query, where_clause);
+        total_count = conn
+            .query_row(&count_sql, [&search_pattern], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
+
+        // Get paginated items
+        let query = format!("{} {} {} LIMIT ?2 OFFSET ?3", base_query, where_clause, group_by);
         
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let customer_iter = stmt
-            .query_map([&search_pattern], |row| {
+            .query_map(rusqlite::params![&search_pattern, limit, offset], |row| {
                 Ok(CustomerWithStats {
                     customer: Customer {
                         id: row.get(0)?,
@@ -79,11 +100,17 @@ pub fn get_customers(search: Option<String>, db: State<Database>) -> Result<Vec<
             customers.push(customer.map_err(|e| e.to_string())?);
         }
     } else {
-        let query = format!("{} {}", base_query, group_by);
+        // Get total count
+        total_count = conn
+            .query_row(count_query, [], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
+
+        // Get paginated items
+        let query = format!("{} {} LIMIT ?1 OFFSET ?2", base_query, group_by);
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let customer_iter = stmt
-            .query_map([], |row| {
+            .query_map([limit, offset], |row| {
                 Ok(CustomerWithStats {
                     customer: Customer {
                         id: row.get(0)?,
@@ -106,8 +133,11 @@ pub fn get_customers(search: Option<String>, db: State<Database>) -> Result<Vec<
         }
     }
 
-    log::info!("Returning {} customers", customers.len());
-    Ok(customers)
+    log::info!("Returning {} customers (page {}, size {}, total {})", customers.len(), page, page_size, total_count);
+    Ok(PaginatedResult {
+        items: customers,
+        total_count,
+    })
 }
 
 /// Get a single customer by ID
@@ -266,6 +296,9 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
                 state: row.get(13)?,
                 district: row.get(14)?,
                 town: row.get(15)?,
+                customer_name: None,
+                customer_phone: None,
+                item_count: None,
             })
         }).map_err(|e| e.to_string())?;
 

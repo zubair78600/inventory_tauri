@@ -9,6 +9,14 @@ pub mod auth;
 pub mod purchase_orders;
 pub mod migration;
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedResult<T> {
+    pub items: Vec<T>,
+    pub total_count: i64,
+}
+
 pub use products::*;
 pub use suppliers::*;
 pub use customers::*;

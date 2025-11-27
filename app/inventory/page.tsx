@@ -1,7 +1,7 @@
 'use client';
 
 import type { Product, Supplier } from '@/types';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, useTransition, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -49,24 +49,66 @@ export default function Inventory() {
     amount_paid: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
+  const [, startTransition] = useTransition();
+
+  // Initial load handled by search effect
+  // useEffect(() => {
+  //   void fetchData(true);
+  // }, []);
 
   useEffect(() => {
-    void fetchData();
-  }, []);
+    router.prefetch('/purchase-orders');
+  }, [router]);
 
-  const fetchData = async () => {
+  const fetchData = async (reset = false, newSearchTerm = searchTerm) => {
     try {
-      const prodData = await productCommands.getAll();
-      setProducts(prodData);
+      const currentPage = reset ? 1 : page;
+      const [prodData, suppData] = await Promise.all([
+        productCommands.getAll(currentPage, pageSize, newSearchTerm),
+        // Fetch first 100 suppliers for the dropdown
+        supplierCommands.getAll(1, 100),
+      ]);
 
-      const suppData = await supplierCommands.getAll();
-      setSuppliers(suppData);
+      startTransition(() => {
+        if (reset) {
+          setProducts(prodData.items);
+          setPage(2); // Next page to fetch
+        } else {
+          setProducts(prev => [...prev, ...prodData.items]);
+          setPage(prev => prev + 1);
+        }
+
+        setTotalCount(prodData.total_count);
+        setHasMore(prodData.items.length === pageSize);
+        setSuppliers(suppData.items);
+      });
     } catch (error) {
       console.error('Error fetching data:', error);
       alert('Failed to fetch data');
     } finally {
       setLoading(false);
+      setIsSearching(false);
     }
+  };
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsSearching(true);
+      void fetchData(true, searchTerm);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const loadMore = () => {
+    void fetchData(false);
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -90,7 +132,7 @@ export default function Inventory() {
         supplier_id: '',
         amount_paid: '',
       });
-      void fetchData();
+      void fetchData(true);
       setShowAddProduct(false);
       alert('Product created successfully!');
     } catch (error) {
@@ -113,7 +155,7 @@ export default function Inventory() {
         supplier_id: editProduct.supplier_id,
       });
       setEditProduct(null);
-      void fetchData();
+      void fetchData(true);
     } catch (error) {
       console.error('Error updating product:', error);
       alert(`Error updating: ${error}`);
@@ -137,7 +179,7 @@ export default function Inventory() {
       }
 
       await productCommands.delete(id);
-      void fetchData();
+      void fetchData(true);
     } catch (error) {
       console.error('Error deleting product:', error);
       const message = error instanceof Error ? error.message : String(error);
@@ -149,32 +191,34 @@ export default function Inventory() {
     try {
       const result = await productCommands.addMockData();
       alert(result);
-      void fetchData();
+      void fetchData(true);
     } catch (error) {
       console.error('Error adding mock data:', error);
       alert(`Failed to add mock data: ${error}`);
     }
   };
 
+  const displayedProducts = products;
+
+
+
   if (loading) return <div>Loading...</div>;
 
-  const filteredProducts = products.filter((p) => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return true;
-    return p.name.toLowerCase().includes(term) || p.sku.toLowerCase().includes(term);
-  });
-  const displayedProducts = searchTerm ? filteredProducts : filteredProducts.slice(0, 10);
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
         <div className="flex items-baseline gap-5">
           <h1 className="page-title">Inventory</h1>
-          <SearchPill
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search products..."
-          />
+          <div className="flex items-center gap-3">
+            <SearchPill
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search products..."
+            />
+            <span className="text-sm text-slate-500">
+              {isSearching ? 'Searching...' : `Total Products (${totalCount})`}
+            </span>
+          </div>
         </div>
         <div className="flex gap-2">
           {products.length === 0 && (
@@ -385,116 +429,130 @@ export default function Inventory() {
       )}
 
       {/* Products Table - Always Visible */}
-      <Card className="table-container p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-center font-bold text-black">Name</TableHead>
-              <TableHead className="text-center font-bold text-black">SKU</TableHead>
-              <TableHead className="text-center font-bold text-black">Stock Amount</TableHead>
-              <TableHead className="text-center font-bold text-black">Amount Sold</TableHead>
-              <TableHead className="text-center font-bold text-black">Stock / Actual Price / Sale Price</TableHead>
-              <TableHead className="text-center font-bold text-black">Supplier</TableHead>
-              <TableHead className="text-center font-bold text-black">Status</TableHead>
-              <TableHead className="text-center font-bold text-black">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {displayedProducts.map((product) => (
-              <TableRow
-                key={product.id}
-                className="hover:bg-sky-50/60 cursor-pointer"
-                onClick={() => router.push(`/inventory/details?id=${product.id}`)}
-              >
-                <TableCell className="font-semibold text-center">{product.name}</TableCell>
-                <TableCell className="text-center">{product.sku}</TableCell>
-                <TableCell className="text-center">
-                  {product.selling_price ? (
-                    <span className="font-medium text-slate-700">
-                      ₹{((product.initial_stock ?? product.stock_quantity) * product.selling_price).toFixed(0)}
-                    </span>
-                  ) : (
-                    <span className="text-slate-400">-</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-center">
-                  {product.selling_price ? (
-                    <span className="font-medium text-slate-700">
-                      ₹{Math.max(
-                        0,
-                        ((product.initial_stock ?? product.stock_quantity) - product.stock_quantity) *
-                          product.selling_price
-                      ).toFixed(0)}
-                    </span>
-                  ) : (
-                    <span className="text-slate-400">-</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-center">
-                  <div className="flex items-center justify-center gap-3 text-sm">
-                    <span className="text-slate-700 font-medium">
-                      <span className="text-xs text-slate-400">Stock:</span>{' '}
-                      {product.initial_stock ?? product.stock_quantity}
-                    </span>
-                    <span className="text-slate-300">|</span>
-                    <span className="text-slate-600">
-                      <span className="text-xs text-slate-400">Actual:</span> ₹{product.price.toFixed(0)}
-                    </span>
-                    <span className="text-slate-300">|</span>
-                    <span className="text-emerald-600 font-medium">
-                      <span className="text-xs text-slate-400">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(0) : '-'}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-center">
-                  {suppliers.find((s) => s.id === product.supplier_id)?.name ?? '-'}
-                </TableCell>
-                <TableCell className="text-center">
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="flex justify-center">
-                      {product.stock_quantity < 10 ? (
-                        <Badge className="bg-red-100 text-red-700">Low Stock</Badge>
+      <div className="w-full flex-1 overflow-hidden">
+        <Card className="table-container p-0 h-full flex flex-col">
+          <div className="flex-1 overflow-y-auto">
+            <Table>
+              <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
+                <TableRow>
+                  <TableHead className="text-center font-bold text-black">Name</TableHead>
+                  <TableHead className="text-center font-bold text-black">SKU</TableHead>
+                  <TableHead className="text-center font-bold text-black">Stock Amount</TableHead>
+                  <TableHead className="text-center font-bold text-black">Amount Sold</TableHead>
+                  <TableHead className="text-center font-bold text-black">Stock / Actual Price / Sale Price</TableHead>
+                  <TableHead className="text-center font-bold text-black">Supplier</TableHead>
+                  <TableHead className="text-center font-bold text-black">Status</TableHead>
+                  <TableHead className="text-center font-bold text-black">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayedProducts.map((product) => (
+                  <TableRow
+                    key={product.id}
+                    className="hover:bg-sky-50/60 cursor-pointer"
+                    onClick={() => router.push(`/inventory/details?id=${product.id}`)}
+                  >
+                    <TableCell className="font-semibold text-center">{product.name}</TableCell>
+                    <TableCell className="text-center">{product.sku}</TableCell>
+                    <TableCell className="text-center">
+                      {product.selling_price ? (
+                        <span className="font-medium text-slate-700">
+                          ₹{((product.initial_stock ?? product.stock_quantity) * product.selling_price).toFixed(0)}
+                        </span>
                       ) : (
-                        <Badge className="bg-emerald-100 text-emerald-700">In Stock</Badge>
+                        <span className="text-slate-400">-</span>
                       )}
-                    </div>
-                    <div className="text-[11px] leading-none text-slate-500">
-                      Current: {product.stock_quantity}
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-center">
-                  <div className="flex justify-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7 px-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditProduct(product);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        await handleDelete(product.id);
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {product.selling_price ? (
+                        <span className="font-medium text-slate-700">
+                          ₹{Math.max(
+                            0,
+                            ((product.initial_stock ?? product.stock_quantity) - product.stock_quantity) *
+                            product.selling_price
+                          ).toFixed(0)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-3 text-sm">
+                        <span className="text-slate-700 font-medium">
+                          <span className="text-xs text-slate-400">Stock:</span>{' '}
+                          {product.initial_stock ?? product.stock_quantity}
+                        </span>
+                        <span className="text-slate-300">|</span>
+                        <span className="text-slate-600">
+                          <span className="text-xs text-slate-400">Actual:</span> ₹{product.price.toFixed(0)}
+                        </span>
+                        <span className="text-slate-300">|</span>
+                        <span className="text-emerald-600 font-medium">
+                          <span className="text-xs text-slate-400">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(0) : '-'}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {suppliers.find((s) => s.id === product.supplier_id)?.name ?? '-'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="flex justify-center">
+                          {product.stock_quantity < 10 ? (
+                            <Badge className="bg-red-100 text-red-700">Low Stock</Badge>
+                          ) : (
+                            <Badge className="bg-emerald-100 text-emerald-700">In Stock</Badge>
+                          )}
+                        </div>
+                        <div className="text-[11px] leading-none text-slate-500">
+                          Current: {product.stock_quantity}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 px-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditProduct(product);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            await handleDelete(product.id);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {hasMore && (
+              <div className="px-4 pb-4 pt-2">
+                <button
+                  onClick={loadMore}
+                  className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                >
+                  Load 50 More
+                </button>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

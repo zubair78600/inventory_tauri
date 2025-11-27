@@ -27,6 +27,18 @@ impl Database {
         // Enable foreign keys
         conn.execute("PRAGMA foreign_keys = ON", [])?;
 
+        // Performance optimizations
+        // WAL mode allows simultaneous readers and writers
+        // PRAGMA journal_mode returns the new mode, so we must use query_row
+        let _mode: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
+        
+        // Normal synchronous mode is safe for WAL and much faster
+        conn.execute("PRAGMA synchronous = NORMAL", [])?;
+        // Store temp tables in memory
+        conn.execute("PRAGMA temp_store = MEMORY", [])?;
+        // Increase cache size (negative value is in kb)
+        conn.execute("PRAGMA cache_size = -64000", [])?;
+
         let db = Database {
             conn: Arc::new(Mutex::new(conn)),
         };
@@ -190,8 +202,6 @@ impl Database {
             .unwrap_or(0) > 0;
 
         if !invoice_town_exists {
-            log::info!("Migrating: Adding town column to invoices table");
-            conn.execute("ALTER TABLE invoices ADD COLUMN town TEXT", [])?;
             log::info!("Migrating: Adding town column to invoices table");
             conn.execute("ALTER TABLE invoices ADD COLUMN town TEXT", [])?;
         }

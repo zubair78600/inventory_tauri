@@ -53,21 +53,54 @@ export default function Suppliers() {
     town: defaults?.town || '',
   });
   const [searchTerm, setSearchTerm] = useState('');
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
 
-  useEffect(() => {
-    void fetchData();
-  }, []);
+  // Initial load handled by search effect
+  // useEffect(() => {
+  //   void fetchData(true);
+  // }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (reset = false, newSearchTerm = searchTerm) => {
     try {
-      const data = await supplierCommands.getAll();
-      setSuppliers(data);
+      const currentPage = reset ? 1 : page;
+      const data = await supplierCommands.getAll(currentPage, pageSize, newSearchTerm);
+
+      if (reset) {
+        setSuppliers(data.items);
+        setPage(2); // Next page to fetch
+      } else {
+        setSuppliers(prev => [...prev, ...data.items]);
+        setPage(prev => prev + 1);
+      }
+
+      setTotalCount(data.total_count);
+      setHasMore(data.items.length === pageSize);
     } catch (error) {
       console.error('Error fetching suppliers:', error);
       alert('Failed to fetch suppliers');
     } finally {
       setLoading(false);
+      setIsSearching(false);
     }
+  };
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsSearching(true);
+      void fetchData(true, searchTerm);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const loadMore = () => {
+    void fetchData(false);
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -95,7 +128,7 @@ export default function Suppliers() {
 
       setShowAddForm(false);
       setNewSupplier({ name: '', contact_info: '', address: '', email: '', comments: '', state: defaults?.state || '', district: defaults?.district || '', town: defaults?.town || '' });
-      void fetchData();
+      void fetchData(true);
     } catch (error) {
       console.error('Error creating supplier:', error);
       alert(`Error adding supplier: ${error}`);
@@ -118,7 +151,7 @@ export default function Suppliers() {
         town: editSupplier.town,
       });
       setEditSupplier(null);
-      void fetchData();
+      void fetchData(true);
     } catch (error) {
       console.error('Error updating supplier:', error);
       alert(`Error updating supplier: ${error}`);
@@ -142,7 +175,7 @@ export default function Suppliers() {
       }
 
       await supplierCommands.delete(id);
-      void fetchData();
+      void fetchData(true);
     } catch (error) {
       console.error('Error deleting supplier:', error);
       const message = error instanceof Error ? error.message : String(error);
@@ -154,7 +187,7 @@ export default function Suppliers() {
     try {
       const result = await supplierCommands.addMockData();
       alert(result);
-      void fetchData();
+      void fetchData(true);
     } catch (error) {
       console.error('Error adding mock data:', error);
       alert(`Failed to add mock data: ${error}`);
@@ -163,17 +196,10 @@ export default function Suppliers() {
 
   if (loading) return <div>Loading...</div>;
 
-  const filtered = suppliers.filter((s) => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return true;
-    return (
-      s.name.toLowerCase().includes(term) || (s.contact_info ?? '').toLowerCase().includes(term)
-    );
-  });
-  const displayed = searchTerm ? filtered : filtered.slice(0, 10);
+  const displayed = suppliers;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
         <div className="flex items-baseline gap-5">
           <h1 className="page-title">Suppliers</h1>
@@ -189,7 +215,7 @@ export default function Suppliers() {
               Load Sample Data
             </Button>
           )}
-          <Button variant="ghost" onClick={() => fetchData()}>
+          <Button variant="ghost" onClick={() => fetchData(true)}>
             Refresh
           </Button>
           <Button
@@ -352,62 +378,76 @@ export default function Suppliers() {
         </Card>
       )}
 
-      <Card className="table-container p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-center font-bold text-black">Name</TableHead>
-              <TableHead className="text-center font-bold text-black">Contact Info</TableHead>
-              <TableHead className="text-center font-bold text-black">Email</TableHead>
-              <TableHead className="text-center font-bold text-black">Address</TableHead>
-              <TableHead className="text-center font-bold text-black">District</TableHead>
-              <TableHead className="text-center font-bold text-black">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {displayed.map((supplier) => (
-              <TableRow
-                key={supplier.id}
-                className="hover:bg-sky-50/60 cursor-pointer"
-                onClick={() => router.push(`/suppliers/details?id=${supplier.id}`)}
-              >
-                <TableCell className="font-semibold text-center">{supplier.name}</TableCell>
-                <TableCell className="text-center">{supplier.contact_info}</TableCell>
-                <TableCell className="text-center">{supplier.email}</TableCell>
-                <TableCell className="text-center">{supplier.address}</TableCell>
-                <TableCell className="text-center">{supplier.district}</TableCell>
-                <TableCell className="text-center">
-                  <div className="flex justify-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7 px-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditSupplier(supplier);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        await handleDelete(supplier.id);
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+      <div className="w-full flex-1 overflow-hidden">
+        <Card className="table-container p-0 h-full flex flex-col">
+          <div className="flex-1 overflow-y-auto">
+            <Table>
+              <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
+                <TableRow>
+                  <TableHead className="text-center font-bold text-black">Name</TableHead>
+                  <TableHead className="text-center font-bold text-black">Contact Info</TableHead>
+                  <TableHead className="text-center font-bold text-black">Email</TableHead>
+                  <TableHead className="text-center font-bold text-black">Address</TableHead>
+                  <TableHead className="text-center font-bold text-black">District</TableHead>
+                  <TableHead className="text-center font-bold text-black">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayed.map((supplier) => (
+                  <TableRow
+                    key={supplier.id}
+                    className="hover:bg-sky-50/60 cursor-pointer"
+                    onClick={() => router.push(`/suppliers/details?id=${supplier.id}`)}
+                  >
+                    <TableCell className="font-semibold text-center">{supplier.name}</TableCell>
+                    <TableCell className="text-center">{supplier.contact_info}</TableCell>
+                    <TableCell className="text-center">{supplier.email}</TableCell>
+                    <TableCell className="text-center">{supplier.address}</TableCell>
+                    <TableCell className="text-center">{supplier.district}</TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 px-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditSupplier(supplier);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            await handleDelete(supplier.id);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {hasMore && (
+              <div className="px-4 pb-4 pt-2">
+                <button
+                  onClick={loadMore}
+                  className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                >
+                  Load 50 More
+                </button>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

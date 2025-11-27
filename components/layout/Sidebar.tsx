@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Boxes,
@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function Sidebar() {
   const pathname = usePathname() ?? '';
+  const router = useRouter();
   const { hasPermission } = useAuth();
 
   type NavLink = { href: string; label: string; icon: React.ElementType; permission: string };
@@ -33,10 +34,19 @@ export default function Sidebar() {
     { href: '/reports', label: 'Reports', icon: BarChart3, permission: 'reports' },
   ];
 
-  const links = allLinks.filter(link => hasPermission(link.permission));
+  const links = useMemo(
+    () => allLinks.filter(link => hasPermission(link.permission)),
+    [hasPermission]
+  );
 
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+
+  useEffect(() => {
+    links.forEach((link) => {
+      void router.prefetch(link.href);
+    });
+  }, [links, router]);
 
   return (
     <>

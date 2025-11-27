@@ -65,6 +65,10 @@ pub struct Invoice {
     pub state: Option<String>,
     pub district: Option<String>,
     pub town: Option<String>,
+    // Display fields (fetched via JOINs)
+    pub customer_name: Option<String>,
+    pub customer_phone: Option<String>,
+    pub item_count: Option<i32>,
 }
 
 /// InvoiceItem model matching Prisma schema

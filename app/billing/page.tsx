@@ -15,7 +15,7 @@ type CartItem = {
 };
 
 export default function Billing() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [topProducts, setTopProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
   const [customerName, setCustomerName] = useState<string>('');
@@ -26,7 +26,11 @@ export default function Billing() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState<boolean>(false);
   const [productSearch, setProductSearch] = useState<string>('');
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [totalSearchCount, setTotalSearchCount] = useState<number>(0);
+  const [searchPage, setSearchPage] = useState<number>(1);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [totalProductCount, setTotalProductCount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
   const [taxRate, setTaxRate] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
@@ -42,11 +46,13 @@ export default function Billing() {
 
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
 
-  const fetchProducts = async (showLoader = false) => {
+  const fetchTopProducts = async (showLoader = false) => {
     if (showLoader) setLoading(true);
     try {
-      const data = await productCommands.getAll();
-      setProducts(data);
+      const data = await productCommands.getAll(1, 20);
+      // Only keep first 20 products for initial display
+      setTopProducts(data.items);
+      setTotalProductCount(data.total_count);
     } catch (error) {
       console.error(error);
     } finally {
@@ -55,20 +61,43 @@ export default function Billing() {
   };
 
   useEffect(() => {
-    void fetchProducts(true);
+    void fetchTopProducts(true);
   }, []);
 
+  // Debounced product search
   useEffect(() => {
-    if (productSearch.length >= 2) {
-      const search = productSearch.toLowerCase();
-      const filtered = products.filter(
-        (p) => p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search)
-      );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts([]);
-    }
-  }, [productSearch, products]);
+    const controller = new AbortController();
+
+    const searchProducts = async () => {
+      const trimmed = productSearch.trim();
+      if (trimmed.length < 2) {
+        setSearchResults([]);
+        setTotalSearchCount(0);
+        setSearchPage(1);
+        setIsSearching(false);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        // Reset to page 1 for new search
+        const data = await productCommands.getAll(1, 50, trimmed);
+        setSearchResults(data.items);
+        setTotalSearchCount(data.total_count);
+        setSearchPage(1);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timer = setTimeout(searchProducts, 300);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [productSearch]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -79,8 +108,8 @@ export default function Billing() {
         return;
       }
       try {
-        const data = await customerCommands.getAll(trimmed);
-        setCustomerSuggestions(data);
+        const result = await customerCommands.getAll(1, 50, trimmed);
+        setCustomerSuggestions(result.items);
       } catch (error) {
         console.error(error);
       }
@@ -92,6 +121,20 @@ export default function Billing() {
       clearTimeout(timer);
     };
   }, [customerName]);
+
+  const loadMoreSearchResults = async () => {
+    const trimmed = productSearch.trim();
+    if (trimmed.length < 2) return;
+
+    const nextPage = searchPage + 1;
+    try {
+      const data = await productCommands.getAll(nextPage, 50, trimmed);
+      setSearchResults((prev) => [...prev, ...data.items]);
+      setSearchPage(nextPage);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const addToCart = (product: Product) => {
     const existing = cart.find((item) => item.product_id === product.id);
@@ -200,7 +243,7 @@ export default function Billing() {
       setCustomerName('');
       setCustomerPhone('');
       setSelectedCustomerId(null);
-      await fetchProducts();
+      await fetchTopProducts();
     } catch (error) {
       console.error(error);
       alert('Checkout failed: ' + error);
@@ -369,62 +412,86 @@ export default function Billing() {
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="section-title">Products</h2>
+          <h2 className="section-title">
+            Products {isSearching || productSearch.length >= 2 ? `(${totalSearchCount})` : `(${totalProductCount})`}
+          </h2>
           <span className="text-xs text-muted-foreground">Tap to add to cart</span>
         </div>
 
-        <input
-          className="form-input"
-          placeholder="Search Product (min 2 chars)..."
-          value={productSearch}
-          onChange={(e) => setProductSearch(e.target.value)}
-        />
+        <div className="relative">
+          <input
+            className="form-input"
+            placeholder="Search Product (min 2 chars)..."
+            value={productSearch}
+            onChange={(e) => setProductSearch(e.target.value)}
+          />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="animate-spin h-5 w-5 border-2 border-sky-600 border-t-transparent rounded-full"></div>
+            </div>
+          )}
+        </div>
 
-        {productSearch.length >= 2 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
-            {filteredProducts.map((product) => (
-              <button
-                type="button"
-                key={product.id}
-                className="card border border-sky-100 text-left hover:-translate-y-0.5 transition"
-                onClick={() => addToCart(product)}
-              >
-                <div className="font-semibold">{product.name}</div>
-                <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
-                <div className="flex justify-between mt-2 text-sm">
-                  <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
-                  <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
-                    Stock: {product.stock_quantity}
-                  </span>
+        {productSearch.length >= 2 ? (
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Search Results</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
+              {searchResults.map((product) => (
+                <button
+                  type="button"
+                  key={product.id}
+                  className="card border border-sky-100 text-left hover:-translate-y-0.5 transition"
+                  onClick={() => addToCart(product)}
+                >
+                  <div className="font-semibold">{product.name}</div>
+                  <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
+                  <div className="flex justify-between mt-2 text-sm">
+                    <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
+                    <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
+                      Stock: {product.stock_quantity}
+                    </span>
+                  </div>
+                </button>
+              ))}
+              {searchResults.length === 0 && !isSearching && (
+                <div className="text-muted-foreground">No products found</div>
+              )}
+              {searchResults.length < totalSearchCount && (
+                <div className="col-span-1 md:col-span-2 pt-2">
+                  <button
+                    onClick={loadMoreSearchResults}
+                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                  >
+                    Load More Results
+                  </button>
                 </div>
-              </button>
-            ))}
-            {filteredProducts.length === 0 && (
-              <div className="text-muted-foreground">No products found</div>
-            )}
+              )}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Quick Add (Top 20 Products)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
+              {topProducts.map((product) => (
+                <button
+                  type="button"
+                  key={product.id}
+                  className="card text-left hover:-translate-y-0.5 transition"
+                  onClick={() => addToCart(product)}
+                >
+                  <div className="font-semibold">{product.name}</div>
+                  <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
+                  <div className="flex justify-between mt-2 text-sm">
+                    <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
+                    <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
+                      Stock: {product.stock_quantity}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
-
-        <h3 className="text-lg font-semibold">All Products</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
-          {products.map((product) => (
-            <button
-              type="button"
-              key={product.id}
-              className="card text-left hover:-translate-y-0.5 transition"
-              onClick={() => addToCart(product)}
-            >
-              <div className="font-semibold">{product.name}</div>
-              <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
-              <div className="flex justify-between mt-2 text-sm">
-                <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
-                <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
-                  Stock: {product.stock_quantity}
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Success Modal */}

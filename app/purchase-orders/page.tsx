@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, useTransition, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -37,6 +37,7 @@ export default function PurchaseOrders() {
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [, startTransition] = useTransition();
 
   const [newPO, setNewPO] = useState<NewPurchaseOrderForm>({
     supplier_id: null,
@@ -51,10 +52,14 @@ export default function PurchaseOrders() {
     void fetchProducts();
   }, []);
 
+  useEffect(() => {
+    router.prefetch('/inventory');
+  }, [router]);
+
   const fetchData = async () => {
     try {
       const data = await purchaseOrderCommands.getAll();
-      setPurchaseOrders(data);
+      startTransition(() => setPurchaseOrders(data));
     } catch (error) {
       console.error('Error fetching purchase orders:', error);
       alert('Failed to fetch purchase orders');
@@ -65,8 +70,8 @@ export default function PurchaseOrders() {
 
   const fetchSuppliers = async () => {
     try {
-      const data = await supplierCommands.getAll();
-      setSuppliers(data);
+      const data = await supplierCommands.getAll(1, 100);
+      setSuppliers(data.items);
     } catch (error) {
       console.error('Error fetching suppliers:', error);
     }
@@ -74,8 +79,8 @@ export default function PurchaseOrders() {
 
   const fetchProducts = async () => {
     try {
-      const data = await productCommands.getAll();
-      setProducts(data);
+      const data = await productCommands.getAll(1, 100);
+      setProducts(data.items);
     } catch (error) {
       console.error('Error fetching products:', error);
     }
@@ -168,23 +173,31 @@ export default function PurchaseOrders() {
     return badges[status as keyof typeof badges] || 'bg-gray-100 text-gray-700';
   };
 
+  const deferredSearch = useDeferredValue(searchTerm);
+  const filtered = useMemo(() => {
+    const term = deferredSearch.trim().toLowerCase();
+    return purchaseOrders.filter((po) => {
+      const matchesSearch = !term ||
+        po.po_number.toLowerCase().includes(term) ||
+        po.supplier_name.toLowerCase().includes(term);
+
+      const matchesStatus = !statusFilter || po.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [purchaseOrders, deferredSearch, statusFilter]);
+
+  const displayed = useMemo(
+    () => (deferredSearch || statusFilter ? filtered : filtered.slice(0, 20)),
+    [filtered, deferredSearch, statusFilter]
+  );
+
   if (loading) return <div>Loading...</div>;
 
-  const filtered = purchaseOrders.filter((po) => {
-    const term = searchTerm.trim().toLowerCase();
-    const matchesSearch = !term ||
-      po.po_number.toLowerCase().includes(term) ||
-      po.supplier_name.toLowerCase().includes(term);
 
-    const matchesStatus = !statusFilter || po.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const displayed = searchTerm || statusFilter ? filtered : filtered.slice(0, 20);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
         <div className="flex items-baseline gap-5">
           <h1 className="page-title">Purchase Orders</h1>
@@ -346,48 +359,52 @@ export default function PurchaseOrders() {
         </Card>
       )}
 
-      <Card className="table-container p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-center font-bold text-black">PO Number</TableHead>
-              <TableHead className="text-center font-bold text-black">Supplier</TableHead>
-              <TableHead className="text-center font-bold text-black">Order Date</TableHead>
-              <TableHead className="text-center font-bold text-black">Status</TableHead>
-              <TableHead className="text-center font-bold text-black">Items</TableHead>
-              <TableHead className="text-center font-bold text-black">Total Amount</TableHead>
-              <TableHead className="text-center font-bold text-black">Paid</TableHead>
-              <TableHead className="text-center font-bold text-black">Pending</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {displayed.map((po) => (
-              <TableRow
-                key={po.id}
-                className="hover:bg-sky-50/60 cursor-pointer"
-                onClick={() => router.push(`/purchase-orders/details?id=${po.id}`)}
-              >
-                <TableCell className="font-semibold text-center text-blue-600">
-                  {po.po_number}
-                </TableCell>
-                <TableCell className="text-center">{po.supplier_name}</TableCell>
-                <TableCell className="text-center">{formatDate(po.order_date)}</TableCell>
-                <TableCell className="text-center">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(po.status)}`}>
-                    {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
-                  </span>
-                </TableCell>
-                <TableCell className="text-center">{po.items_count}</TableCell>
-                <TableCell className="text-center font-semibold">{formatCurrency(po.total_amount)}</TableCell>
-                <TableCell className="text-center text-green-600">{formatCurrency(po.total_paid)}</TableCell>
-                <TableCell className="text-center text-orange-600 font-semibold">
-                  {formatCurrency(po.total_pending)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+      <div className="w-full flex-1 overflow-hidden">
+        <Card className="table-container p-0 h-full flex flex-col">
+          <div className="flex-1 overflow-y-auto">
+            <Table>
+              <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
+                <TableRow>
+                  <TableHead className="text-center font-bold text-black">PO Number</TableHead>
+                  <TableHead className="text-center font-bold text-black">Supplier</TableHead>
+                  <TableHead className="text-center font-bold text-black">Order Date</TableHead>
+                  <TableHead className="text-center font-bold text-black">Status</TableHead>
+                  <TableHead className="text-center font-bold text-black">Items</TableHead>
+                  <TableHead className="text-center font-bold text-black">Total Amount</TableHead>
+                  <TableHead className="text-center font-bold text-black">Paid</TableHead>
+                  <TableHead className="text-center font-bold text-black">Pending</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayed.map((po) => (
+                  <TableRow
+                    key={po.id}
+                    className="hover:bg-sky-50/60 cursor-pointer"
+                    onClick={() => router.push(`/purchase-orders/details?id=${po.id}`)}
+                  >
+                    <TableCell className="font-semibold text-center text-blue-600">
+                      {po.po_number}
+                    </TableCell>
+                    <TableCell className="text-center">{po.supplier_name}</TableCell>
+                    <TableCell className="text-center">{formatDate(po.order_date)}</TableCell>
+                    <TableCell className="text-center">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(po.status)}`}>
+                        {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">{po.items_count}</TableCell>
+                    <TableCell className="text-center font-semibold">{formatCurrency(po.total_amount)}</TableCell>
+                    <TableCell className="text-center text-green-600">{formatCurrency(po.total_paid)}</TableCell>
+                    <TableCell className="text-center text-orange-600 font-semibold">
+                      {formatCurrency(po.total_pending)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      </div>
 
       {displayed.length === 0 && (
         <div className="text-center py-10 text-gray-500">

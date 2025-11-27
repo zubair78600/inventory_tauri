@@ -36,8 +36,8 @@ const categories: Category[] = [
     label: 'Customers',
     placeholder: 'Search in Customers ( / )',
     fetcher: async (q) => {
-      const data = await customerCommands.search(q);
-      return data.map((c) => ({
+      const result = await customerCommands.search(q, 1, 10);
+      return result.items.map((c) => ({
         id: c.id,
         title: c.name,
         subtitle: c.phone ?? c.email ?? '',
@@ -51,8 +51,8 @@ const categories: Category[] = [
     label: 'Items',
     placeholder: 'Search in Items ( / )',
     fetcher: async (q) => {
-      const data = await productCommands.getAll(q);
-      return data.map((p) => ({
+      const data = await productCommands.getAll(1, 10, q);
+      return data.items.map((p) => ({
         id: p.id,
         title: p.name,
         subtitle: `SKU: ${p.sku} • Stock: ${p.stock_quantity}`,
@@ -66,8 +66,8 @@ const categories: Category[] = [
     label: 'Suppliers',
     placeholder: 'Search in Suppliers ( / )',
     fetcher: async (q) => {
-      const data = await supplierCommands.getAll(q);
-      return data.map((s) => ({
+      const data = await supplierCommands.getAll(1, 10, q);
+      return data.items.map((s) => ({
         id: s.id,
         title: s.name,
         subtitle: s.contact_info ?? 'No contact info',
@@ -111,8 +111,8 @@ const categories: Category[] = [
     label: 'Inventory',
     placeholder: 'Search Inventory (name or SKU)',
     fetcher: async (q) => {
-      const data = await productCommands.getAll(q);
-      return data.map((p) => ({
+      const data = await productCommands.getAll(1, 10, q);
+      return data.items.map((p) => ({
         id: p.id,
         title: p.name,
         subtitle: `SKU: ${p.sku} • Stock: ${p.stock_quantity}`,
@@ -162,7 +162,7 @@ export function OmniSearch() {
       if (activeCategory.id === 'customers') {
         const [customer, invoices] = await Promise.all([
           customerCommands.getById(Number(item.id)),
-          invoiceCommands.getAll(Number(item.id)),
+          invoiceCommands.getAll(1, 10, undefined, Number(item.id)),
         ]);
 
         setDetail({
@@ -175,7 +175,7 @@ export function OmniSearch() {
               <div className="mt-2">
                 <p className="text-xs text-muted-foreground">Recent Invoices</p>
                 <div className="divide-y border rounded-lg max-h-48 overflow-auto">
-                  {invoices?.map((inv) => (
+                  {invoices?.items?.map((inv) => (
                     <div key={inv.id} className="px-3 py-2 flex justify-between">
                       <span className="font-semibold">{inv.invoice_number}</span>
                       <span className="text-muted-foreground text-xs">

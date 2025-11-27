@@ -1,0 +1,2 @@
+# Python dependencies for fake data generator
+Faker>=20.0.0
