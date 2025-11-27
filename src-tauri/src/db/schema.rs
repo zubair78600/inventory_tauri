@@ -116,6 +116,12 @@ CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_paid_at ON supplier_payments(paid_at);
 
+-- Performance Indices for Sorting and Searching
+CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
+CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);
+CREATE INDEX IF NOT EXISTS idx_suppliers_contact ON suppliers(contact_info);
+
     -- Users table
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

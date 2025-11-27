@@ -1,4 +1,5 @@
 use crate::db::{Database, Invoice};
+use crate::commands::PaginatedResult;
 use crate::services::inventory_service;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -47,83 +48,121 @@ pub struct ProductSalesSummary {
     pub invoice_count: i32,
 }
 
-/// Get all invoices, optionally filtered by customer
+/// Get all invoices with pagination, search, and optional customer filter
 #[tauri::command]
-pub fn get_invoices(customer_id: Option<i32>, db: State<Database>) -> Result<Vec<Invoice>, String> {
-    log::info!("get_invoices called with customer_id: {:?}", customer_id);
+pub fn get_invoices(
+    page: i32,
+    page_size: i32,
+    search: Option<String>,
+    customer_id: Option<i32>,
+    db: State<Database>
+) -> Result<PaginatedResult<Invoice>, String> {
+    log::info!("get_invoices called - page: {}, size: {}, search: {:?}, customer_id: {:?}", page, page_size, search, customer_id);
 
     let conn = db.conn();
     let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
+    let offset = (page - 1) * page_size;
+    let limit = page_size;
+
     let mut invoices = Vec::new();
+    let total_count: i64;
+
+    // Base query with JOIN to get customer details
+    let base_select = "
+        SELECT 
+            i.id, i.invoice_number, i.customer_id, i.total_amount, i.tax_amount, 
+            i.discount_amount, i.payment_method, i.created_at, 
+            i.cgst_amount, i.fy_year, i.gst_rate, i.igst_amount, i.sgst_amount, 
+            i.state, i.district, i.town,
+            c.name as customer_name, c.phone as customer_phone,
+            (SELECT COUNT(*) FROM invoice_items WHERE invoice_id = i.id) as item_count
+        FROM invoices i
+        LEFT JOIN customers c ON i.customer_id = c.id
+    ";
+
+    let count_select = "SELECT COUNT(*) FROM invoices i LEFT JOIN customers c ON i.customer_id = c.id";
+
+    let mut where_clauses = Vec::new();
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
     if let Some(cust_id) = customer_id {
-        let mut stmt = conn
-            .prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices WHERE customer_id = ?1 ORDER BY created_at DESC")
-            .map_err(|e| e.to_string())?;
-
-        let invoice_iter = stmt
-            .query_map([cust_id], |row| {
-                Ok(Invoice {
-                    id: row.get(0)?,
-                    invoice_number: row.get(1)?,
-                    customer_id: row.get(2)?,
-                    total_amount: row.get(3)?,
-                    tax_amount: row.get(4)?,
-                    discount_amount: row.get(5)?,
-                    payment_method: row.get(6)?,
-                    created_at: row.get(7)?,
-                    cgst_amount: row.get(8)?,
-                    fy_year: row.get(9)?,
-                    gst_rate: row.get(10)?,
-                    igst_amount: row.get(11)?,
-                    sgst_amount: row.get(12)?,
-                    state: row.get(13)?,
-                    district: row.get(14)?,
-                    town: row.get(15)?,
-                })
-            })
-            .map_err(|e| e.to_string())?;
-
-        for invoice in invoice_iter {
-            invoices.push(invoice.map_err(|e| e.to_string())?);
-        }
-    } else {
-        let mut stmt = conn
-            .prepare("SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices ORDER BY created_at DESC")
-            .map_err(|e| e.to_string())?;
-
-        let invoice_iter = stmt
-            .query_map([], |row| {
-                Ok(Invoice {
-                    id: row.get(0)?,
-                    invoice_number: row.get(1)?,
-                    customer_id: row.get(2)?,
-                    total_amount: row.get(3)?,
-                    tax_amount: row.get(4)?,
-                    discount_amount: row.get(5)?,
-                    payment_method: row.get(6)?,
-                    created_at: row.get(7)?,
-                    cgst_amount: row.get(8)?,
-                    fy_year: row.get(9)?,
-                    gst_rate: row.get(10)?,
-                    igst_amount: row.get(11)?,
-                    sgst_amount: row.get(12)?,
-                    state: row.get(13)?,
-                    district: row.get(14)?,
-                    town: row.get(15)?,
-                })
-            })
-            .map_err(|e| e.to_string())?;
-
-        for invoice in invoice_iter {
-            invoices.push(invoice.map_err(|e| e.to_string())?);
-        }
+        where_clauses.push("i.customer_id = ?");
+        params.push(Box::new(cust_id));
     }
 
-    log::info!("Returning {} invoices", invoices.len());
-    Ok(invoices)
+    if let Some(search_term) = search {
+        where_clauses.push("(i.invoice_number LIKE ? OR c.name LIKE ?)");
+        let pattern = format!("%{}%", search_term);
+        params.push(Box::new(pattern.clone()));
+        params.push(Box::new(pattern));
+    }
+
+    let where_sql = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    // Get total count
+    let count_query = format!("{} {}", count_select, where_sql);
+    let mut count_stmt = conn.prepare(&count_query).map_err(|e| e.to_string())?;
+    
+    // rusqlite requires params as a slice of references
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    
+    total_count = count_stmt
+        .query_row(rusqlite::params_from_iter(param_refs.iter()), |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    // Get paginated items
+    let query = format!("{} {} ORDER BY i.created_at DESC LIMIT ? OFFSET ?", base_select, where_sql);
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+
+    // Add limit and offset to params
+    let mut query_params = params;
+    query_params.push(Box::new(limit));
+    query_params.push(Box::new(offset));
+    
+    let query_param_refs: Vec<&dyn rusqlite::ToSql> = query_params.iter().map(|p| p.as_ref()).collect();
+
+    let invoice_iter = stmt
+        .query_map(rusqlite::params_from_iter(query_param_refs.iter()), |row| {
+            Ok(Invoice {
+                id: row.get(0)?,
+                invoice_number: row.get(1)?,
+                customer_id: row.get(2)?,
+                total_amount: row.get(3)?,
+                tax_amount: row.get(4)?,
+                discount_amount: row.get(5)?,
+                payment_method: row.get(6)?,
+                created_at: row.get(7)?,
+                cgst_amount: row.get(8)?,
+                fy_year: row.get(9)?,
+                gst_rate: row.get(10)?,
+                igst_amount: row.get(11)?,
+                sgst_amount: row.get(12)?,
+                state: row.get(13)?,
+                district: row.get(14)?,
+                town: row.get(15)?,
+                customer_name: row.get(16)?,
+                customer_phone: row.get(17)?,
+                item_count: row.get(18)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    for invoice in invoice_iter {
+        invoices.push(invoice.map_err(|e| e.to_string())?);
+    }
+
+    log::info!("Returning {} invoices (page {}, size {}, total {})", invoices.len(), page, page_size, total_count);
+    Ok(PaginatedResult {
+        items: invoices,
+        total_count,
+    })
 }
+
 
 /// Get all invoices containing a specific product
 #[tauri::command]
@@ -162,6 +201,9 @@ pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<V
                 state: row.get(13)?,
                 district: row.get(14)?,
                 town: row.get(15)?,
+                customer_name: None,
+                customer_phone: None,
+                item_count: None,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -186,7 +228,16 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
     // Get invoice
     let invoice = conn
         .query_row(
-            "SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices WHERE id = ?1",
+            "SELECT 
+                i.id, i.invoice_number, i.customer_id, i.total_amount, i.tax_amount, 
+                i.discount_amount, i.payment_method, i.created_at, 
+                i.cgst_amount, i.fy_year, i.gst_rate, i.igst_amount, i.sgst_amount, 
+                i.state, i.district, i.town,
+                c.name as customer_name, c.phone as customer_phone,
+                (SELECT COUNT(*) FROM invoice_items WHERE invoice_id = i.id) as item_count
+            FROM invoices i
+            LEFT JOIN customers c ON i.customer_id = c.id
+            WHERE i.id = ?1",
             [id],
             |row| {
                 Ok(Invoice {
@@ -206,6 +257,9 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
                     state: row.get(13)?,
                     district: row.get(14)?,
                     town: row.get(15)?,
+                    customer_name: row.get(16)?,
+                    customer_phone: row.get(17)?,
+                    item_count: row.get(18)?,
                 })
             },
         )
@@ -367,10 +421,17 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
     let sale_date = Utc::now().format("%Y-%m-%d").to_string();
 
     for item in &input.items {
+        // Get product name for historical record
+        let product_name: String = tx.query_row(
+            "SELECT name FROM products WHERE id = ?1",
+            [item.product_id],
+            |row| row.get(0),
+        ).map_err(|e| format!("Failed to get product name: {}", e))?;
+
         // Insert invoice item
         tx.execute(
-            "INSERT INTO invoice_items (invoice_id, product_id, quantity, unit_price) VALUES (?1, ?2, ?3, ?4)",
-            (invoice_id, item.product_id, item.quantity, item.unit_price),
+            "INSERT INTO invoice_items (invoice_id, product_id, quantity, unit_price, product_name) VALUES (?1, ?2, ?3, ?4, ?5)",
+            (invoice_id, item.product_id, item.quantity, item.unit_price, product_name),
         )
         .map_err(|e| format!("Failed to create invoice item: {}", e))?;
 
@@ -412,6 +473,9 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
         state: input.state.clone(),
         district: input.district.clone(),
         town: input.town.clone(),
+        customer_name: None,
+        customer_phone: None,
+        item_count: Some(input.items.len() as i32),
     };
 
     log::info!("Created invoice with id: {}", invoice_id);
@@ -448,6 +512,9 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
                 state: row.get(13)?,
                 district: row.get(14)?,
                 town: row.get(15)?,
+                customer_name: None,
+                customer_phone: None,
+                item_count: None,
             })
         },
     )

@@ -37,6 +37,10 @@ export default function Customers() {
   const [reportLoading, setReportLoading] = useState<boolean>(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const pageSize = 50;
   const [newCustomer, setNewCustomer] = useState<NewCustomerFormState>({
     name: '',
     email: '',
@@ -46,14 +50,25 @@ export default function Customers() {
   });
 
   useEffect(() => {
-    void fetchData();
-  }, []);
+    const timer = setTimeout(() => {
+      void fetchData(1, searchTerm, true);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-  const fetchData = async () => {
+  const fetchData = async (pageNum: number, search: string, reset: boolean = false) => {
     try {
-      const data = await customerCommands.getAll();
-      setCustomers(data);
-      setSearchTerm('');
+      setLoading(true);
+      const result = await customerCommands.getAll(pageNum, pageSize, search);
+      if (reset) {
+        setCustomers(result.items);
+        setPage(1);
+      } else {
+        setCustomers(prev => [...prev, ...result.items]);
+        setPage(pageNum);
+      }
+      setTotalCount(result.total_count);
+      setHasMore((reset ? result.items.length : customers.length + result.items.length) < result.total_count);
     } catch (error) {
       console.error(error);
     } finally {
@@ -88,7 +103,7 @@ export default function Customers() {
       });
       setShowAddForm(false);
       setNewCustomer({ name: '', email: '', phone: '', address: '', place: '' });
-      void fetchData();
+      void fetchData(1, searchTerm, true);
       setSelectedReport(null);
     } catch (error) {
       console.error(error);
@@ -109,7 +124,7 @@ export default function Customers() {
         place: editCustomer.place,
       });
       setEditCustomer(null);
-      void fetchData();
+      void fetchData(page, searchTerm, true);
       setSelectedReport(null);
     } catch (error) {
       console.error(error);
@@ -134,7 +149,7 @@ export default function Customers() {
       }
 
       await customerCommands.delete(id);
-      void fetchData();
+      void fetchData(page, searchTerm, true);
       setSelectedReport(null);
     } catch (error) {
       console.error('Error deleting customer:', error);
@@ -144,19 +159,15 @@ export default function Customers() {
 
   if (loading) return <div>Loading...</div>;
 
-  const filteredCustomers = customers.filter((c) => {
-    const term = searchTerm.toLowerCase().trim();
-    if (!term) return true;
-    return (
-      c.name.toLowerCase().includes(term) ||
-      (c.email ?? '').toLowerCase().includes(term) ||
-      (c.phone ?? '').toLowerCase().includes(term) ||
-      (c.place ?? '').toLowerCase().includes(term)
-    );
-  });
+  // Server-side filtering is now used
+  const displayedCustomers = customers;
+
+  const loadMore = () => {
+    void fetchData(page + 1, searchTerm, false);
+  };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
         <div className="flex items-baseline gap-5">
           <h1 className="page-title">Customers</h1>
@@ -167,7 +178,7 @@ export default function Customers() {
           />
         </div>
         <div className="flex gap-2 items-center">
-          <Button variant="ghost" onClick={() => fetchData()}>
+          <Button variant="ghost" onClick={() => fetchData(1, searchTerm, true)}>
             Refresh
           </Button>
           <Button
@@ -289,84 +300,96 @@ export default function Customers() {
         </Card>
       )}
 
-      <div className="w-full">
-        <Card className="table-container p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-center font-bold text-black">Customer</TableHead>
-                <TableHead className="text-center font-bold text-black">Contact</TableHead>
-                <TableHead className="text-center font-bold text-black">Place</TableHead>
-                <TableHead className="text-center font-bold text-black">Last Billed</TableHead>
-                <TableHead className="text-center font-bold text-black">Invoices</TableHead>
-                <TableHead className="text-center font-bold text-black">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(searchTerm ? filteredCustomers : filteredCustomers.slice(0, 10)).map((customer) => (
-                <TableRow
-                  key={customer.id}
-                  className={`hover:bg-sky-50/60 cursor-pointer ${selectedId === customer.id ? 'bg-sky-50' : ''}`}
-                  onClick={() => router.push(`/customers/details?id=${customer.id}`)}
-                >
-                  <TableCell className="font-semibold text-center space-y-1">
-                    <div className="text-slate-900 dark:text-slate-100">{customer.name}</div>
-                    {customer.address && (
-                      <div className="text-xs text-muted-foreground">{customer.address}</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center space-y-1">
-                    {customer.email && <div className="text-sm">{customer.email}</div>}
-                    {customer.phone && (
-                      <div className="text-sm text-muted-foreground">{customer.phone}</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center text-sm">{customer.place ?? '—'}</TableCell>
-                  <TableCell className="text-center text-sm text-muted-foreground">
-                    {customer.last_billed ? new Date(customer.last_billed).toLocaleString() : '—'}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex justify-center">
-                      <div
-                        className="inline-flex items-center justify-center px-2 py-1 rounded-full bg-sky-100 text-sky-700 text-xs font-medium"
-                      >
-                        {customer.invoice_count ?? 0}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex justify-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs h-7 px-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditCustomer(customer);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          await handleDelete(customer.id);
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </TableCell>
+      <div className="w-full flex-1 overflow-hidden">
+        <Card className="table-container p-0 h-full flex flex-col">
+          <div className="flex-1 overflow-y-auto">
+            <Table>
+              <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
+                <TableRow>
+                  <TableHead className="text-center font-bold text-black">Customer</TableHead>
+                  <TableHead className="text-center font-bold text-black">Contact</TableHead>
+                  <TableHead className="text-center font-bold text-black">Place</TableHead>
+                  <TableHead className="text-center font-bold text-black">Last Billed</TableHead>
+                  <TableHead className="text-center font-bold text-black">Invoices</TableHead>
+                  <TableHead className="text-center font-bold text-black">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {displayedCustomers.map((customer) => (
+                  <TableRow
+                    key={customer.id}
+                    className={`hover:bg-sky-50/60 cursor-pointer ${selectedId === customer.id ? 'bg-sky-50' : ''}`}
+                    onClick={() => router.push(`/customers/details?id=${customer.id}`)}
+                  >
+                    <TableCell className="font-semibold text-center space-y-1">
+                      <div className="text-slate-900 dark:text-slate-100">{customer.name}</div>
+                      {customer.address && (
+                        <div className="text-xs text-muted-foreground">{customer.address}</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center space-y-1">
+                      {customer.email && <div className="text-sm">{customer.email}</div>}
+                      {customer.phone && (
+                        <div className="text-sm text-muted-foreground">{customer.phone}</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center text-sm">{customer.place ?? '—'}</TableCell>
+                    <TableCell className="text-center text-sm text-muted-foreground">
+                      {customer.last_billed ? new Date(customer.last_billed).toLocaleString() : '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <div
+                          className="inline-flex items-center justify-center px-2 py-1 rounded-full bg-sky-100 text-sky-700 text-xs font-medium"
+                        >
+                          {customer.invoice_count ?? 0}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 px-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditCustomer(customer);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            await handleDelete(customer.id);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {hasMore && (
+              <div className="px-4 pb-4 pt-2">
+                <button
+                  onClick={loadMore}
+                  className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                >
+                  Load 50 More
+                </button>
+              </div>
+            )}
+          </div>
         </Card>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }

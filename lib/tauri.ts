@@ -5,6 +5,11 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
+export interface PaginatedResult<T> {
+  items: T[];
+  total_count: number;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -218,8 +223,11 @@ export const productCommands = {
   /**
    * Get all products, optionally filtered by search query
    */
-  getAll: async (search?: string): Promise<Product[]> => {
-    return await invoke<Product[]>('get_products', { search });
+  /**
+   * Get all products, optionally filtered by search query
+   */
+  getAll: async (page: number = 1, pageSize: number = 50, search?: string): Promise<PaginatedResult<Product>> => {
+    return await invoke<PaginatedResult<Product>>('get_products', { search, page, pageSize });
   },
 
   /**
@@ -272,8 +280,11 @@ export const supplierCommands = {
   /**
    * Get all suppliers, optionally filtered by search query
    */
-  getAll: async (search?: string): Promise<Supplier[]> => {
-    return await invoke<Supplier[]>('get_suppliers', { search });
+  /**
+   * Get all suppliers, optionally filtered by search query
+   */
+  getAll: async (page: number = 1, pageSize: number = 50, search?: string): Promise<PaginatedResult<Supplier>> => {
+    return await invoke<PaginatedResult<Supplier>>('get_suppliers', { search, page, pageSize });
   },
 
   /**
@@ -361,15 +372,21 @@ export const customerCommands = {
   /**
    * Get all customers, optionally filtered by search query
    */
-  getAll: async (search?: string): Promise<Customer[]> => {
-    return await invoke<Customer[]>('get_customers', { search });
+  /**
+   * Get all customers, optionally filtered by search query
+   */
+  getAll: async (page: number = 1, pageSize: number = 50, search?: string): Promise<PaginatedResult<Customer>> => {
+    return await invoke<PaginatedResult<Customer>>('get_customers', { search, page, pageSize });
   },
 
   /**
    * Search for customers (alias for getAll with query)
    */
-  search: async (query: string): Promise<Customer[]> => {
-    return await invoke<Customer[]>('get_customers', { search: query });
+  /**
+   * Search for customers (alias for getAll with query)
+   */
+  search: async (query: string, page: number = 1, pageSize: number = 50): Promise<PaginatedResult<Customer>> => {
+    return await invoke<PaginatedResult<Customer>>('get_customers', { search: query, page, pageSize });
   },
 
   /**
@@ -473,8 +490,11 @@ export const invoiceCommands = {
   /**
    * Get all invoices, optionally filtered by customer
    */
-  getAll: async (customerId?: number): Promise<Invoice[]> => {
-    return await invoke<Invoice[]>('get_invoices', { customerId });
+  /**
+   * Get all invoices with pagination, search, and optional customer filter
+   */
+  getAll: async (page: number = 1, pageSize: number = 50, search?: string, customerId?: number): Promise<PaginatedResult<Invoice>> => {
+    return await invoke<PaginatedResult<Invoice>>('get_invoices', { page, pageSize, search, customer_id: customerId });
   },
 
   /**

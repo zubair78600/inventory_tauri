@@ -1,4 +1,5 @@
 use crate::db::{Database, Supplier, SupplierPayment};
+use crate::commands::PaginatedResult;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -47,24 +48,45 @@ pub struct SupplierPaymentSummary {
 }
 
 /// Get all suppliers, optionally filtered by search query
+/// Get all suppliers, optionally filtered by search query, with pagination
 #[tauri::command]
-pub fn get_suppliers(search: Option<String>, db: State<Database>) -> Result<Vec<Supplier>, String> {
-    log::info!("get_suppliers called with search: {:?}", search);
+pub fn get_suppliers(
+    search: Option<String>,
+    page: i32,
+    page_size: i32,
+    db: State<Database>
+) -> Result<PaginatedResult<Supplier>, String> {
+    log::info!("get_suppliers called with search: {:?}, page: {}, page_size: {}", search, page, page_size);
 
     let conn = db.conn();
     let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
+    let offset = (page - 1) * page_size;
+    let limit = page_size;
+
     let mut suppliers = Vec::new();
+    let total_count: i64;
+
+    let base_query = "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers";
+    let count_query = "SELECT COUNT(*) FROM suppliers";
 
     if let Some(search_term) = search {
         // Search by name or contact info
         let search_pattern = format!("%{}%", search_term);
-        let mut stmt = conn
-            .prepare("SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers WHERE name LIKE ?1 OR contact_info LIKE ?1 ORDER BY name")
+        let where_clause = "WHERE name LIKE ?1 OR contact_info LIKE ?1";
+        
+        // Get total count
+        let count_sql = format!("{} {}", count_query, where_clause);
+        total_count = conn
+            .query_row(&count_sql, [&search_pattern], |row| row.get(0))
             .map_err(|e| e.to_string())?;
 
+        // Get paginated items
+        let query = format!("{} {} ORDER BY name LIMIT ?2 OFFSET ?3", base_query, where_clause);
+        let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+
         let supplier_iter = stmt
-            .query_map([&search_pattern], |row| {
+            .query_map(rusqlite::params![&search_pattern, limit, offset], |row| {
                 Ok(Supplier {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -85,13 +107,17 @@ pub fn get_suppliers(search: Option<String>, db: State<Database>) -> Result<Vec<
             suppliers.push(supplier.map_err(|e| e.to_string())?);
         }
     } else {
-        // Get all suppliers
-        let mut stmt = conn
-            .prepare("SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers ORDER BY name")
+        // Get total count
+        total_count = conn
+            .query_row(count_query, [], |row| row.get(0))
             .map_err(|e| e.to_string())?;
 
+        // Get paginated items
+        let query = format!("{} ORDER BY name LIMIT ?1 OFFSET ?2", base_query);
+        let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+
         let supplier_iter = stmt
-            .query_map([], |row| {
+            .query_map([limit, offset], |row| {
                 Ok(Supplier {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -113,8 +139,11 @@ pub fn get_suppliers(search: Option<String>, db: State<Database>) -> Result<Vec<
         }
     }
 
-    log::info!("Returning {} suppliers", suppliers.len());
-    Ok(suppliers)
+    log::info!("Returning {} suppliers (page {}, size {}, total {})", suppliers.len(), page, page_size, total_count);
+    Ok(PaginatedResult {
+        items: suppliers,
+        total_count,
+    })
 }
 
 /// Get a single supplier by ID
