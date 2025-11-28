@@ -235,7 +235,7 @@ export default function Suppliers() {
               onClick={() => {
                 setShowAddForm(!showAddForm);
                 setEditSupplier(null);
-                setNewSupplier({ name: '', contact_info: '', email: '', address: '', town: '', district: '', state: '' });
+                setNewSupplier({ name: '', contact_info: '', email: '', address: '', town: '', district: '', state: '', comments: '' });
               }}
             >
               Add Supplier
