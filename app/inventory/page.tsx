@@ -17,8 +17,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { SearchPill } from '@/components/shared/SearchPill';
 import { productCommands, supplierCommands } from '@/lib/tauri';
+import { generateInventoryReportPDF } from '@/lib/pdf-generator';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { useRouter } from 'next/navigation';
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 
 type NewProductFormState = {
   name: string;
@@ -32,7 +34,10 @@ type NewProductFormState = {
 
 export default function Inventory() {
   const router = useRouter();
-  const [showAddProduct, setShowAddProduct] = useState<boolean>(false);
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState('');
 
   // Products state
   const [products, setProducts] = useState<Product[]>([]);
@@ -207,37 +212,43 @@ export default function Inventory() {
   return (
     <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
-        <div className="flex items-baseline gap-5">
-          <h1 className="page-title">Inventory</h1>
-          <div className="flex items-center gap-3">
-            <SearchPill
-              value={searchTerm}
-              onChange={setSearchTerm}
-              placeholder="Search products..."
-            />
-            <span className="text-sm text-slate-500">
-              {isSearching ? 'Searching...' : `Total Products (${totalCount})`}
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {products.length === 0 && (
-            <Button variant="outline" onClick={handleAddMockData}>
-              Load Sample Data
+        <h1 className="page-title">Inventory ({totalCount})</h1>
+        <div className="flex gap-2 items-center">
+          <SearchPill
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search products..."
+          />
+          <div className="flex gap-2">
+            {products.length === 0 && (
+              <Button variant="outline" onClick={handleAddMockData}>
+                Load Sample Data
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                const url = generateInventoryReportPDF(products);
+                setPdfUrl(url);
+                setPdfFileName(`Inventory_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+                setShowPdfPreview(true);
+              }}
+            >
+              Export PDF
             </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => router.push('/purchase-orders')}
-          >
-            Purchase Orders
-          </Button>
-          <Button
-            variant={showAddProduct ? 'default' : 'outline'}
-            onClick={() => setShowAddProduct(!showAddProduct)}
-          >
-            Add Product
-          </Button>
+            <Button
+              variant="outline"
+              onClick={() => router.push('/purchase-orders')}
+            >
+              Purchase Orders
+            </Button>
+            <Button
+              variant={showAddProduct ? 'default' : 'outline'}
+              onClick={() => setShowAddProduct(!showAddProduct)}
+            >
+              Add Product
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -337,96 +348,102 @@ export default function Inventory() {
         </Card>
       )}
 
+      {/* ... rest of component ... */}
+
+
+
       {/* Edit Product Form */}
-      {editProduct && (
-        <Card className="space-y-4 p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Edit Product</h2>
-            <Button variant="ghost" onClick={() => setEditProduct(null)}>
-              Close
-            </Button>
-          </div>
-          <form onSubmit={handleUpdate}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Product Name</label>
-                <Input
-                  value={editProduct.name}
-                  onChange={(e) => setEditProduct({ ...editProduct, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">SKU</label>
-                <Input
-                  value={editProduct.sku}
-                  onChange={(e) => setEditProduct({ ...editProduct, sku: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">Actual Price (Purchase Price)</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={editProduct.price}
-                  onChange={(e) =>
-                    setEditProduct({ ...editProduct, price: Number(e.target.value) })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">Selling Price</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={editProduct.selling_price ?? ''}
-                  onChange={(e) =>
-                    setEditProduct({ ...editProduct, selling_price: e.target.value ? Number(e.target.value) : null })
-                  }
-                />
-              </div>
-              <div>
-                <label className="form-label">Stock Quantity</label>
-                <Input
-                  type="number"
-                  value={editProduct.stock_quantity}
-                  onChange={(e) =>
-                    setEditProduct({ ...editProduct, stock_quantity: Number(e.target.value) })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">Supplier</label>
-                <Select
-                  value={editProduct.supplier_id ?? ''}
-                  onChange={(e) =>
-                    setEditProduct({
-                      ...editProduct,
-                      supplier_id: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                >
-                  <option value="">Select Supplier</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <Button type="submit">Update Product</Button>
-              <Button type="button" variant="ghost" onClick={() => setEditProduct(null)}>
-                Cancel
+      {
+        editProduct && (
+          <Card className="space-y-4 p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Edit Product</h2>
+              <Button variant="ghost" onClick={() => setEditProduct(null)}>
+                Close
               </Button>
             </div>
-          </form>
-        </Card>
-      )}
+            <form onSubmit={handleUpdate}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Product Name</label>
+                  <Input
+                    value={editProduct.name}
+                    onChange={(e) => setEditProduct({ ...editProduct, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">SKU</label>
+                  <Input
+                    value={editProduct.sku}
+                    onChange={(e) => setEditProduct({ ...editProduct, sku: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Actual Price (Purchase Price)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editProduct.price}
+                    onChange={(e) =>
+                      setEditProduct({ ...editProduct, price: Number(e.target.value) })
+                    }
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Selling Price</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editProduct.selling_price ?? ''}
+                    onChange={(e) =>
+                      setEditProduct({ ...editProduct, selling_price: e.target.value ? Number(e.target.value) : null })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Stock Quantity</label>
+                  <Input
+                    type="number"
+                    value={editProduct.stock_quantity}
+                    onChange={(e) =>
+                      setEditProduct({ ...editProduct, stock_quantity: Number(e.target.value) })
+                    }
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Supplier</label>
+                  <Select
+                    value={editProduct.supplier_id ?? ''}
+                    onChange={(e) =>
+                      setEditProduct({
+                        ...editProduct,
+                        supplier_id: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                  >
+                    <option value="">Select Supplier</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4">
+                <Button type="submit">Update Product</Button>
+                <Button type="button" variant="ghost" onClick={() => setEditProduct(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        )
+      }
 
       {/* Products Table - Always Visible */}
       <div className="w-full flex-1 overflow-hidden">
@@ -435,6 +452,7 @@ export default function Inventory() {
             <Table>
               <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
                 <TableRow>
+                  <TableHead className="w-[50px] text-center font-bold text-black">S.No</TableHead>
                   <TableHead className="text-center font-bold text-black">Name</TableHead>
                   <TableHead className="text-center font-bold text-black">SKU</TableHead>
                   <TableHead className="text-center font-bold text-black">Stock Amount</TableHead>
@@ -452,6 +470,9 @@ export default function Inventory() {
                     className="hover:bg-sky-50/60 cursor-pointer"
                     onClick={() => router.push(`/inventory/details?id=${product.id}`)}
                   >
+                    <TableCell className="text-center font-medium text-slate-500">
+                      {(page - 1) * pageSize + displayedProducts.indexOf(product) + 1}
+                    </TableCell>
                     <TableCell className="font-semibold text-center">{product.name}</TableCell>
                     <TableCell className="text-center">{product.sku}</TableCell>
                     <TableCell className="text-center">
@@ -553,6 +574,12 @@ export default function Inventory() {
           </div>
         </Card>
       </div>
-    </div>
+      <PDFPreviewDialog
+        open={showPdfPreview}
+        onOpenChange={setShowPdfPreview}
+        url={pdfUrl}
+        fileName={pdfFileName}
+      />
+    </div >
   );
 }

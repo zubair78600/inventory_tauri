@@ -15,7 +15,9 @@ import {
 } from '@/components/ui/table';
 import { SearchPill } from '@/components/shared/SearchPill';
 import { purchaseOrderCommands, supplierCommands, productCommands } from '@/lib/tauri';
+import { generatePurchaseOrderPDF } from '@/lib/pdf-generator';
 import type { PurchaseOrderWithDetails, Supplier, Product, PurchaseOrderItemInput } from '@/lib/tauri';
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 
 type NewPurchaseOrderForm = {
   supplier_id: number | null;
@@ -33,7 +35,10 @@ export default function PurchaseOrders() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderWithDetails[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState('');
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -145,7 +150,7 @@ export default function PurchaseOrders() {
     });
   };
 
-  const updateItem = (index: number, field: string, value: any) => {
+  const updateItem = (index: number, field: string, value: number | null) => {
     const updatedItems = [...newPO.items];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
     setNewPO({ ...newPO, items: updatedItems });
@@ -199,36 +204,36 @@ export default function PurchaseOrders() {
   return (
     <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
-        <div className="flex items-baseline gap-5">
-          <h1 className="page-title">Purchase Orders</h1>
+        <h1 className="page-title">Purchase Orders ({displayed.length})</h1>
+        <div className="flex gap-2 items-center">
           <SearchPill
             value={searchTerm}
             onChange={setSearchTerm}
-            placeholder="Search by PO number or supplier..."
+            placeholder="Search by PO number..."
           />
-        </div>
-        <div className="flex gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 text-sm border rounded-md"
-          >
-            <option value="">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="ordered">Ordered</option>
-            <option value="received">Received</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <Button variant="ghost" onClick={() => router.push('/inventory')}>
-            Back to Inventory
-          </Button>
-          <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-            }}
-          >
-            {showAddForm ? 'Cancel' : 'Create Purchase Order'}
-          </Button>
+          <div className="flex gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 text-sm border rounded-md"
+            >
+              <option value="">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="ordered">Ordered</option>
+              <option value="received">Received</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <Button variant="ghost" onClick={() => router.push('/inventory')}>
+              Back to Inventory
+            </Button>
+            <Button
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+              }}
+            >
+              {showAddForm ? 'Cancel' : 'Create Purchase Order'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -365,6 +370,7 @@ export default function PurchaseOrders() {
             <Table>
               <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
                 <TableRow>
+                  <TableHead className="w-[50px] text-center font-bold text-black">S.No</TableHead>
                   <TableHead className="text-center font-bold text-black">PO Number</TableHead>
                   <TableHead className="text-center font-bold text-black">Supplier</TableHead>
                   <TableHead className="text-center font-bold text-black">Order Date</TableHead>
@@ -372,7 +378,9 @@ export default function PurchaseOrders() {
                   <TableHead className="text-center font-bold text-black">Items</TableHead>
                   <TableHead className="text-center font-bold text-black">Total Amount</TableHead>
                   <TableHead className="text-center font-bold text-black">Paid</TableHead>
+
                   <TableHead className="text-center font-bold text-black">Pending</TableHead>
+                  <TableHead className="text-center font-bold text-black">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -382,6 +390,9 @@ export default function PurchaseOrders() {
                     className="hover:bg-sky-50/60 cursor-pointer"
                     onClick={() => router.push(`/purchase-orders/details?id=${po.id}`)}
                   >
+                    <TableCell className="text-center font-medium text-slate-500">
+                      {displayed.indexOf(po) + 1}
+                    </TableCell>
                     <TableCell className="font-semibold text-center text-blue-600">
                       {po.po_number}
                     </TableCell>
@@ -398,6 +409,29 @@ export default function PurchaseOrders() {
                     <TableCell className="text-center text-orange-600 font-semibold">
                       {formatCurrency(po.total_pending)}
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+
+                          try {
+                            const fullPO = await purchaseOrderCommands.getById(po.id);
+                            const url = generatePurchaseOrderPDF(fullPO);
+                            setPdfUrl(url);
+                            setPdfFileName(`PO_${po.po_number}.pdf`);
+                            setShowPdfPreview(true);
+                          } catch (err) {
+                            console.error('Failed to fetch PO details', err);
+                            alert('Failed to generate PDF');
+                          }
+                        }}
+                      >
+                        PDF
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -411,6 +445,13 @@ export default function PurchaseOrders() {
           No purchase orders found. Create your first purchase order to get started!
         </div>
       )}
+
+      <PDFPreviewDialog
+        open={showPdfPreview}
+        onOpenChange={setShowPdfPreview}
+        url={pdfUrl}
+        fileName={pdfFileName}
+      />
     </div>
   );
 }

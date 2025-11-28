@@ -168,6 +168,7 @@ export interface Invoice {
   state: string | null;
   district: string | null;
   town: string | null;
+  item_count?: number;
 }
 
 export interface ProductSalesSummary {

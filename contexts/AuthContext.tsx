@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
 
     useEffect(() => {
-        // Check for persisted user session
+        // Check for persisted session
         const storedUser = localStorage.getItem('user_session');
         if (storedUser) {
             try {

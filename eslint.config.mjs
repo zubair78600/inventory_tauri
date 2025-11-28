@@ -6,7 +6,7 @@ const nextCoreWebVitals = nextPlugin.configs['core-web-vitals'];
 
 export default tseslint.config(
   {
-    ignores: ['node_modules', '.next', 'out', 'dist', 'inventory.db', 'tailwind.config.js', 'postcss.config.js', 'tsconfig.tsbuildinfo']
+    ignores: ['node_modules', '.next', 'out', 'dist', 'inventory.db', 'tailwind.config.js', 'postcss.config.js', 'tsconfig.tsbuildinfo', 'src-tauri']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

@@ -2,10 +2,12 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { supplierCommands, productCommands, Supplier, Product, SupplierPaymentSummary } from '@/lib/tauri';
+import { supplierCommands, productCommands, type Supplier, type Product, type SupplierPaymentSummary } from '@/lib/tauri';
+import { generateSupplierDetailPDF } from '@/lib/pdf-generator';
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, MapPin, Phone, Mail, Package, FileText, ChevronDown, ChevronUp, Building } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Phone, Mail, Package, Building } from 'lucide-react';
 
 function SupplierDetailsContent() {
     const searchParams = useSearchParams();
@@ -17,6 +19,9 @@ function SupplierDetailsContent() {
     const [paymentSummaries, setPaymentSummaries] = useState<Record<number, SupplierPaymentSummary | null>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+    const [showPdfPreview, setShowPdfPreview] = useState(false);
+    const [pdfFileName, setPdfFileName] = useState('');
 
     useEffect(() => {
         if (!id) return;
@@ -91,9 +96,23 @@ function SupplierDetailsContent() {
             {/* Header */}
             <div className="flex items-start justify-between">
                 <div>
-                    <Button variant="ghost" onClick={() => router.back()} className="mb-2 pl-0 hover:pl-2 transition-all">
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Suppliers
-                    </Button>
+                    <div className="flex items-center gap-2 mb-2">
+                        <Button variant="ghost" onClick={() => router.back()} className="pl-0 hover:pl-2 transition-all">
+                            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Suppliers
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                const url = generateSupplierDetailPDF(supplier);
+                                setPdfUrl(url);
+                                setPdfFileName(`${supplier.name.replace(/\s+/g, '_')}_Details.pdf`);
+                                setShowPdfPreview(true);
+                            }}
+                        >
+                            Export PDF
+                        </Button>
+                    </div>
                     <h1 className="text-3xl font-bold text-slate-900">{supplier.name}</h1>
                     <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
                         {(supplier.state || supplier.district || supplier.town) && (
@@ -220,6 +239,12 @@ function SupplierDetailsContent() {
                     </div>
                 </div>
             </div>
+            <PDFPreviewDialog
+                open={showPdfPreview}
+                onOpenChange={setShowPdfPreview}
+                url={pdfUrl}
+                fileName={pdfFileName}
+            />
         </div>
     );
 }

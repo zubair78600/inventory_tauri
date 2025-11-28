@@ -17,7 +17,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { customerCommands, analyticsCommands, invoiceCommands } from '@/lib/tauri';
+import { generateCustomerListPDF } from '@/lib/pdf-generator';
 import { ask } from '@tauri-apps/plugin-dialog';
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 
 type NewCustomerFormState = {
   name: string;
@@ -48,6 +50,9 @@ export default function Customers() {
     address: '',
     place: '',
   });
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -169,26 +174,35 @@ export default function Customers() {
   return (
     <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
-        <div className="flex items-baseline gap-5">
-          <h1 className="page-title">Customers</h1>
+        <h1 className="page-title">Customers ({totalCount})</h1>
+        <div className="flex gap-2 items-center">
           <SearchPill
             value={searchTerm}
             onChange={setSearchTerm}
             placeholder="Search customers..."
           />
-        </div>
-        <div className="flex gap-2 items-center">
-          <Button variant="ghost" onClick={() => fetchData(1, searchTerm, true)}>
-            Refresh
-          </Button>
-          <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditCustomer(null);
-            }}
-          >
-            {showAddForm ? 'Cancel' : 'Add Customer'}
-          </Button>
+          <div className="flex gap-2 items-center">
+            <Button variant="ghost" onClick={() => fetchData(1, searchTerm, true)}>
+              Refresh
+            </Button>
+            <Button variant="outline" onClick={() => {
+              const url = generateCustomerListPDF(customers);
+              setPdfUrl(url);
+              setPdfFileName(`Customer_List_${new Date().toISOString().split('T')[0]}.pdf`);
+              setShowPdfPreview(true);
+            }}>
+              Export PDF
+            </Button>
+            <Button
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                setEditCustomer(null);
+                setNewCustomer({ name: '', email: '', phone: '', address: '', place: '' });
+              }}
+            >
+              {showAddForm ? 'Cancel' : 'Add Customer'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -306,6 +320,7 @@ export default function Customers() {
             <Table>
               <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
                 <TableRow>
+                  <TableHead className="w-[50px] text-center font-bold text-black">S.No</TableHead>
                   <TableHead className="text-center font-bold text-black">Customer</TableHead>
                   <TableHead className="text-center font-bold text-black">Contact</TableHead>
                   <TableHead className="text-center font-bold text-black">Place</TableHead>
@@ -321,6 +336,9 @@ export default function Customers() {
                     className={`hover:bg-sky-50/60 cursor-pointer ${selectedId === customer.id ? 'bg-sky-50' : ''}`}
                     onClick={() => router.push(`/customers/details?id=${customer.id}`)}
                   >
+                    <TableCell className="text-center font-medium text-slate-500">
+                      {(page - 1) * pageSize + displayedCustomers.indexOf(customer) + 1}
+                    </TableCell>
                     <TableCell className="font-semibold text-center space-y-1">
                       <div className="text-slate-900 dark:text-slate-100">{customer.name}</div>
                       {customer.address && (
@@ -390,6 +408,12 @@ export default function Customers() {
           </div>
         </Card>
       </div >
+      <PDFPreviewDialog
+        open={showPdfPreview}
+        onOpenChange={setShowPdfPreview}
+        url={pdfUrl}
+        fileName={pdfFileName}
+      />
     </div >
   );
 }
