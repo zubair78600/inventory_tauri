@@ -2,7 +2,9 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { productCommands, invoiceCommands, supplierCommands, purchaseOrderCommands, Product, Invoice, SupplierPayment, SupplierPaymentSummary, ProductSalesSummary, PurchaseOrderItemWithProduct, ProductPurchaseSummary } from '@/lib/tauri';
+import { productCommands, invoiceCommands, supplierCommands, purchaseOrderCommands, type Product, type Invoice, type SupplierPayment, type SupplierPaymentSummary, type ProductSalesSummary, type PurchaseOrderItemWithProduct, type ProductPurchaseSummary } from '@/lib/tauri';
+import { generateProductDetailPDF } from '@/lib/pdf-generator';
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +33,9 @@ function InventoryDetailsContent() {
         note: '',
     });
     const [savingPayment, setSavingPayment] = useState(false);
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+    const [showPdfPreview, setShowPdfPreview] = useState(false);
+    const [pdfFileName, setPdfFileName] = useState('');
 
     useEffect(() => {
         if (!id) return;
@@ -86,7 +91,7 @@ function InventoryDetailsContent() {
             return;
         }
 
-         // Do not allow adding payments if already cleared
+        // Do not allow adding payments if already cleared
         if (paymentSummary && paymentSummary.pending_amount <= 0) {
             alert('All payments are already cleared for this product.');
             return;
@@ -180,9 +185,23 @@ function InventoryDetailsContent() {
             {/* Header */}
             <div className="flex items-start justify-between">
                 <div>
-                    <Button variant="ghost" onClick={() => router.back()} className="mb-2 pl-0 hover:pl-2 transition-all">
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Inventory
-                    </Button>
+                    <div className="flex items-center gap-2 mb-2">
+                        <Button variant="ghost" onClick={() => router.back()} className="pl-0 hover:pl-2 transition-all">
+                            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Inventory
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                const url = generateProductDetailPDF(product);
+                                setPdfUrl(url);
+                                setPdfFileName(`${product.name.replace(/\s+/g, '_')}_Details.pdf`);
+                                setShowPdfPreview(true);
+                            }}
+                        >
+                            Export PDF
+                        </Button>
+                    </div>
                     <h1 className="text-3xl font-bold text-slate-900">{product.name}</h1>
                     <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
                         <div className="flex items-center gap-1">
@@ -526,6 +545,12 @@ function InventoryDetailsContent() {
                     </div>
                 </div>
             </div>
+            <PDFPreviewDialog
+                open={showPdfPreview}
+                onOpenChange={setShowPdfPreview}
+                url={pdfUrl}
+                fileName={pdfFileName}
+            />
         </div>
     );
 }

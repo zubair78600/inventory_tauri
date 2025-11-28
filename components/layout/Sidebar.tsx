@@ -14,6 +14,7 @@ import {
   Truck,
   Users,
   Receipt,
+  Settings,
 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -32,6 +33,7 @@ export default function Sidebar() {
     { href: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory' },
     { href: '/suppliers', label: 'Suppliers', icon: Truck, permission: 'suppliers' },
     { href: '/reports', label: 'Reports', icon: BarChart3, permission: 'reports' },
+    { href: '/settings', label: 'Settings', icon: Settings, permission: 'settings' },
   ];
 
   const links = useMemo(

@@ -1,0 +1,60 @@
+
+> inventory-tauri@1.0.0 lint
+> eslint . --ext .ts,.tsx --max-warnings=0
+
+
+/Users/zubair/Documents/Inventry_tauri/app/customers/details/page.tsx
+  5:1   warning  Imports "CustomerReport" and "InvoiceItem" are only used as type           @typescript-eslint/consistent-type-imports
+  5:62  warning  'Invoice' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/app/customers/page.tsx
+  19:47  warning  'invoiceCommands' is defined but never used. Allowed unused vars must match /^_/u          @typescript-eslint/no-unused-vars
+  38:10  warning  'selectedReport' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  39:10  warning  'reportLoading' is assigned a value but never used. Allowed unused vars must match /^_/u   @typescript-eslint/no-unused-vars
+  84:9   warning  'loadReport' is assigned a value but never used. Allowed unused vars must match /^_/u      @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/app/inventory/details/page.tsx
+   5:1   warning  Imports "Product", "Invoice", "SupplierPayment", "SupplierPaymentSummary", "ProductSalesSummary", "PurchaseOrderItemWithProduct" and "ProductPurchaseSummary" are only used as type  @typescript-eslint/consistent-type-imports
+  13:45  warning  'BarChart3' is defined but never used. Allowed unused vars must match /^_/u                                                                                                          @typescript-eslint/no-unused-vars
+  13:66  warning  'ChevronDown' is defined but never used. Allowed unused vars must match /^_/u                                                                                                        @typescript-eslint/no-unused-vars
+  13:79  warning  'ChevronUp' is defined but never used. Allowed unused vars must match /^_/u                                                                                                          @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/app/inventory/page.tsx
+   4:10  warning  'useDeferredValue' is defined but never used. Allowed unused vars must match /^_/u      @typescript-eslint/no-unused-vars
+   4:39  warning  'useMemo' is defined but never used. Allowed unused vars must match /^_/u               @typescript-eslint/no-unused-vars
+  62:10  warning  'isSearching' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/app/purchase-orders/details/page.tsx
+  17:38  warning  'SupplierPayment' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/app/purchase-orders/page.tsx
+   19:60  warning  'PurchaseOrderItemInput' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  152:60  error    Unexpected any. Specify a different type                                                  @typescript-eslint/no-explicit-any
+
+/Users/zubair/Documents/Inventry_tauri/app/reports/page.tsx
+  11:21  warning  'setAnalytics' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/app/sales/page.tsx
+   13:6   warning  'InvoiceItem' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  183:32  error    Unexpected any. Specify a different type                                       @typescript-eslint/no-explicit-any
+  189:30  error    Unexpected any. Specify a different type                                       @typescript-eslint/no-explicit-any
+
+/Users/zubair/Documents/Inventry_tauri/app/settings/page.tsx
+  195:9  warning  'handlePermanentDelete' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  218:9  warning  'handleClearTrash' is assigned a value but never used. Allowed unused vars must match /^_/u       @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/app/suppliers/details/page.tsx
+  5:1  warning  Imports "Supplier", "Product" and "SupplierPaymentSummary" are only used as type  @typescript-eslint/consistent-type-imports
+
+/Users/zubair/Documents/Inventry_tauri/app/suppliers/page.tsx
+  67:10  warning  'isSearching' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/components/layout/Header.tsx
+  15:11  warning  'hasPermission' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/zubair/Documents/Inventry_tauri/contexts/AuthContext.tsx
+  5:10  warning  'invoke' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 26 problems (3 errors, 23 warnings)
+  0 errors and 3 warnings potentially fixable with the `--fix` option.
+

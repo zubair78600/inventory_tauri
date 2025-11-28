@@ -3,9 +3,12 @@
 import type { Invoice } from '@/types';
 import { useState, useDeferredValue } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { SearchPill } from '@/components/shared/SearchPill';
-import { invoiceCommands, type PaginatedResult } from '@/lib/tauri';
+import { invoiceCommands, customerCommands, type PaginatedResult, type Customer } from '@/lib/tauri';
+import { generateInvoicePDF } from '@/lib/pdf-generator';
 import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 
 type InvoiceItem = {
   id: number;
@@ -27,6 +30,9 @@ export default function Sales() {
   const [searchTerm, setSearchTerm] = useState('');
   const deferredSearch = useDeferredValue(searchTerm);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState('');
 
   // Fetch sales with infinite query for pagination + search
   const {
@@ -89,14 +95,12 @@ export default function Sales() {
   return (
     <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
-        <div className="flex items-baseline gap-5">
-          <h1 className="page-title">Sales</h1>
-          <SearchPill
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search invoices or customers..."
-          />
-        </div>
+        <h1 className="page-title">Sales ({sales.length})</h1>
+        <SearchPill
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search invoices..."
+        />
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.2fr,1fr] h-full overflow-hidden">
         <Card className="p-0 overflow-hidden flex flex-col h-full">
@@ -149,41 +153,79 @@ export default function Sales() {
 
         <Card className="p-0 overflow-hidden flex flex-col h-full">
           <CardHeader className="pb-2">
-            <CardTitle>Invoice Details</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {selected ? selected.invoice_number : 'Select an order to view products'}
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Invoice Details</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {selected ? selected.invoice_number : 'Select an order to view products'}
+                </p>
+              </div>
+              {selected && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (!selected) return;
+
+                    try {
+                      // Fetch full invoice details
+                      const fullInvoice = await invoiceCommands.getById(selected.id);
+
+                      let customer = null;
+                      if (selected.customer_id) {
+                        try {
+                          customer = await customerCommands.getById(selected.customer_id);
+                        } catch (e) {
+                          console.error("Could not fetch customer details", e);
+                          customer = {
+                            name: selected.customer_name || 'Customer',
+                            phone: selected.customer_phone,
+                          } as unknown as Customer;
+                        }
+                      } else if (selected.customer_name) {
+                        customer = {
+                          name: selected.customer_name,
+                          phone: selected.customer_phone,
+                        } as unknown as Customer;
+                      }
+
+                      const url = generateInvoicePDF(fullInvoice.invoice, fullInvoice.items, customer);
+                      setPdfUrl(url);
+                      setPdfFileName(`Invoice_${selected.invoice_number}.pdf`);
+                      setShowPdfPreview(true);
+                    } catch (error) {
+                      console.error("Error generating PDF:", error);
+                      alert("Failed to generate PDF");
+                    }
+                  }}
+                >
+                  Download PDF
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4 flex-1 overflow-y-auto p-4">
             {selected && (
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground">Customer</p>
-                  <p className="font-semibold">{selected.customer_name ?? 'Walk-in'}</p>
-                  {selected.customer_phone && (
-                    <p className="text-xs text-muted-foreground">{selected.customer_phone}</p>
-                  )}
+              <>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Customer:</span>
+                    <p className="font-medium">{selected.customer_name || 'Walk-in Customer'}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Date:</span>
+                    <p className="font-medium">{new Date(selected.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Amount:</span>
+                    <p className="font-medium">₹{selected.total_amount.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Items:</span>
+                    <p className="font-medium">{selected.item_count || 0}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Date</p>
-                  <p className="font-semibold">{new Date(selected.created_at).toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Payment</p>
-                  <p className="font-semibold">{selected.payment_method ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">GST / Discount</p>
-                  <p className="font-semibold">
-                    GST: ₹{selected.tax_amount.toFixed(0)} | Disc: ₹
-                    {selected.discount_amount.toFixed(0)}
-                  </p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-xs text-muted-foreground">Total</p>
-                  <p className="text-lg font-semibold">₹{selected.total_amount.toFixed(0)}</p>
-                </div>
-              </div>
+              </>
             )}
 
             <div className="divide-y divide-slate-200 dark:divide-slate-700 rounded-xl border border-slate-200">
@@ -213,8 +255,15 @@ export default function Sales() {
               )}
             </div>
           </CardContent>
-        </Card>
-      </div>
-    </div>
+        </Card >
+      </div >
+      <PDFPreviewDialog
+        open={showPdfPreview}
+        onOpenChange={setShowPdfPreview}
+        url={pdfUrl}
+        fileName={pdfFileName}
+      />
+    </div >
   );
 }
+

@@ -2,7 +2,9 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { analyticsCommands, invoiceCommands, CustomerReport, Invoice, InvoiceItem } from '@/lib/tauri';
+import { analyticsCommands, invoiceCommands, type CustomerReport, type Invoice, type InvoiceItem } from '@/lib/tauri';
+import { generateCustomerDetailPDF } from '@/lib/pdf-generator';
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Calendar, MapPin, Phone, Mail, FileText, Package, ChevronDown, ChevronUp, Home } from 'lucide-react';
@@ -18,6 +20,9 @@ function CustomerDetailsContent() {
     const [expandedInvoiceId, setExpandedInvoiceId] = useState<number | null>(null);
     const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
     const [itemsLoading, setItemsLoading] = useState(false);
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+    const [showPdfPreview, setShowPdfPreview] = useState(false);
+    const [pdfFileName, setPdfFileName] = useState('');
 
     useEffect(() => {
         if (!id) return;
@@ -82,9 +87,23 @@ function CustomerDetailsContent() {
             {/* Header */}
             <div className="flex items-start justify-between">
                 <div>
-                    <Button variant="ghost" onClick={() => router.back()} className="mb-2 pl-0 hover:pl-2 transition-all">
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Customers
-                    </Button>
+                    <div className="flex items-center gap-2 mb-2">
+                        <Button variant="ghost" onClick={() => router.back()} className="pl-0 hover:pl-2 transition-all">
+                            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Customers
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                const url = generateCustomerDetailPDF(customer, invoices, stats);
+                                setPdfUrl(url);
+                                setPdfFileName(`${customer.name.replace(/\s+/g, '_')}_Details.pdf`);
+                                setShowPdfPreview(true);
+                            }}
+                        >
+                            Export PDF
+                        </Button>
+                    </div>
                     <h1 className="text-3xl font-bold text-slate-900">{customer.name}</h1>
                     <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
                         {customer.place && (
@@ -218,6 +237,12 @@ function CustomerDetailsContent() {
                     </div>
                 </div>
             </div>
+            <PDFPreviewDialog
+                open={showPdfPreview}
+                onOpenChange={setShowPdfPreview}
+                url={pdfUrl}
+                fileName={pdfFileName}
+            />
         </div>
     );
 }

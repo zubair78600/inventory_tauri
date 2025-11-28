@@ -1,6 +1,6 @@
 'use client';
 
-import type { Supplier } from '@/types';
+import type { Supplier } from '@/lib/tauri';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -17,7 +17,10 @@ import { SearchPill } from '@/components/shared/SearchPill';
 import { LocationSelector } from '@/components/shared/LocationSelector';
 import { useLocationDefaults } from '@/hooks/useLocationDefaults';
 import { supplierCommands } from '@/lib/tauri';
+import { generateSupplierListPDF } from '@/lib/pdf-generator';
 import { ask } from '@tauri-apps/plugin-dialog';
+
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 
 type NewSupplierForm = {
   name: string;
@@ -38,6 +41,9 @@ export default function Suppliers() {
   const [loading, setLoading] = useState<boolean>(true);
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState('');
 
   // Location smart defaults
   const { defaults, recordSelection } = useLocationDefaults('suppliers');
@@ -201,31 +207,40 @@ export default function Suppliers() {
   return (
     <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
-        <div className="flex items-baseline gap-5">
-          <h1 className="page-title">Suppliers</h1>
+        <h1 className="page-title">Suppliers ({totalCount})</h1>
+        <div className="flex gap-2 items-center">
           <SearchPill
             value={searchTerm}
             onChange={setSearchTerm}
             placeholder="Search suppliers..."
           />
-        </div>
-        <div className="flex gap-2">
-          {suppliers.length === 0 && (
-            <Button variant="outline" onClick={handleAddMockData}>
-              Load Sample Data
+          <div className="flex gap-2">
+            {suppliers.length === 0 && (
+              <Button variant="outline" onClick={handleAddMockData}>
+                Load Sample Data
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => fetchData(true)}>
+              Refresh
             </Button>
-          )}
-          <Button variant="ghost" onClick={() => fetchData(true)}>
-            Refresh
-          </Button>
-          <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditSupplier(null);
-            }}
-          >
-            {showAddForm ? 'Cancel' : 'Add Supplier'}
-          </Button>
+            <Button variant="outline" onClick={() => {
+              const url = generateSupplierListPDF(suppliers);
+              setPdfUrl(url);
+              setPdfFileName(`Supplier_List_${new Date().toISOString().split('T')[0]}.pdf`);
+              setShowPdfPreview(true);
+            }}>
+              Export PDF
+            </Button>
+            <Button
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                setEditSupplier(null);
+                setNewSupplier({ name: '', contact_info: '', email: '', address: '', town: '', district: '', state: '' });
+              }}
+            >
+              Add Supplier
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -384,6 +399,7 @@ export default function Suppliers() {
             <Table>
               <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
                 <TableRow>
+                  <TableHead className="w-[50px] text-center font-bold text-black">S.No</TableHead>
                   <TableHead className="text-center font-bold text-black">Name</TableHead>
                   <TableHead className="text-center font-bold text-black">Contact Info</TableHead>
                   <TableHead className="text-center font-bold text-black">Email</TableHead>
@@ -399,6 +415,9 @@ export default function Suppliers() {
                     className="hover:bg-sky-50/60 cursor-pointer"
                     onClick={() => router.push(`/suppliers/details?id=${supplier.id}`)}
                   >
+                    <TableCell className="text-center font-medium text-slate-500">
+                      {(page - 1) * pageSize + displayed.indexOf(supplier) + 1}
+                    </TableCell>
                     <TableCell className="font-semibold text-center">{supplier.name}</TableCell>
                     <TableCell className="text-center">{supplier.contact_info}</TableCell>
                     <TableCell className="text-center">{supplier.email}</TableCell>
@@ -448,6 +467,12 @@ export default function Suppliers() {
           </div>
         </Card>
       </div>
+      <PDFPreviewDialog
+        open={showPdfPreview}
+        onOpenChange={setShowPdfPreview}
+        url={pdfUrl}
+        fileName={pdfFileName}
+      />
     </div>
   );
 }

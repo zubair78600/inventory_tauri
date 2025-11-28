@@ -9,6 +9,11 @@
     "core:default",
     "dialog:allow-ask",
     "dialog:allow-message",
-    "dialog:allow-confirm"
+    "dialog:allow-confirm",
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-download-write",
+    "fs:allow-desktop-write",
+    "fs:allow-document-write"
   ]
 }
