@@ -59,8 +59,7 @@ pub fn get_invoices(
 ) -> Result<PaginatedResult<Invoice>, String> {
     log::info!("get_invoices called - page: {}, size: {}, search: {:?}, customer_id: {:?}", page, page_size, search, customer_id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let offset = (page - 1) * page_size;
     let limit = page_size;
@@ -169,8 +168,7 @@ pub fn get_invoices(
 pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<Vec<Invoice>, String> {
     log::info!("get_invoices_by_product called with product_id: {}", product_id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare(
@@ -222,8 +220,7 @@ pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<V
 pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, String> {
     log::info!("get_invoice called with id: {}", id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Get invoice
     let invoice = conn
@@ -308,10 +305,7 @@ pub fn get_product_sales_summary(
         product_id
     );
 
-    let conn = db.conn();
-    let conn = conn
-        .lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Total quantity and total amount for this product across all invoices
     let (total_qty, total_amount): (i64, f64) = conn
@@ -347,8 +341,7 @@ pub fn get_product_sales_summary(
 pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<Invoice, String> {
     log::info!("create_invoice called");
 
-    let conn = db.conn();
-    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = db.get_conn()?;
 
     // Validate customer exists if provided
     if let Some(cid) = input.customer_id {
@@ -487,8 +480,7 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
 pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_invoice called with id: {}", id);
 
-    let conn = db.conn();
-    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = db.get_conn()?;
 
     // Get invoice data before deletion for audit trail
     let invoice = conn.query_row(

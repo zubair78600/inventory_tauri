@@ -2,7 +2,8 @@
 
 import type { Customer } from '@/lib/tauri';
 import type { CustomerReport } from '@/lib/tauri';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -16,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { customerCommands, analyticsCommands, invoiceCommands } from '@/lib/tauri';
+import { customerCommands, analyticsCommands } from '@/lib/tauri';
 import { generateCustomerListPDF } from '@/lib/pdf-generator';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
@@ -31,17 +32,14 @@ type NewCustomerFormState = {
 
 export default function Customers() {
   const router = useRouter();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [selectedReport, setSelectedReport] = useState<CustomerReport | null>(null);
   const [reportLoading, setReportLoading] = useState<boolean>(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [page, setPage] = useState<number>(1);
-  const [hasMore, setHasMore] = useState<boolean>(true);
-  const [totalCount, setTotalCount] = useState<number>(0);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const pageSize = 50;
   const [newCustomer, setNewCustomer] = useState<NewCustomerFormState>({
     name: '',
@@ -54,31 +52,53 @@ export default function Customers() {
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
 
+  // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
-      void fetchData(1, searchTerm, true);
+      setDebouncedSearch(searchTerm);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const fetchData = async (pageNum: number, search: string, reset: boolean = false) => {
-    try {
-      setLoading(true);
-      const result = await customerCommands.getAll(pageNum, pageSize, search);
-      if (reset) {
-        setCustomers(result.items);
-        setPage(1);
-      } else {
-        setCustomers(prev => [...prev, ...result.items]);
-        setPage(pageNum);
+  // Infinite query for customers with caching
+  const {
+    data: customersData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: loading,
+  } = useInfiniteQuery({
+    queryKey: ['customers', debouncedSearch],
+    queryFn: async ({ pageParam = 1 }) => {
+      return await customerCommands.getAll(pageParam, pageSize, debouncedSearch || undefined);
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.flatMap(p => p.items).length;
+      if (loadedCount < lastPage.total_count) {
+        return allPages.length + 1;
       }
-      setTotalCount(result.total_count);
-      setHasMore((reset ? result.items.length : customers.length + result.items.length) < result.total_count);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
+      return undefined;
+    },
+    staleTime: 30 * 1000, // Data fresh for 30 seconds
+  });
+
+  // Flatten paginated data
+  const customers = useMemo(() => {
+    return customersData?.pages.flatMap(page => page.items) ?? [];
+  }, [customersData]);
+
+  const totalCount = customersData?.pages[0]?.total_count ?? 0;
+
+  const loadMore = () => {
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
     }
+  };
+
+  // Invalidate queries after mutations
+  const invalidateCustomers = () => {
+    void queryClient.invalidateQueries({ queryKey: ['customers'] });
   };
 
   const loadReport = async (customer: Customer) => {
@@ -108,7 +128,7 @@ export default function Customers() {
       });
       setShowAddForm(false);
       setNewCustomer({ name: '', email: '', phone: '', address: '', place: '' });
-      void fetchData(1, searchTerm, true);
+      invalidateCustomers();
       setSelectedReport(null);
     } catch (error) {
       console.error(error);
@@ -129,7 +149,7 @@ export default function Customers() {
         place: editCustomer.place,
       });
       setEditCustomer(null);
-      void fetchData(page, searchTerm, true);
+      invalidateCustomers();
       setSelectedReport(null);
     } catch (error) {
       console.error(error);
@@ -154,7 +174,7 @@ export default function Customers() {
       }
 
       await customerCommands.delete(id);
-      void fetchData(page, searchTerm, true);
+      invalidateCustomers();
       setSelectedReport(null);
     } catch (error) {
       console.error('Error deleting customer:', error);
@@ -162,157 +182,159 @@ export default function Customers() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
-
-  // Server-side filtering is now used
   const displayedCustomers = customers;
 
-  const loadMore = () => {
-    void fetchData(page + 1, searchTerm, false);
-  };
+  if (loading) return <div>Loading...</div>;
 
   return (
     <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
-        <h1 className="page-title">Customers ({totalCount})</h1>
-        <div className="flex gap-2 items-center">
-          <SearchPill
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search customers..."
-          />
-          <div className="flex gap-2 items-center">
-            <Button variant="ghost" onClick={() => fetchData(1, searchTerm, true)}>
-              Refresh
-            </Button>
-            <Button variant="outline" onClick={() => {
-              const url = generateCustomerListPDF(customers);
-              setPdfUrl(url);
-              setPdfFileName(`Customer_List_${new Date().toISOString().split('T')[0]}.pdf`);
-              setShowPdfPreview(true);
-            }}>
-              Export PDF
-            </Button>
-            <Button
-              onClick={() => {
-                setShowAddForm(!showAddForm);
-                setEditCustomer(null);
-                setNewCustomer({ name: '', email: '', phone: '', address: '', place: '' });
-              }}
-            >
-              {showAddForm ? 'Cancel' : 'Add Customer'}
-            </Button>
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex items-center gap-5">
+            <h1 className="page-title !mb-0">Customers</h1>
+            <SearchPill
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search customers..."
+            />
           </div>
+          <p className="text-sm text-muted-foreground">{totalCount} total customers</p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <Button variant="ghost" onClick={invalidateCustomers}>
+            Refresh
+          </Button>
+          <Button variant="outline" onClick={() => {
+            const url = generateCustomerListPDF(customers);
+            setPdfUrl(url);
+            setPdfFileName(`Customer_List_${new Date().toISOString().split('T')[0]}.pdf`);
+            setShowPdfPreview(true);
+          }}>
+            Export PDF
+          </Button>
+          <Button
+            onClick={() => {
+              setShowAddForm(!showAddForm);
+              setEditCustomer(null);
+              setNewCustomer({ name: '', email: '', phone: '', address: '', place: '' });
+            }}
+          >
+            {showAddForm ? 'Cancel' : 'Add Customer'}
+          </Button>
         </div>
       </div>
 
-      {showAddForm && (
-        <Card className="space-y-4 p-5">
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Name</label>
-                <Input
-                  value={newCustomer.name}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                  required
-                />
+      {
+        showAddForm && (
+          <Card className="space-y-4 p-5">
+            <form onSubmit={handleSubmit}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Name</label>
+                  <Input
+                    value={newCustomer.name}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Place</label>
+                  <Input
+                    value={newCustomer.place}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, place: e.target.value })}
+                    placeholder="City or Location"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Email</label>
+                  <Input
+                    type="email"
+                    value={newCustomer.email}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Phone</label>
+                  <Input
+                    value={newCustomer.phone}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="form-label">Address</label>
+                  <Input
+                    value={newCustomer.address}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="form-label">Place</label>
-                <Input
-                  value={newCustomer.place}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, place: e.target.value })}
-                  placeholder="City or Location"
-                />
-              </div>
-              <div>
-                <label className="form-label">Email</label>
-                <Input
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="form-label">Phone</label>
-                <Input
-                  value={newCustomer.phone}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="form-label">Address</label>
-                <Input
-                  value={newCustomer.address}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
-                />
-              </div>
-            </div>
-            <Button type="submit" className="mt-4">
-              Save Customer
-            </Button>
-          </form>
-        </Card>
-      )}
+              <Button type="submit" className="mt-4">
+                Save Customer
+              </Button>
+            </form>
+          </Card>
+        )
+      }
 
-      {editCustomer && (
-        <Card className="space-y-4 p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Edit Customer</h2>
-            <Button variant="ghost" onClick={() => setEditCustomer(null)}>
-              Close
-            </Button>
-          </div>
-          <form onSubmit={handleUpdate}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Name</label>
-                <Input
-                  value={editCustomer.name}
-                  onChange={(e) => setEditCustomer({ ...editCustomer, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">Place</label>
-                <Input
-                  value={editCustomer.place || ''}
-                  onChange={(e) => setEditCustomer({ ...editCustomer, place: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="form-label">Email</label>
-                <Input
-                  type="email"
-                  value={editCustomer.email || ''}
-                  onChange={(e) => setEditCustomer({ ...editCustomer, email: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="form-label">Phone</label>
-                <Input
-                  value={editCustomer.phone || ''}
-                  onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="form-label">Address</label>
-                <Input
-                  value={editCustomer.address || ''}
-                  onChange={(e) => setEditCustomer({ ...editCustomer, address: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <Button type="submit">Update Customer</Button>
-              <Button variant="ghost" type="button" onClick={() => setEditCustomer(null)}>
-                Cancel
+      {
+        editCustomer && (
+          <Card className="space-y-4 p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Edit Customer</h2>
+              <Button variant="ghost" onClick={() => setEditCustomer(null)}>
+                Close
               </Button>
             </div>
-          </form>
-        </Card>
-      )}
+            <form onSubmit={handleUpdate}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Name</label>
+                  <Input
+                    value={editCustomer.name}
+                    onChange={(e) => setEditCustomer({ ...editCustomer, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Place</label>
+                  <Input
+                    value={editCustomer.place || ''}
+                    onChange={(e) => setEditCustomer({ ...editCustomer, place: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Email</label>
+                  <Input
+                    type="email"
+                    value={editCustomer.email || ''}
+                    onChange={(e) => setEditCustomer({ ...editCustomer, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Phone</label>
+                  <Input
+                    value={editCustomer.phone || ''}
+                    onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="form-label">Address</label>
+                  <Input
+                    value={editCustomer.address || ''}
+                    onChange={(e) => setEditCustomer({ ...editCustomer, address: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4">
+                <Button type="submit">Update Customer</Button>
+                <Button variant="ghost" type="button" onClick={() => setEditCustomer(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        )
+      }
 
       <div className="w-full flex-1 overflow-hidden">
         <Card className="table-container p-0 h-full flex flex-col">
@@ -337,7 +359,7 @@ export default function Customers() {
                     onClick={() => router.push(`/customers/details?id=${customer.id}`)}
                   >
                     <TableCell className="text-center font-medium text-slate-500">
-                      {(page - 1) * pageSize + displayedCustomers.indexOf(customer) + 1}
+                      {displayedCustomers.indexOf(customer) + 1}
                     </TableCell>
                     <TableCell className="font-semibold text-center space-y-1">
                       <div className="text-slate-900 dark:text-slate-100">{customer.name}</div>
@@ -395,13 +417,14 @@ export default function Customers() {
                 ))}
               </TableBody>
             </Table>
-            {hasMore && (
+            {hasNextPage && (
               <div className="px-4 pb-4 pt-2">
                 <button
                   onClick={loadMore}
-                  className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                  disabled={isFetchingNextPage}
+                  className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-medium rounded-md transition-colors"
                 >
-                  Load 50 More
+                  {isFetchingNextPage ? 'Loading...' : 'Load 50 More'}
                 </button>
               </div>
             )}

@@ -22,9 +22,7 @@ pub struct MigrationResult {
 /// Migrate existing products with initial_stock to Purchase Order system
 #[tauri::command]
 pub fn migrate_existing_products(db: State<Database>) -> Result<MigrationResult, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Start transaction
     conn.execute("BEGIN TRANSACTION", [])
@@ -257,9 +255,7 @@ fn migrate_product(
 /// Check migration status - see which products need migration
 #[tauri::command]
 pub fn check_migration_status(db: State<Database>) -> Result<MigrationStatus, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Count products with stock but no batches
     let needs_migration: i32 = conn
@@ -320,9 +316,7 @@ pub struct MigrationStatus {
 /// Validate data consistency after migration
 #[tauri::command]
 pub fn validate_migration(db: State<Database>) -> Result<ValidationResult, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut result = ValidationResult {
         total_products_checked: 0,

@@ -38,8 +38,7 @@ pub fn get_products(
 ) -> Result<PaginatedResult<Product>, String> {
     log::info!("get_products called with search: {:?}, page: {}, page_size: {}", search, page, page_size);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let offset = (page - 1) * page_size;
     let limit = page_size;
@@ -129,8 +128,7 @@ pub fn get_products(
 pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
     log::info!("get_product called with id: {}", id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let product = conn
         .query_row(
@@ -164,8 +162,7 @@ pub fn get_products_by_supplier(
 ) -> Result<Vec<Product>, String> {
     log::info!("get_products_by_supplier called with supplier_id: {}", supplier_id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare("SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE supplier_id = ?1 ORDER BY name")
@@ -202,8 +199,7 @@ pub fn get_products_by_supplier(
 pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<Product, String> {
     log::info!("create_product called with: {:?}", input);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let initial_qty = input.stock_quantity;
     let purchase_date = Utc::now().format("%Y-%m-%d").to_string();
@@ -311,8 +307,7 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
 pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<Product, String> {
     log::info!("update_product called with: {:?}", input);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Check if SKU is already used by another product
     let sku_exists: bool = conn
@@ -376,8 +371,7 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_product called with id: {}", id);
 
-    let conn = db.conn();
-    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = db.get_conn()?;
 
     // Check if product is used in any invoices
     let usage_count: i32 = conn
@@ -446,8 +440,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
 pub fn add_mock_products(db: State<Database>) -> Result<String, String> {
     log::info!("add_mock_products called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Check if products already exist
     let count: i32 = conn

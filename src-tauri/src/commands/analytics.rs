@@ -33,8 +33,7 @@ pub struct LowStockProduct {
 pub fn get_dashboard_stats(db: State<Database>) -> Result<DashboardStats, String> {
     log::info!("get_dashboard_stats called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Total revenue
     let total_revenue: f64 = conn
@@ -110,8 +109,7 @@ pub fn get_dashboard_stats(db: State<Database>) -> Result<DashboardStats, String
 pub fn get_low_stock_products(db: State<Database>) -> Result<Vec<LowStockProduct>, String> {
     log::info!("get_low_stock_products called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare("SELECT id, name, sku, stock_quantity FROM products WHERE stock_quantity < 10 ORDER BY stock_quantity ASC")
@@ -173,8 +171,7 @@ pub struct CustomerReport {
 pub fn customer_search(query: String, db: State<Database>) -> Result<Vec<CustomerReport>, String> {
     log::info!("customer_search called with query: {}", query);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let search_pattern = format!("%{}%", query);
 
@@ -286,8 +283,7 @@ pub fn customer_search(query: String, db: State<Database>) -> Result<Vec<Custome
 pub fn get_customer_report(id: i32, db: State<Database>) -> Result<CustomerReport, String> {
     log::info!("get_customer_report called with id: {}", id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Get customer details
     let customer = conn

@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable, { type UserOptions } from 'jspdf-autotable';
-import type { Invoice, InvoiceItem, Customer, Product, Supplier, PurchaseOrderComplete, CustomerInvoice } from './tauri';
+import type { Invoice, InvoiceItem, Customer, Product, Supplier, PurchaseOrderComplete, CustomerInvoice, SupplierPaymentSummary } from './tauri';
 
 // Define the autoTable type extension
 declare module 'jspdf' {
@@ -361,6 +361,12 @@ export const generateCustomerDetailPDF = (
         ['Last Billed', lastBilled]
     ];
 
+    const pageWidth = doc.internal.pageSize.width;
+    const margin = 14;
+    const gap = 10;
+    const availableWidth = pageWidth - (margin * 2);
+    const tableWidth = (availableWidth - gap) / 2;
+
     autoTable(doc, {
         startY: 50,
         body: tableRows,
@@ -369,16 +375,22 @@ export const generateCustomerDetailPDF = (
         columnStyles: {
             0: { fontStyle: 'bold', cellWidth: 40, fillColor: [240, 240, 240] },
             1: { cellWidth: 'auto' }
-        }
+        },
+        margin: { left: margin },
+        tableWidth: tableWidth
     });
 
-    let finalY = doc.lastAutoTable.finalY + 10;
+    const leftFinalY = doc.lastAutoTable.finalY;
+    let rightFinalY = 50;
 
     // Stats Section
     if (stats) {
+        const rightTableX = margin + tableWidth + gap;
+
+        // Title for Summary
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
-        doc.text('Summary', 14, finalY);
+        doc.text('Summary', rightTableX, 48);
 
         const statsRows = [
             ['Total Spent', formatCurrency(stats.total_spent)],
@@ -387,18 +399,22 @@ export const generateCustomerDetailPDF = (
         ];
 
         autoTable(doc, {
-            startY: finalY + 5,
+            startY: 50,
             body: statsRows,
             theme: 'grid',
             styles: { fontSize: 10, font: 'helvetica' },
             columnStyles: {
                 0: { fontStyle: 'bold', cellWidth: 40, fillColor: [240, 240, 240] },
                 1: { cellWidth: 'auto' }
-            }
+            },
+            margin: { left: rightTableX },
+            tableWidth: tableWidth
         });
 
-        finalY = doc.lastAutoTable.finalY + 10;
+        rightFinalY = doc.lastAutoTable.finalY;
     }
+
+    const finalY = Math.max(leftFinalY, rightFinalY) + 15;
 
     // Invoice History
     if (invoices.length > 0) {
@@ -461,7 +477,12 @@ export const generateProductDetailPDF = (product: Product, supplierName?: string
     return createBlobUrl(doc);
 };
 
-export const generateSupplierDetailPDF = (supplier: Supplier): string => {
+export const generateSupplierDetailPDF = (
+    supplier: Supplier,
+    products: Product[] = [],
+    stats?: { totalProducts: number; totalStock: number; totalValue: number; totalPending: number },
+    paymentSummaries: Record<number, SupplierPaymentSummary | null> = {}
+): string => {
     const doc = new jsPDF();
     addHeader(doc, 'SUPPLIER DETAILS');
 
@@ -484,6 +505,74 @@ export const generateSupplierDetailPDF = (supplier: Supplier): string => {
             1: { cellWidth: 'auto' }
         }
     });
+
+    let finalY = doc.lastAutoTable.finalY + 10;
+
+    // Stats Section
+    if (stats) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Summary', 14, finalY);
+
+
+
+        autoTable(doc, {
+            startY: finalY + 5,
+            head: [['Total Products', 'Total Stock', 'Stock Value', 'Pending Amount']],
+            body: [[
+                stats.totalProducts.toString(),
+                stats.totalStock.toString(),
+                formatCurrency(stats.totalValue),
+                formatCurrency(stats.totalPending)
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+            styles: { fontSize: 10, font: 'helvetica', halign: 'center' },
+        });
+
+        finalY = doc.lastAutoTable.finalY + 10;
+    }
+
+    // Supplied Products Section
+    if (products.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Supplied Products', 14, finalY + 5);
+
+        const productTableColumn = ["Purchased Date", "Product", "SKU", "Stock", "Price", "Stock Amount"];
+        const productTableRows = products.map(product => {
+            const stockAmount = (product.initial_stock ?? product.stock_quantity) * product.price;
+            const summary = paymentSummaries[product.id];
+            let stockAmountText = formatCurrency(stockAmount);
+
+            if (summary && summary.pending_amount > 0) {
+                stockAmountText += `\n(Pending: ${formatCurrency(summary.pending_amount)})`;
+            }
+
+            return [
+                new Date(product.created_at).toLocaleDateString(),
+                product.name,
+                product.sku,
+                (product.initial_stock ?? product.stock_quantity).toString(),
+                formatCurrency(product.price),
+                stockAmountText
+            ];
+        });
+
+        autoTable(doc, {
+            startY: finalY + 10,
+            head: [productTableColumn],
+            body: productTableRows,
+            theme: 'striped',
+            headStyles: { fillColor: [66, 66, 66] },
+            styles: { fontSize: 9, font: 'helvetica' },
+            columnStyles: {
+                3: { halign: 'center' },
+                4: { halign: 'right' },
+                5: { halign: 'right' }
+            }
+        });
+    }
 
     addFooter(doc);
     return createBlobUrl(doc);

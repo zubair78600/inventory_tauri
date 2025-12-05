@@ -1,7 +1,8 @@
 'use client';
 
 import type { Product, Supplier } from '@/types';
-import { useDeferredValue, useEffect, useMemo, useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -34,15 +35,11 @@ type NewProductFormState = {
 
 export default function Inventory() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
-
-  // Products state
-  const [products, setProducts] = useState<Product[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [newProduct, setNewProduct] = useState<NewProductFormState>({
     name: '',
@@ -54,66 +51,73 @@ export default function Inventory() {
     amount_paid: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
-  // Pagination state
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
-  const [totalCount, setTotalCount] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [isSearching, setIsSearching] = useState(false);
-  const [, startTransition] = useTransition();
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const pageSize = 50;
 
-  // Initial load handled by search effect
-  // useEffect(() => {
-  //   void fetchData(true);
-  // }, []);
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   useEffect(() => {
     router.prefetch('/purchase-orders');
   }, [router]);
 
-  const fetchData = async (reset = false, newSearchTerm = searchTerm) => {
-    try {
-      const currentPage = reset ? 1 : page;
-      const [prodData, suppData] = await Promise.all([
-        productCommands.getAll(currentPage, pageSize, newSearchTerm),
-        // Fetch first 100 suppliers for the dropdown
-        supplierCommands.getAll(1, 100),
-      ]);
+  // Fetch suppliers with React Query (cached)
+  const { data: suppliersData } = useQuery({
+    queryKey: ['suppliers-dropdown'],
+    queryFn: () => supplierCommands.getAll(1, 500),
+    staleTime: 60 * 1000, // Cache for 1 minute
+  });
+  const suppliers = suppliersData?.items ?? [];
 
-      startTransition(() => {
-        if (reset) {
-          setProducts(prodData.items);
-          setPage(2); // Next page to fetch
-        } else {
-          setProducts(prev => [...prev, ...prodData.items]);
-          setPage(prev => prev + 1);
-        }
+  // O(1) supplier lookup using Map instead of O(n) find
+  const supplierMap = useMemo(() => {
+    return new Map(suppliers.map(s => [s.id, s]));
+  }, [suppliers]);
 
-        setTotalCount(prodData.total_count);
-        setHasMore(prodData.items.length === pageSize);
-        setSuppliers(suppData.items);
-      });
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      alert('Failed to fetch data');
-    } finally {
-      setLoading(false);
-      setIsSearching(false);
+  // Infinite query for products with caching
+  const {
+    data: productsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: loading,
+  } = useInfiniteQuery({
+    queryKey: ['products', debouncedSearch],
+    queryFn: async ({ pageParam = 1 }) => {
+      return await productCommands.getAll(pageParam, pageSize, debouncedSearch || undefined);
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.flatMap(p => p.items).length;
+      if (loadedCount < lastPage.total_count) {
+        return allPages.length + 1;
+      }
+      return undefined;
+    },
+    staleTime: 30 * 1000, // Data fresh for 30 seconds
+  });
+
+  // Flatten paginated data
+  const products = useMemo(() => {
+    return productsData?.pages.flatMap(page => page.items) ?? [];
+  }, [productsData]);
+
+  const totalCount = productsData?.pages[0]?.total_count ?? 0;
+
+  const loadMore = () => {
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
     }
   };
 
-  // Debounced search effect
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsSearching(true);
-      void fetchData(true, searchTerm);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
-  const loadMore = () => {
-    void fetchData(false);
+  // Invalidate queries after mutations
+  const invalidateProducts = () => {
+    void queryClient.invalidateQueries({ queryKey: ['products'] });
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -137,7 +141,7 @@ export default function Inventory() {
         supplier_id: '',
         amount_paid: '',
       });
-      void fetchData(true);
+      invalidateProducts();
       setShowAddProduct(false);
       alert('Product created successfully!');
     } catch (error) {
@@ -160,7 +164,7 @@ export default function Inventory() {
         supplier_id: editProduct.supplier_id,
       });
       setEditProduct(null);
-      void fetchData(true);
+      invalidateProducts();
     } catch (error) {
       console.error('Error updating product:', error);
       alert(`Error updating: ${error}`);
@@ -184,7 +188,7 @@ export default function Inventory() {
       }
 
       await productCommands.delete(id);
-      void fetchData(true);
+      invalidateProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
       const message = error instanceof Error ? error.message : String(error);
@@ -196,7 +200,7 @@ export default function Inventory() {
     try {
       const result = await productCommands.addMockData();
       alert(result);
-      void fetchData(true);
+      invalidateProducts();
     } catch (error) {
       console.error('Error adding mock data:', error);
       alert(`Failed to add mock data: ${error}`);
@@ -212,141 +216,146 @@ export default function Inventory() {
   return (
     <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
       <div className="flex items-center justify-between">
-        <h1 className="page-title">Inventory ({totalCount})</h1>
-        <div className="flex gap-2 items-center">
-          <SearchPill
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search products..."
-          />
-          <div className="flex gap-2">
-            {products.length === 0 && (
-              <Button variant="outline" onClick={handleAddMockData}>
-                Load Sample Data
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              onClick={() => {
-                const url = generateInventoryReportPDF(products);
-                setPdfUrl(url);
-                setPdfFileName(`Inventory_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-                setShowPdfPreview(true);
-              }}
-            >
-              Export PDF
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => router.push('/purchase-orders')}
-            >
-              Purchase Orders
-            </Button>
-            <Button
-              variant={showAddProduct ? 'default' : 'outline'}
-              onClick={() => setShowAddProduct(!showAddProduct)}
-            >
-              Add Product
-            </Button>
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex items-center gap-5">
+            <h1 className="page-title !mb-0">Inventory</h1>
+            <SearchPill
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search products..."
+            />
           </div>
+          <p className="text-sm text-muted-foreground">{totalCount} total products</p>
+        </div>
+        <div className="flex gap-2">
+          {products.length === 0 && (
+            <Button variant="outline" onClick={handleAddMockData}>
+              Load Sample Data
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              const url = generateInventoryReportPDF(products);
+              setPdfUrl(url);
+              setPdfFileName(`Inventory_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+              setShowPdfPreview(true);
+            }}
+          >
+            Export PDF
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => router.push('/purchase-orders')}
+          >
+            Purchase Orders
+          </Button>
+          <Button
+            variant={showAddProduct ? 'default' : 'outline'}
+            onClick={() => setShowAddProduct(!showAddProduct)}
+          >
+            Add Product
+          </Button>
         </div>
       </div>
 
       {/* Add Product Form */}
-      {showAddProduct && (
-        <Card className="space-y-4 p-5">
-          <h2 className="text-lg font-semibold">Add New Product</h2>
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Product Name</label>
-                <Input
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                  required
-                />
+      {
+        showAddProduct && (
+          <Card className="space-y-4 p-5">
+            <h2 className="text-lg font-semibold">Add New Product</h2>
+            <form onSubmit={handleSubmit}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Product Name</label>
+                  <Input
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">SKU</label>
+                  <Input
+                    value={newProduct.sku}
+                    onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Actual Price (Purchase Price)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={newProduct.price}
+                    onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Selling Price</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={newProduct.selling_price}
+                    onChange={(e) => setNewProduct({ ...newProduct, selling_price: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Stock Quantity</label>
+                  <Input
+                    type="number"
+                    value={newProduct.stock_quantity}
+                    onChange={(e) => setNewProduct({ ...newProduct, stock_quantity: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">
+                    Amount Paid
+                    {newProduct.price && newProduct.stock_quantity && (
+                      <span className="ml-2 text-xs text-slate-400">
+                        Stock Amount (
+                        ₹
+                        {(
+                          parseFloat(newProduct.price || '0') *
+                          parseInt(newProduct.stock_quantity || '0', 10)
+                        ).toFixed(0)}
+                        )
+                      </span>
+                    )}
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={newProduct.amount_paid}
+                    onChange={(e) =>
+                      setNewProduct({ ...newProduct, amount_paid: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Supplier</label>
+                  <Select
+                    value={newProduct.supplier_id}
+                    onChange={(e) => setNewProduct({ ...newProduct, supplier_id: e.target.value })}
+                  >
+                    <option value="">Select Supplier</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               </div>
-              <div>
-                <label className="form-label">SKU</label>
-                <Input
-                  value={newProduct.sku}
-                  onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">Actual Price (Purchase Price)</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={newProduct.price}
-                  onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">Selling Price</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={newProduct.selling_price}
-                  onChange={(e) => setNewProduct({ ...newProduct, selling_price: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="form-label">Stock Quantity</label>
-                <Input
-                  type="number"
-                  value={newProduct.stock_quantity}
-                  onChange={(e) => setNewProduct({ ...newProduct, stock_quantity: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">
-                  Amount Paid
-                  {newProduct.price && newProduct.stock_quantity && (
-                    <span className="ml-2 text-xs text-slate-400">
-                      Stock Amount (
-                      ₹
-                      {(
-                        parseFloat(newProduct.price || '0') *
-                        parseInt(newProduct.stock_quantity || '0', 10)
-                      ).toFixed(0)}
-                      )
-                    </span>
-                  )}
-                </label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={newProduct.amount_paid}
-                  onChange={(e) =>
-                    setNewProduct({ ...newProduct, amount_paid: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <label className="form-label">Supplier</label>
-                <Select
-                  value={newProduct.supplier_id}
-                  onChange={(e) => setNewProduct({ ...newProduct, supplier_id: e.target.value })}
-                >
-                  <option value="">Select Supplier</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-            <Button type="submit" className="mt-4">
-              Save Product
-            </Button>
-          </form>
-        </Card>
-      )}
+              <Button type="submit" className="mt-4">
+                Save Product
+              </Button>
+            </form>
+          </Card>
+        )
+      }
 
       {/* ... rest of component ... */}
 
@@ -471,7 +480,7 @@ export default function Inventory() {
                     onClick={() => router.push(`/inventory/details?id=${product.id}`)}
                   >
                     <TableCell className="text-center font-medium text-slate-500">
-                      {(page - 1) * pageSize + displayedProducts.indexOf(product) + 1}
+                      {displayedProducts.indexOf(product) + 1}
                     </TableCell>
                     <TableCell className="font-semibold text-center">{product.name}</TableCell>
                     <TableCell className="text-center">{product.sku}</TableCell>
@@ -514,7 +523,7 @@ export default function Inventory() {
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
-                      {suppliers.find((s) => s.id === product.supplier_id)?.name ?? '-'}
+                      {product.supplier_id ? supplierMap.get(product.supplier_id)?.name ?? '-' : '-'}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex flex-col items-center gap-1">
@@ -561,13 +570,14 @@ export default function Inventory() {
                 ))}
               </TableBody>
             </Table>
-            {hasMore && (
+            {hasNextPage && (
               <div className="px-4 pb-4 pt-2">
                 <button
                   onClick={loadMore}
-                  className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                  disabled={isFetchingNextPage}
+                  className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-medium rounded-md transition-colors"
                 >
-                  Load 50 More
+                  {isFetchingNextPage ? 'Loading...' : 'Load 50 More'}
                 </button>
               </div>
             )}

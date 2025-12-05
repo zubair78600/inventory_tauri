@@ -104,7 +104,13 @@ function SupplierDetailsContent() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                                const url = generateSupplierDetailPDF(supplier);
+                                const stats = {
+                                    totalProducts: products.length,
+                                    totalStock,
+                                    totalValue,
+                                    totalPending
+                                };
+                                const url = generateSupplierDetailPDF(supplier, products, stats, paymentSummaries);
                                 setPdfUrl(url);
                                 setPdfFileName(`${supplier.name.replace(/\s+/g, '_')}_Details.pdf`);
                                 setShowPdfPreview(true);

@@ -30,8 +30,7 @@ pub struct UpdateUserInput {
 pub fn login(input: LoginInput, db: State<Database>) -> Result<User, String> {
     log::info!("login called for user: {}", input.username);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let user = conn
         .query_row(
@@ -57,8 +56,7 @@ pub fn login(input: LoginInput, db: State<Database>) -> Result<User, String> {
 pub fn get_users(db: State<Database>) -> Result<Vec<User>, String> {
     log::info!("get_users called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare("SELECT id, username, role, permissions, created_at FROM users ORDER BY username")
@@ -89,8 +87,7 @@ pub fn get_users(db: State<Database>) -> Result<Vec<User>, String> {
 pub fn create_user(input: CreateUserInput, db: State<Database>) -> Result<User, String> {
     log::info!("create_user called for: {}", input.username);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Check if user already exists (case-insensitive)
     let exists: i32 = conn
@@ -130,8 +127,7 @@ pub fn create_user(input: CreateUserInput, db: State<Database>) -> Result<User, 
 pub fn update_user(input: UpdateUserInput, db: State<Database>) -> Result<User, String> {
     log::info!("update_user called for id: {}", input.id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     if let Some(password) = input.password {
         conn.execute(
@@ -163,8 +159,7 @@ pub fn update_user(input: UpdateUserInput, db: State<Database>) -> Result<User, 
 pub fn delete_user(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_user called for id: {}", id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Prevent deleting the last admin or specific protected users if needed
     // For now, just delete

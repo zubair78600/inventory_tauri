@@ -41,8 +41,7 @@ pub fn get_customers(
 ) -> Result<PaginatedResult<CustomerWithStats>, String> {
     log::info!("get_customers called with search: {:?}, page: {}, page_size: {}", search, page, page_size);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let offset = (page - 1) * page_size;
     let limit = page_size;
@@ -145,8 +144,7 @@ pub fn get_customers(
 pub fn get_customer(id: i32, db: State<Database>) -> Result<Customer, String> {
     log::info!("get_customer called with id: {}", id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let customer = conn
         .query_row(
@@ -175,8 +173,7 @@ pub fn get_customer(id: i32, db: State<Database>) -> Result<Customer, String> {
 pub fn create_customer(input: CreateCustomerInput, db: State<Database>) -> Result<Customer, String> {
     log::info!("create_customer called with: {:?}", input);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let now = Utc::now().to_rfc3339();
 
@@ -208,8 +205,7 @@ pub fn create_customer(input: CreateCustomerInput, db: State<Database>) -> Resul
 pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Result<Customer, String> {
     log::info!("update_customer called with: {:?}", input);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let now = Utc::now().to_rfc3339();
 
@@ -253,8 +249,7 @@ pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Resul
 pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_customer called with id: {}", id);
 
-    let conn = db.conn();
-    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = db.get_conn()?;
 
     // Get customer data before deletion for audit trail
     let customer = conn.query_row(
@@ -349,8 +344,7 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
 pub fn add_mock_customers(db: State<Database>) -> Result<String, String> {
     log::info!("add_mock_customers called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let count: i32 = conn
         .query_row("SELECT COUNT(*) FROM customers", [], |row| row.get(0))

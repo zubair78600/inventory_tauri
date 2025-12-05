@@ -52,8 +52,7 @@ pub struct SearchInvoice {
 pub fn omnisearch(query: String, db: State<Database>) -> Result<SearchResult, String> {
     log::info!("omnisearch called with query: {}", query);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let search_pattern = format!("%{}%", query);
 
@@ -164,8 +163,7 @@ pub fn omnisearch(query: String, db: State<Database>) -> Result<SearchResult, St
 pub fn export_products_csv(db: State<Database>) -> Result<String, String> {
     log::info!("export_products_csv called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut csv = String::from("ID,Name,SKU,Price,Stock Quantity,Supplier ID\n");
 
@@ -201,8 +199,7 @@ pub fn export_products_csv(db: State<Database>) -> Result<String, String> {
 pub fn export_customers_csv(db: State<Database>) -> Result<String, String> {
     log::info!("export_customers_csv called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut csv = String::from("ID,Name,Email,Phone,Address\n");
 

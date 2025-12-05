@@ -52,9 +52,7 @@ pub fn create_purchase_order(
     input: CreatePurchaseOrderInput,
     db: State<Database>,
 ) -> Result<PurchaseOrder, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Start transaction
     conn.execute("BEGIN TRANSACTION", [])
@@ -227,8 +225,7 @@ pub fn get_product_purchase_summary(
     product_id: i32,
     db: State<Database>,
 ) -> Result<ProductPurchaseSummary, String> {
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let (initial_stock, price): (i64, f64) = conn
         .query_row(
@@ -271,9 +268,7 @@ pub fn get_purchase_orders(
     status: Option<String>,
     db: State<Database>,
 ) -> Result<Vec<PurchaseOrderWithDetails>, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut query = String::from(
         "SELECT
@@ -349,9 +344,7 @@ pub fn get_purchase_order_by_id(
     po_id: i32,
     db: State<Database>,
 ) -> Result<PurchaseOrderComplete, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Get purchase order
     let po: PurchaseOrder = conn
@@ -483,9 +476,7 @@ pub fn update_purchase_order_status(
     received_date: Option<String>,
     db: State<Database>,
 ) -> Result<PurchaseOrder, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Validate status
     let valid_statuses = ["draft", "ordered", "received", "cancelled"];
@@ -548,9 +539,7 @@ pub fn add_payment_to_purchase_order(
     paid_at: Option<String>,
     db: State<Database>,
 ) -> Result<i32, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     if amount <= 0.0 {
         return Err("Payment amount must be greater than 0".to_string());
@@ -616,9 +605,7 @@ pub fn get_product_purchase_history(
     product_id: i32,
     db: State<Database>,
 ) -> Result<Vec<PurchaseOrderItemWithProduct>, String> {
-    let conn = db.conn();
-    let conn = conn.lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare(
