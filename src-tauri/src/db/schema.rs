@@ -112,7 +112,6 @@ CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id
 CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id);
 CREATE INDEX IF NOT EXISTS idx_deleted_items_type ON deleted_items(entity_type);
 CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
-    CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_paid_at ON supplier_payments(paid_at);
 
@@ -121,6 +120,25 @@ CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
 CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
 CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);
 CREATE INDEX IF NOT EXISTS idx_suppliers_contact ON suppliers(contact_info);
+
+-- Critical Performance Indexes for Large Datasets (100K+ records)
+-- Index for invoice sorting by date (used in ORDER BY)
+CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at DESC);
+
+-- Composite index for customer invoice stats (JOIN optimization)
+CREATE INDEX IF NOT EXISTS idx_invoices_customer_created ON invoices(customer_id, created_at DESC);
+
+-- Composite indexes for keyset/cursor pagination (fast pagination at any page)
+CREATE INDEX IF NOT EXISTS idx_products_name_id ON products(name, id);
+CREATE INDEX IF NOT EXISTS idx_customers_name_id ON customers(name, id);
+CREATE INDEX IF NOT EXISTS idx_suppliers_name_id ON suppliers(name, id);
+CREATE INDEX IF NOT EXISTS idx_invoices_created_id ON invoices(created_at DESC, id);
+
+-- Partial index for low stock products (dashboard widget)
+CREATE INDEX IF NOT EXISTS idx_products_low_stock ON products(stock_quantity) WHERE stock_quantity < 10;
+
+-- Index for invoice items aggregation
+CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_product ON invoice_items(invoice_id, product_id);
 
     -- Users table
     CREATE TABLE IF NOT EXISTS users (

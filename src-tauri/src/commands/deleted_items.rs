@@ -19,8 +19,7 @@ pub struct DeletedItemDisplay {
 pub fn get_deleted_items(db: State<Database>) -> Result<Vec<DeletedItemDisplay>, String> {
     log::info!("get_deleted_items called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare("SELECT id, entity_type, entity_id, entity_data, deleted_at FROM deleted_items ORDER BY deleted_at DESC")
@@ -87,8 +86,7 @@ pub fn get_deleted_items(db: State<Database>) -> Result<Vec<DeletedItemDisplay>,
 pub fn restore_customer(deleted_item_id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("restore_customer called with deleted_item_id: {}", deleted_item_id);
 
-    let conn = db.conn();
-    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = db.get_conn()?;
 
     // Get deleted item
     let (entity_data, related_data): (String, Option<String>) = conn
@@ -165,8 +163,7 @@ pub fn restore_customer(deleted_item_id: i32, db: State<Database>) -> Result<(),
 pub fn restore_product(deleted_item_id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("restore_product called with deleted_item_id: {}", deleted_item_id);
 
-    let conn = db.conn();
-    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = db.get_conn()?;
 
     // Get deleted item
     let entity_data: String = conn
@@ -225,8 +222,7 @@ pub fn restore_product(deleted_item_id: i32, db: State<Database>) -> Result<(), 
 pub fn restore_supplier(deleted_item_id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("restore_supplier called with deleted_item_id: {}", deleted_item_id);
 
-    let conn = db.conn();
-    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = db.get_conn()?;
 
     // Get deleted item
     let (entity_data, related_data): (String, Option<String>) = conn
@@ -277,8 +273,7 @@ pub fn restore_supplier(deleted_item_id: i32, db: State<Database>) -> Result<(),
 pub fn permanently_delete_item(deleted_item_id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("permanently_delete_item called with id: {}", deleted_item_id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let rows_affected = conn
         .execute("DELETE FROM deleted_items WHERE id = ?1", [deleted_item_id])
@@ -297,8 +292,7 @@ pub fn permanently_delete_item(deleted_item_id: i32, db: State<Database>) -> Res
 pub fn clear_trash(db: State<Database>) -> Result<usize, String> {
     log::info!("clear_trash called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let rows_affected = conn
         .execute("DELETE FROM deleted_items", [])

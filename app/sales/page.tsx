@@ -92,15 +92,20 @@ export default function Sales() {
     void fetchNextPage();
   };
 
+  const totalCount = data?.pages[0]?.total_count ?? 0;
+
   return (
     <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
-      <div className="flex items-center justify-between">
-        <h1 className="page-title">Sales ({sales.length})</h1>
-        <SearchPill
-          value={searchTerm}
-          onChange={setSearchTerm}
-          placeholder="Search invoices..."
-        />
+      <div className="flex flex-col items-start gap-1">
+        <div className="flex items-center gap-5">
+          <h1 className="page-title !mb-0">Sales</h1>
+          <SearchPill
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search invoices..."
+          />
+        </div>
+        <p className="text-sm text-muted-foreground">{totalCount} total orders</p>
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.2fr,1fr] h-full overflow-hidden">
         <Card className="p-0 overflow-hidden flex flex-col h-full">

@@ -1,20 +1,26 @@
-use rusqlite::{Connection, Result};
+use r2d2::{Pool, PooledConnection};
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::Result;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 use super::schema::CREATE_TABLES_SQL;
 use super::schema::purchase_order_migration::PURCHASE_ORDER_MIGRATION_SQL;
 
-/// Database wrapper with thread-safe connection
+/// Type alias for the connection pool
+pub type SqlitePool = Pool<SqliteConnectionManager>;
+/// Type alias for a pooled connection
+pub type PooledConn = PooledConnection<SqliteConnectionManager>;
+
+/// Database wrapper with connection pool for better concurrency
 #[derive(Clone)]
 pub struct Database {
-    conn: Arc<Mutex<Connection>>,
+    pool: SqlitePool,
 }
 
 impl Database {
-    /// Create a new database connection and initialize tables
+    /// Create a new database connection pool and initialize tables
     pub fn new(db_path: PathBuf) -> Result<Self> {
-        log::info!("Initializing database at: {:?}", db_path);
+        log::info!("Initializing database pool at: {:?}", db_path);
 
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
@@ -22,37 +28,64 @@ impl Database {
                 .map_err(|e| rusqlite::Error::InvalidPath(parent.to_path_buf()))?;
         }
 
-        let conn = Connection::open(&db_path)?;
+        // Create connection manager with initialization hook
+        let manager = SqliteConnectionManager::file(&db_path)
+            .with_init(|c| {
+                // Enable foreign keys
+                c.pragma_update(None, "foreign_keys", "ON")?;
 
-        // Enable foreign keys
-        conn.execute("PRAGMA foreign_keys = ON", [])?;
+                // Performance optimizations - these are per-connection settings
+                // WAL mode is database-wide, but needs to be set on first connection
+                c.pragma_update(None, "journal_mode", "WAL")?;
 
-        // Performance optimizations
-        // WAL mode allows simultaneous readers and writers
-        // PRAGMA journal_mode returns the new mode, so we must use query_row
-        let _mode: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
-        
-        // Normal synchronous mode is safe for WAL and much faster
-        conn.execute("PRAGMA synchronous = NORMAL", [])?;
-        // Store temp tables in memory
-        conn.execute("PRAGMA temp_store = MEMORY", [])?;
-        // Increase cache size (negative value is in kb)
-        conn.execute("PRAGMA cache_size = -64000", [])?;
+                // Normal synchronous mode is safe for WAL and much faster
+                c.pragma_update(None, "synchronous", "NORMAL")?;
+                // Store temp tables in memory
+                c.pragma_update(None, "temp_store", "MEMORY")?;
+                // Increase cache size (negative value is in kb) - 64MB per connection
+                c.pragma_update(None, "cache_size", "-64000")?;
+                // Enable memory-mapped I/O for faster reads (256MB)
+                c.pragma_update(None, "mmap_size", "268435456")?;
+                // Optimize for read-heavy workloads
+                c.pragma_update(None, "read_uncommitted", "1")?;
 
-        let db = Database {
-            conn: Arc::new(Mutex::new(conn)),
-        };
+                Ok(())
+            });
 
-        // Initialize tables
+        // Build the connection pool
+        // Pool size of 8 is good for desktop apps - allows parallel queries
+        let pool = Pool::builder()
+            .max_size(8)
+            .min_idle(Some(2))
+            .build(manager)
+            .map_err(|e| {
+                log::error!("Failed to create connection pool: {}", e);
+                rusqlite::Error::InvalidParameterName(format!("Pool error: {}", e))
+            })?;
+
+        let db = Database { pool };
+
+        // Initialize tables using a connection from the pool
         db.init_tables()?;
 
-        log::info!("Database initialized successfully");
+        log::info!("Database pool initialized successfully with {} connections", 8);
         Ok(db)
+    }
+
+    /// Get a connection from the pool
+    /// This is much faster than locking a mutex - connections are reused
+    pub fn get_conn(&self) -> std::result::Result<PooledConn, String> {
+        self.pool
+            .get()
+            .map_err(|e| format!("Failed to get database connection: {}", e))
     }
 
     /// Initialize database tables
     fn init_tables(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.pool.get().map_err(|e| {
+            rusqlite::Error::InvalidParameterName(format!("Pool error: {}", e))
+        })?;
+
         conn.execute_batch(CREATE_TABLES_SQL)?;
 
         // Migration: Add place column to customers if it doesn't exist
@@ -239,7 +272,7 @@ impl Database {
             // Add as nullable first, then update with current timestamp
             conn.execute("ALTER TABLE products ADD COLUMN created_at TEXT", [])?;
         }
-        
+
         // Always update NULL values (in case migration was interrupted)
         conn.execute("UPDATE products SET created_at = datetime('now') WHERE created_at IS NULL", [])?;
 
@@ -255,7 +288,7 @@ impl Database {
             log::info!("Migrating: Adding updated_at column to products table");
             conn.execute("ALTER TABLE products ADD COLUMN updated_at TEXT", [])?;
         }
-        
+
         // Always update NULL values (in case migration was interrupted)
         conn.execute("UPDATE products SET updated_at = datetime('now') WHERE updated_at IS NULL", [])?;
 
@@ -272,7 +305,7 @@ impl Database {
             log::info!("Migrating: Adding created_at column to suppliers table");
             conn.execute("ALTER TABLE suppliers ADD COLUMN created_at TEXT", [])?;
         }
-        
+
         // Always update NULL values (in case migration was interrupted)
         conn.execute("UPDATE suppliers SET created_at = datetime('now') WHERE created_at IS NULL", [])?;
 
@@ -288,7 +321,7 @@ impl Database {
             log::info!("Migrating: Adding updated_at column to suppliers table");
             conn.execute("ALTER TABLE suppliers ADD COLUMN updated_at TEXT", [])?;
         }
-        
+
         // Always update NULL values (in case migration was interrupted)
         conn.execute("UPDATE suppliers SET updated_at = datetime('now') WHERE updated_at IS NULL", [])?;
 
@@ -364,10 +397,5 @@ impl Database {
         log::info!("Purchase Order and FIFO migration completed successfully");
 
         Ok(())
-    }
-
-    /// Get a reference to the connection (for queries)
-    pub fn conn(&self) -> Arc<Mutex<Connection>> {
-        self.conn.clone()
     }
 }

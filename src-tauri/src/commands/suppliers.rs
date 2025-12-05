@@ -58,8 +58,7 @@ pub fn get_suppliers(
 ) -> Result<PaginatedResult<Supplier>, String> {
     log::info!("get_suppliers called with search: {:?}, page: {}, page_size: {}", search, page, page_size);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let offset = (page - 1) * page_size;
     let limit = page_size;
@@ -151,8 +150,7 @@ pub fn get_suppliers(
 pub fn get_supplier(id: i32, db: State<Database>) -> Result<Supplier, String> {
     log::info!("get_supplier called with id: {}", id);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let supplier = conn
         .query_row(
@@ -184,8 +182,7 @@ pub fn get_supplier(id: i32, db: State<Database>) -> Result<Supplier, String> {
 pub fn create_supplier(input: CreateSupplierInput, db: State<Database>) -> Result<Supplier, String> {
     log::info!("create_supplier called with: {:?}", input);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     conn.execute(
         "INSERT INTO suppliers (name, contact_info, address, email, comments, state, district, town, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'), datetime('now'))",
@@ -225,8 +222,7 @@ pub fn create_supplier(input: CreateSupplierInput, db: State<Database>) -> Resul
 pub fn update_supplier(input: UpdateSupplierInput, db: State<Database>) -> Result<Supplier, String> {
     log::info!("update_supplier called with: {:?}", input);
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let rows_affected = conn
         .execute(
@@ -269,8 +265,7 @@ pub fn update_supplier(input: UpdateSupplierInput, db: State<Database>) -> Resul
 pub fn delete_supplier(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_supplier called with id: {}", id);
 
-    let conn = db.conn();
-    let mut conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let mut conn = db.get_conn()?;
 
     // Get supplier data before deletion for audit trail
     let supplier = conn.query_row(
@@ -360,10 +355,7 @@ pub fn create_supplier_payment(
         return Err("Amount must be greater than zero".into());
     }
 
-    let conn = db.conn();
-    let conn = conn
-        .lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let paid_at = input
         .paid_at
@@ -418,10 +410,7 @@ pub fn get_supplier_payments(
         supplier_id
     );
 
-    let conn = db.conn();
-    let conn = conn
-        .lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare(
@@ -460,10 +449,7 @@ pub fn get_supplier_payments(
 pub fn delete_supplier_payment(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_supplier_payment called with id: {}", id);
 
-    let conn = db.conn();
-    let conn = conn
-        .lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     let rows_affected = conn
         .execute("DELETE FROM supplier_payments WHERE id = ?1", [id])
@@ -488,10 +474,7 @@ pub fn get_supplier_payment_summary(
         supplier_id, product_id
     );
 
-    let conn = db.conn();
-    let conn = conn
-        .lock()
-        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Total payable is the purchase value for this specific product from this supplier.
     // Use purchase_order_items to sum actual quantities and costs, plus initial stock value.
@@ -540,8 +523,7 @@ pub fn get_supplier_payment_summary(
 pub fn add_mock_suppliers(db: State<Database>) -> Result<String, String> {
     log::info!("add_mock_suppliers called");
 
-    let conn = db.conn();
-    let conn = conn.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    let conn = db.get_conn()?;
 
     // Check if suppliers already exist
     let count: i32 = conn
