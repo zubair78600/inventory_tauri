@@ -202,38 +202,42 @@ export default function PurchaseOrders() {
 
 
   return (
-    <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
-      <div className="flex items-center justify-between">
-        <h1 className="page-title">Purchase Orders ({displayed.length})</h1>
-        <div className="flex gap-2 items-center">
-          <SearchPill
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search by PO number..."
-          />
-          <div className="flex gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 text-sm border rounded-md"
-            >
-              <option value="">All Status</option>
-              <option value="draft">Draft</option>
-              <option value="ordered">Ordered</option>
-              <option value="received">Received</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-            <Button variant="ghost" onClick={() => router.push('/inventory')}>
-              Back to Inventory
-            </Button>
-            <Button
-              onClick={() => {
-                setShowAddForm(!showAddForm);
-              }}
-            >
-              {showAddForm ? 'Cancel' : 'Create Purchase Order'}
-            </Button>
+    <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col relative">
+      <div className="flex items-center justify-between h-14 min-h-[3.5rem]">
+        <div className="flex flex-col items-start gap-0.5">
+          <div className="flex items-center gap-[25px]">
+            <h1 className="page-title !mb-0">Purchase Orders ({displayed.length})</h1>
+            <SearchPill
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search by PO number..."
+              className="w-[260px] mt-1.5"
+            />
           </div>
+        </div>
+
+        <div className="flex gap-2 items-center z-20">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-1.5 text-sm border rounded-md"
+          >
+            <option value="">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="ordered">Ordered</option>
+            <option value="received">Received</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <Button variant="ghost" onClick={() => router.push('/inventory')}>
+            Back to Inventory
+          </Button>
+          <Button
+            onClick={() => {
+              setShowAddForm(!showAddForm);
+            }}
+          >
+            {showAddForm ? 'Cancel' : 'Create Purchase Order'}
+          </Button>
         </div>
       </div>
 

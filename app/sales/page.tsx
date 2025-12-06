@@ -41,7 +41,8 @@ export default function Sales() {
     hasNextPage,
     isFetchingNextPage,
     status,
-    error
+    error,
+    isLoading: loading,
   } = useInfiniteQuery({
     queryKey: ['sales', deferredSearch],
     queryFn: async ({ pageParam = 1 }) => {
@@ -85,7 +86,7 @@ export default function Sales() {
 
   const items = details?.items ?? [];
 
-  if (status === 'pending') return <div>Loading...</div>;
+  if (loading && !sales.length) return <div>Loading...</div>;
   if (status === 'error') return <div>Error: {error ? error.message : 'Unknown error'}</div>;
 
   const loadMore = () => {
@@ -95,20 +96,24 @@ export default function Sales() {
   const totalCount = data?.pages[0]?.total_count ?? 0;
 
   return (
-    <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
-      <div className="flex flex-col items-start gap-1">
-        <div className="flex items-center gap-5">
-          <h1 className="page-title !mb-0">Sales</h1>
-          <SearchPill
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search invoices..."
-          />
+    <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col relative">
+      <div className="flex items-center justify-between h-14 min-h-[3.5rem]">
+        <div className="flex flex-col items-start gap-0.5">
+          <div className="flex items-center gap-[25px]">
+            <h1 className="page-title !mb-0">Sales</h1>
+            <SearchPill
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search invoices..."
+              className="w-[260px] mt-1.5"
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">{totalCount} total orders</p>
         </div>
-        <p className="text-sm text-muted-foreground">{totalCount} total orders</p>
       </div>
+
       <div className="grid gap-4 lg:grid-cols-[1.2fr,1fr] h-full overflow-hidden">
-        <Card className="p-0 overflow-hidden flex flex-col h-full">
+        <Card className="p-0 overflow-hidden flex flex-col h-full relative">
           <CardHeader className="pb-2">
             <CardTitle>Recent Sales</CardTitle>
             <p className="text-sm text-muted-foreground">Last 10 orders with timestamp</p>
@@ -151,6 +156,12 @@ export default function Sales() {
                 >
                   {isFetchingNextPage ? 'Loading...' : 'Load 50 More'}
                 </button>
+              </div>
+            )}
+            {/* Loading Overlay */}
+            {(loading || isFetchingNextPage) && sales.length > 0 && (
+              <div className="absolute inset-0 bg-white/50 z-20 pointer-events-none flex items-start justify-center pt-20">
+                {/* Optional spinner */}
               </div>
             )}
           </CardContent>

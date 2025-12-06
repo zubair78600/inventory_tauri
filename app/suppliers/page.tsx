@@ -207,20 +207,22 @@ export default function Suppliers() {
   const displayed = suppliers;
 
   return (
-    <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col items-start gap-1">
-          <div className="flex items-center gap-5">
+    <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col relative">
+      <div className="flex items-center justify-between h-14 min-h-[3.5rem]">
+        <div className="flex flex-col items-start gap-0.5">
+          <div className="flex items-center gap-[25px]">
             <h1 className="page-title !mb-0">Suppliers</h1>
             <SearchPill
               value={searchTerm}
               onChange={setSearchTerm}
               placeholder="Search suppliers..."
+              className="w-[260px] mt-1.5"
             />
           </div>
           <p className="text-sm text-muted-foreground">{totalCount} total suppliers</p>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex gap-2 items-center z-20">
           {suppliers.length === 0 && (
             <Button variant="outline" onClick={handleAddMockData}>
               Load Sample Data
