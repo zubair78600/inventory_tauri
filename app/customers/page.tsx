@@ -3,7 +3,7 @@
 import type { Customer } from '@/lib/tauri';
 import type { CustomerReport } from '@/lib/tauri';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -80,6 +80,7 @@ export default function Customers() {
       }
       return undefined;
     },
+    placeholderData: keepPreviousData, // Keep showing old data while fetching new search results
     staleTime: 30 * 1000, // Data fresh for 30 seconds
   });
 
@@ -184,23 +185,23 @@ export default function Customers() {
 
   const displayedCustomers = customers;
 
-  if (loading) return <div>Loading...</div>;
-
   return (
-    <div className="space-y-5 h-[calc(100vh-6rem)] flex flex-col">
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col items-start gap-1">
-          <div className="flex items-center gap-5">
+    <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col relative">
+      <div className="flex items-center justify-between h-14 min-h-[3.5rem]">
+        <div className="flex flex-col items-start gap-0.5">
+          <div className="flex items-center gap-[25px]">
             <h1 className="page-title !mb-0">Customers</h1>
             <SearchPill
               value={searchTerm}
               onChange={setSearchTerm}
               placeholder="Search customers..."
+              className="w-[260px] mt-1.5"
             />
           </div>
           <p className="text-sm text-muted-foreground">{totalCount} total customers</p>
         </div>
-        <div className="flex gap-2 items-center">
+
+        <div className="flex gap-2 items-center z-20">
           <Button variant="ghost" onClick={invalidateCustomers}>
             Refresh
           </Button>
@@ -336,7 +337,7 @@ export default function Customers() {
         )
       }
 
-      <div className="w-full flex-1 overflow-hidden">
+      <div className="w-full flex-1 overflow-hidden relative">
         <Card className="table-container p-0 h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">
             <Table>
@@ -417,6 +418,11 @@ export default function Customers() {
                 ))}
               </TableBody>
             </Table>
+            {loading && !displayedCustomers.length && (
+              <div className="flex justify-center items-center h-40">
+                <div className="text-slate-500">Loading customers...</div>
+              </div>
+            )}
             {hasNextPage && (
               <div className="px-4 pb-4 pt-2">
                 <button
@@ -429,6 +435,12 @@ export default function Customers() {
               </div>
             )}
           </div>
+          {/* Loading Overlay */}
+          {(loading || isFetchingNextPage) && displayedCustomers.length > 0 && (
+            <div className="absolute inset-0 bg-white/50 z-20 pointer-events-none flex items-start justify-center pt-20">
+              {/* Optional spinner or just allow interaction with opacity */}
+            </div>
+          )}
         </Card>
       </div >
       <PDFPreviewDialog
