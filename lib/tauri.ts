@@ -408,6 +408,12 @@ export const productCommands = {
   addMockData: async (): Promise<string> => {
     return await invoke<string>('add_mock_products');
   },
+  getTopSelling: async (limit: number, page: number = 1): Promise<Product[]> => {
+    return await invoke<Product[]>('get_top_selling_products', { limit, page });
+  },
+  getByIds: async (ids: number[]): Promise<Product[]> => {
+    return await invoke<Product[]>('get_products_by_ids', { ids });
+  }
 };
 
 /**

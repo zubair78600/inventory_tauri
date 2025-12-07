@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { LogOut, Settings, ChevronDown, User as UserIcon } from 'lucide-react';
+import { LogOut, ChevronDown, User as UserIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function Header({ userEmail }: HeaderProps) {
@@ -108,21 +108,7 @@ export function Header({ userEmail }: HeaderProps) {
             {/* Dropdown Content */}
             {menuOpen && (
               <div className="absolute right-0 top-full mt-1 w-48 rounded-md bg-white dark:bg-slate-800 shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50 animated-in fade-in zoom-in-95 duration-200">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setMenuOpen(false);
-                    // Direct navigation without password prompt
-                    router.push('/settings');
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-                >
-                  <Settings size={16} />
-                  Settings
-                </button>
-                <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
+
                 <button
                   type="button"
                   onClick={(e) => {

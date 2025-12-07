@@ -455,6 +455,34 @@ impl Database {
             ("1014209932", "admin"),
         )?;
 
+        // Migration: Add biometric_enabled column to users table
+        let biometric_enabled_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = 'biometric_enabled'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !biometric_enabled_exists {
+            log::info!("Migrating: Adding biometric_enabled column to users table");
+            conn.execute("ALTER TABLE users ADD COLUMN biometric_enabled INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+
+        // Migration: Add biometric_token_hash column to users table
+        let biometric_token_hash_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = 'biometric_token_hash'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !biometric_token_hash_exists {
+            log::info!("Migrating: Adding biometric_token_hash column to users table");
+            conn.execute("ALTER TABLE users ADD COLUMN biometric_token_hash TEXT", [])?;
+        }
+
         Ok(())
     }
 }

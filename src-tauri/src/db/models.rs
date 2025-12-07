@@ -14,6 +14,8 @@ pub struct Product {
     pub created_at: String,
     pub updated_at: String,
     pub image_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_sold: Option<i64>,
 }
 
 /// Supplier model matching Prisma schema

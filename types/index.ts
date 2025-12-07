@@ -41,6 +41,7 @@ export type Product = {
   created_at: string;
   updated_at: string;
   image_path: string | null;
+  total_sold?: number;
 };
 
 export type Customer = {

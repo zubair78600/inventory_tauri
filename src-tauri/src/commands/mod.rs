@@ -10,6 +10,7 @@ pub mod purchase_orders;
 pub mod migration;
 pub mod settings;
 pub mod images;
+pub mod biometric;
 
 use serde::{Deserialize, Serialize};
 
@@ -31,3 +32,4 @@ pub use purchase_orders::*;
 pub use migration::*;
 pub use settings::*;
 pub use images::*;
+pub use biometric::*;
