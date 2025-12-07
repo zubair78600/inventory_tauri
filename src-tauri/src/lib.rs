@@ -3,7 +3,7 @@ mod db;
 mod services;
 
 use db::Database;
-use tauri::{Manager, menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder}};
+use tauri::{Manager, Emitter, menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder}};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -61,9 +61,8 @@ pub fn run() {
       let app_handle_clone = app.handle().clone();
       app.on_menu_event(move |_app, event| {
         if event.id() == "settings" {
-          if let Some(window) = app_handle_clone.get_webview_window("main") {
-            let _ = window.eval("window.location.href = '/settings'");
-          }
+          // Emit an event to the frontend to show password prompt before navigating
+          let _ = app_handle_clone.emit("open-settings-menu", ());
         }
       });
 
@@ -98,6 +97,22 @@ pub fn run() {
       commands::get_low_stock_products,
       commands::customer_search,
       commands::get_customer_report,
+      // New analytics commands
+      commands::get_sales_analytics,
+      commands::get_revenue_trend,
+      commands::get_top_products,
+      commands::get_sales_by_payment_method,
+      commands::get_sales_by_region,
+      commands::get_customer_analytics,
+      commands::get_top_customers,
+      commands::get_customer_trend,
+      commands::get_inventory_health,
+      commands::get_low_stock_alerts,
+      commands::get_purchase_analytics,
+      commands::get_cashflow_trend,
+      commands::get_top_suppliers,
+      commands::get_tax_summary,
+      commands::get_discount_analysis,
       commands::get_invoices,
       commands::get_invoices_by_product,
       commands::get_invoice,
@@ -130,6 +145,29 @@ pub fn run() {
       commands::migrate_existing_products,
       commands::check_migration_status,
       commands::validate_migration,
+      // Settings commands
+      commands::get_app_setting,
+      commands::set_app_setting,
+      commands::get_all_settings,
+      commands::delete_app_setting,
+      commands::export_settings_json,
+      commands::import_settings_json,
+      // Image commands
+      commands::save_product_image,
+      commands::download_product_image,
+      commands::get_product_image_path,
+      commands::delete_product_image,
+      commands::search_google_images,
+      commands::get_pictures_directory,
+      commands::save_cropped_image,
+      commands::get_original_image_path,
+      // Supplier & Customer Image commands
+      commands::save_supplier_image,
+      commands::get_supplier_image_path,
+      commands::delete_supplier_image,
+      commands::save_customer_image,
+      commands::get_customer_image_path,
+      commands::delete_customer_image,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

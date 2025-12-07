@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Trash2, RefreshCw, AlertCircle, Loader2, Edit } from 'lucide-react';
-import { ask } from '@tauri-apps/plugin-dialog';
+import { Trash2, RefreshCw, AlertCircle, Loader2, Edit, Eye, EyeOff, Save, ExternalLink, Search, CheckCircle, XCircle, Download, Upload, FileJson } from 'lucide-react';
+import { ask, save, open } from '@tauri-apps/plugin-dialog';
+import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
+import { settingsCommands, imageCommands, GoogleImageResult } from '@/lib/tauri';
 
 type DeletedItem = {
   id: number;
@@ -38,7 +40,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'users' | 'themes'>('deleted-data');
+  const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'api' | 'users' | 'themes'>('deleted-data');
   const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
@@ -52,13 +54,157 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Google API Settings
+  const [googleApiKey, setGoogleApiKey] = useState('');
+  const [googleCxId, setGoogleCxId] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSuccess, setSettingsSuccess] = useState(false);
+
+  // JSON Settings
+  const [verifyingApi, setVerifyingApi] = useState(false);
+  const [importingInfo, setImportingInfo] = useState<string | null>(null);
+
+  // API Test State
+  const [testQuery, setTestQuery] = useState('');
+  const [testResults, setTestResults] = useState<GoogleImageResult[]>([]);
+  const [testing, setTesting] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [apiVerified, setApiVerified] = useState<boolean | null>(null);
+
   useEffect(() => {
     if (activeTab === 'deleted-data') {
       void fetchDeletedItems();
     } else if (activeTab === 'users') {
       void fetchUsers();
+    } else if (activeTab === 'general' || activeTab === 'api') {
+      void fetchGoogleSettings();
     }
   }, [activeTab]);
+
+  const fetchGoogleSettings = async () => {
+    try {
+      const settings = await settingsCommands.getAll();
+      setGoogleApiKey(settings['google_api_key'] || '');
+      setGoogleCxId(settings['google_cx_id'] || '');
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+    }
+  };
+
+  const handleSaveGoogleSettings = async () => {
+    setSavingSettings(true);
+    setSettingsSuccess(false);
+    setApiVerified(null);
+    try {
+      await settingsCommands.set('google_api_key', googleApiKey);
+      await settingsCommands.set('google_cx_id', googleCxId);
+      setSettingsSuccess(true);
+      setTimeout(() => setSettingsSuccess(false), 3000);
+
+      // Auto-verify if credentials changed
+      if (googleApiKey && googleCxId) {
+        void handleVerifyApiConnection();
+      }
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      alert('Error saving settings: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleVerifyApiConnection = async () => {
+    if (!googleApiKey || !googleCxId) return;
+
+    setVerifyingApi(true);
+    setApiVerified(null);
+    try {
+      // Perform a minimal search
+      await imageCommands.searchGoogleImages('test', 1);
+      setApiVerified(true);
+    } catch (err) {
+      console.error('API Verification failed:', err);
+      setApiVerified(false);
+    } finally {
+      setVerifyingApi(false);
+    }
+  };
+
+  const handleExportSettings = async () => {
+    try {
+      const json = await settingsCommands.exportJson();
+
+      const filePath = await save({
+        filters: [{
+          name: 'JSON',
+          extensions: ['json']
+        }],
+        defaultPath: 'inventory-settings-backup.json'
+      });
+
+      if (filePath) {
+        await writeTextFile(filePath, json);
+        alert('Settings exported successfully!');
+      }
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Failed to export settings: ' + String(err));
+    }
+  };
+
+  const handleImportSettings = async () => {
+    try {
+      const filePath = await open({
+        multiple: false,
+        filters: [{
+          name: 'JSON',
+          extensions: ['json']
+        }]
+      });
+
+      if (filePath && typeof filePath === 'string') {
+        setLoading(true);
+        const jsonContent = await readTextFile(filePath);
+        const count = await settingsCommands.importJson(jsonContent);
+
+        setImportingInfo(`Successfully imported ${count} settings. Please refresh the page to see changes.`);
+
+        // Refresh values if we are on the page
+        void fetchGoogleSettings();
+
+        setTimeout(() => setImportingInfo(null), 5000);
+      }
+    } catch (err) {
+      console.error('Import failed:', err);
+      alert('Failed to import settings: ' + String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestApi = async () => {
+    if (!testQuery.trim()) return;
+
+    setTesting(true);
+    setTestError(null);
+    setTestResults([]);
+    setApiVerified(null);
+
+    try {
+      const results = await imageCommands.searchGoogleImages(testQuery.trim(), 10);
+      setTestResults(results);
+      setApiVerified(true);
+      if (results.length === 0) {
+        setTestError('Search succeeded but no images found. Try a different query.');
+      }
+    } catch (err) {
+      setTestError(String(err));
+      setApiVerified(false);
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const fetchDeletedItems = async () => {
     try {
@@ -269,12 +415,6 @@ export default function SettingsPage() {
           <h1 className="page-title">Settings</h1>
           <p className="page-description">Manage application settings and deleted data</p>
         </div>
-        <a
-          href="/settings/migration"
-          className="btn btn-secondary"
-        >
-          Open Data Migration
-        </a>
       </div>
 
       {/* Tabs */}
@@ -297,6 +437,15 @@ export default function SettingsPage() {
               }`}
           >
             General
+          </button>
+          <button
+            onClick={() => setActiveTab('api')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'api'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-300'
+              }`}
+          >
+            API
           </button>
           {user?.role === 'admin' && (
             <button
@@ -422,13 +571,240 @@ export default function SettingsPage() {
 
       {/* General Tab */}
       {activeTab === 'general' && (
-        <div className="card">
-          <h2 className="text-lg font-semibold mb-4">General Settings</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            General settings will be available in a future update.
-          </p>
+        <div className="space-y-6">
+          {/* Google Image Search API Section */}
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">General Settings</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              General application settings will appear here.
+            </p>
+          </div>
         </div>
       )}
+
+      {/* API Tab */}
+      {activeTab === 'api' && (
+        <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">Google Image Search API</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              Configure Google Custom Search API to enable searching product images from Google.
+            </p>
+
+            <div className="space-y-4 max-w-xl">
+              <div>
+                <label className="form-label">API Key</label>
+                <div className="relative">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    className="form-input pr-10"
+                    value={googleApiKey}
+                    onChange={(e) => setGoogleApiKey(e.target.value)}
+                    placeholder="Enter your Google API Key"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  >
+                    {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Search Engine ID (CX)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={googleCxId}
+                  onChange={(e) => setGoogleCxId(e.target.value)}
+                  placeholder="Enter your Custom Search Engine ID"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => void handleSaveGoogleSettings()}
+                  disabled={savingSettings}
+                  className="btn btn-primary"
+                >
+                  {savingSettings ? (
+                    <Loader2 size={16} className="animate-spin mr-2" />
+                  ) : (
+                    <Save size={16} className="mr-2" />
+                  )}
+                  Save Settings
+                </button>
+
+                <button
+                  onClick={() => void handleVerifyApiConnection()}
+                  disabled={verifyingApi || !googleApiKey}
+                  className={`btn ${apiVerified === true ? 'btn-success bg-green-50 text-green-700 hover:bg-green-100 border-green-200' : 'btn-secondary'}`}
+                  title="Verify connection"
+                >
+                  {verifyingApi ? (
+                    <Loader2 size={16} className="animate-spin mr-2" />
+                  ) : apiVerified === true ? (
+                    <CheckCircle size={16} className="mr-2" />
+                  ) : apiVerified === false ? (
+                    <XCircle size={16} className="mr-2 text-red-500" />
+                  ) : (
+                    <RefreshCw size={16} className="mr-2" />
+                  )}
+                  {apiVerified === true ? 'Verified' : 'Verify API'}
+                </button>
+
+                {settingsSuccess && (
+                  <span className="text-sm text-green-600 dark:text-green-400">
+                    Settings saved successfully!
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Backup & Restore Section */}
+            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+              <h2 className="text-lg font-semibold mb-4">Backup & Restore Settings</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Export all application settings to a JSON file or restore from a backup.
+              </p>
+
+              <div className="flex flex-wrap gap-4">
+                <button
+                  onClick={() => void handleExportSettings()}
+                  className="btn btn-secondary inline-flex items-center"
+                >
+                  <Download size={16} className="mr-2" />
+                  Export Settings (JSON)
+                </button>
+
+                <button
+                  onClick={() => void handleImportSettings()}
+                  className="btn btn-secondary inline-flex items-center"
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Upload size={16} className="mr-2" />}
+                  Import Settings (JSON)
+                </button>
+              </div>
+
+              {importingInfo && (
+                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-md text-sm border border-blue-100 dark:border-blue-800 flex items-center gap-2">
+                  <FileJson size={16} />
+                  {importingInfo}
+                </div>
+              )}
+            </div>
+
+            {/* Test API Section */}
+            {googleApiKey && googleCxId && (
+              <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-4">Test API - Search Images</h3>
+                <p className="text-sm text-slate-500 mb-4">
+                  Enter a product name to test if the API is working correctly.
+                </p>
+
+                <div className="flex gap-2 max-w-xl">
+                  <input
+                    type="text"
+                    className="form-input flex-1"
+                    placeholder="Enter a product name (e.g., Ponds Magic Powder)"
+                    value={testQuery}
+                    onChange={(e) => setTestQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleTestApi()}
+                  />
+                  <button
+                    onClick={() => void handleTestApi()}
+                    disabled={testing || !testQuery.trim()}
+                    className="btn btn-primary"
+                  >
+                    {testing ? (
+                      <Loader2 size={16} className="animate-spin mr-2" />
+                    ) : (
+                      <Search size={16} className="mr-2" />
+                    )}
+                    Search
+                  </button>
+                </div>
+
+                {testError && (
+                  <div className="mt-3 flex items-center gap-2 p-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800 max-w-xl">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{testError}</span>
+                  </div>
+                )}
+
+                {/* Test Results Grid */}
+                {testResults.length > 0 && (
+                  <div className="mt-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle size={16} className="text-green-600" />
+                      <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                        API working! Found {testResults.length} images
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 max-w-2xl">
+                      {testResults.map((result, idx) => (
+                        <div
+                          key={idx}
+                          className="aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                        >
+                          <img
+                            src={result.thumbnail_link}
+                            alt={result.title}
+                            className="w-full h-full object-cover hover:scale-105 transition-transform"
+                            title={`${result.title}\n${result.display_link}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Setup Instructions */}
+            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+              <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">How to get API credentials</h3>
+              <ol className="text-sm text-slate-600 dark:text-slate-400 space-y-2 list-decimal list-inside">
+                <li>
+                  Go to{' '}
+                  <a
+                    href="https://console.cloud.google.com/apis/credentials"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Google Cloud Console <ExternalLink size={12} />
+                  </a>{' '}
+                  and create a project
+                </li>
+                <li>Enable the "Custom Search API" for your project</li>
+                <li>Create an API Key under Credentials</li>
+                <li>
+                  Go to{' '}
+                  <a
+                    href="https://programmablesearchengine.google.com/controlpanel/all"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Programmable Search Engine <ExternalLink size={12} />
+                  </a>{' '}
+                  and create a search engine
+                </li>
+                <li>Enable "Image Search" and "Search the entire web" in settings</li>
+                <li>Copy the Search Engine ID (cx parameter)</li>
+              </ol>
+              <p className="mt-4 text-xs text-amber-600 dark:text-amber-500">
+                Note: Free tier allows 100 searches per day. For higher usage, billing must be enabled.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Users Tab */}
       {activeTab === 'users' && (
         <div className="space-y-6">

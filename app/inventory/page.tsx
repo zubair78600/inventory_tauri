@@ -22,6 +22,10 @@ import { generateInventoryReportPDF } from '@/lib/pdf-generator';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { useRouter } from 'next/navigation';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
+import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
+import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
+import { EntityImageUpload } from '@/components/shared/EntityImageUpload';
+import { imageCommands } from '@/lib/tauri';
 
 type NewProductFormState = {
   name: string;
@@ -53,6 +57,14 @@ export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const pageSize = 50;
+
+  // Image preview state
+  const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
+
+  // New Product Image State (Deferred Upload)
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
+  const [tempPreviewUrl, setTempPreviewUrl] = useState<string | null>(null);
 
   // Debounce search term
   useEffect(() => {
@@ -124,7 +136,7 @@ export default function Inventory() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      await productCommands.create({
+      const createdProduct = await productCommands.create({
         name: newProduct.name,
         sku: newProduct.sku,
         price: parseFloat(newProduct.price),
@@ -133,6 +145,27 @@ export default function Inventory() {
         supplier_id: newProduct.supplier_id ? Number(newProduct.supplier_id) : null,
         amount_paid: newProduct.amount_paid ? parseFloat(newProduct.amount_paid) : null,
       });
+
+      // Handle deferred image upload
+      if (pendingImageFile) {
+        try {
+          const arrayBuffer = await pendingImageFile.arrayBuffer();
+          const fileData = Array.from(new Uint8Array(arrayBuffer));
+          const extension = pendingImageFile.name.split('.').pop() || 'jpg';
+          await imageCommands.saveProductImage(createdProduct.id, fileData, extension);
+        } catch (imgErr) {
+          console.error("Failed to upload image for new product", imgErr);
+          alert("Product created but image upload failed: " + String(imgErr));
+        }
+      } else if (pendingImageUrl) {
+        try {
+          await imageCommands.downloadProductImage(createdProduct.id, pendingImageUrl);
+        } catch (imgErr) {
+          console.error("Failed to download image from URL for new product", imgErr);
+          alert("Product created but image download failed: " + String(imgErr));
+        }
+      }
+
       setNewProduct({
         name: '',
         sku: '',
@@ -142,9 +175,15 @@ export default function Inventory() {
         supplier_id: '',
         amount_paid: '',
       });
+      // Reset image state
+      setPendingImageFile(null);
+      setPendingImageUrl(null);
+      setTempPreviewUrl(null);
+
       invalidateProducts();
       setShowAddProduct(false);
-      alert('Product created successfully!');
+      // Open edit form immediately to allow further edits
+      setEditProduct(createdProduct);
     } catch (error) {
       console.error('Error creating product:', error);
       alert(`Error saving product: ${error}`);
@@ -351,6 +390,32 @@ export default function Inventory() {
                   </Select>
                 </div>
               </div>
+
+              {/* Product Photo Upload Section for Add Product */}
+              <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <label className="form-label mb-3">Product Photo (Optional)</label>
+                <EntityImageUpload
+                  entityId={null}
+                  entityType="product"
+                  entityName={newProduct.name}
+                  imagePath={null}
+                  previewUrl={tempPreviewUrl}
+                  onFileSelect={(file) => {
+                    setPendingImageFile(file);
+                    setPendingImageUrl(null);
+                    setTempPreviewUrl(URL.createObjectURL(file));
+                  }}
+                  onImageSelect={(url) => {
+                    setPendingImageUrl(url);
+                    setPendingImageFile(null);
+                    setTempPreviewUrl(url);
+                  }}
+                  onPreviewClick={() => {
+                    // Simply clear selection on preview click if needed, or implement a local preview modal
+                    // For now loop back to clearing or show nothing special since it's just a preview
+                  }}
+                />
+              </div>
               <Button type="submit" className="mt-4">
                 Save Product
               </Button>
@@ -445,6 +510,22 @@ export default function Inventory() {
                   </Select>
                 </div>
               </div>
+
+              {/* Product Photo Section */}
+              <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <label className="form-label mb-3">Product Photo</label>
+                <EntityImageUpload
+                  entityId={editProduct.id}
+                  entityType="product"
+                  entityName={editProduct.name}
+                  imagePath={editProduct.image_path}
+                  onImageChange={(newPath) => {
+                    setEditProduct({ ...editProduct, image_path: newPath });
+                    invalidateProducts();
+                  }}
+                />
+              </div>
+
               <div className="flex gap-3 mt-4">
                 <Button type="submit">Update Product</Button>
                 <Button type="button" variant="ghost" onClick={() => setEditProduct(null)}>
@@ -472,6 +553,7 @@ export default function Inventory() {
                   <TableHead className="text-center font-bold text-black">Supplier</TableHead>
                   <TableHead className="text-center font-bold text-black">Status</TableHead>
                   <TableHead className="text-center font-bold text-black">Actions</TableHead>
+                  <TableHead className="w-[60px] text-center font-bold text-black">Photo</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -568,6 +650,22 @@ export default function Inventory() {
                         </Button>
                       </div>
                     </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <EntityThumbnail
+                          entityId={product.id}
+                          entityType="product"
+                          imagePath={product.image_path}
+                          size="sm"
+                          onClick={(e) => {
+                            e?.stopPropagation();
+                            if (product.image_path) {
+                              setPreviewProduct(product);
+                            }
+                          }}
+                        />
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -603,6 +701,17 @@ export default function Inventory() {
         url={pdfUrl}
         fileName={pdfFileName}
       />
+
+      {/* Image Preview Modal */}
+      {previewProduct && (
+        <EntityImagePreviewModal
+          open={!!previewProduct}
+          onOpenChange={(open) => !open && setPreviewProduct(null)}
+          entityId={previewProduct.id}
+          entityType="product"
+          entityName={previewProduct.name}
+        />
+      )}
     </div >
   );
 }

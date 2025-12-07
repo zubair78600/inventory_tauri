@@ -21,7 +21,7 @@ tauri-build = { version = "2.5.1", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.9.2", features = [] }
+tauri = { version = "2.9.2", features = ["protocol-asset", "devtools"] }
 tauri-plugin-log = "2"
 
 # Database dependencies
@@ -39,3 +39,12 @@ tokio = { version = "1", features = ["full"] }
 thiserror = "1.0"
 tauri-plugin-dialog = "2.4.2"
 tauri-plugin-fs = "2"
+
+# Image processing for thumbnails
+image = "0.24"
+
+# HTTP client for downloading images and Google API
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+
+# URL encoding for API requests
+urlencoding = "2.1"

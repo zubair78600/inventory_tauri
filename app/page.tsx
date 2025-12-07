@@ -1,177 +1,301 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { AlertTriangle, Package, Receipt, TrendingUp } from 'lucide-react';
-import { analyticsCommands, type DashboardStats } from '@/lib/tauri';
+  DateRangeFilter,
+  getDefaultDateRange,
+  KPICard,
+  KPICardSkeleton,
+  RevenueChart,
+  TopProductsChart,
+  PaymentMethodChart,
+  TopCustomersChart,
+  InventoryHealthChart,
+  LowStockTable,
+  RegionSalesChart,
+  CashflowChart,
+} from '@/components/dashboard';
+import type { DateRange } from '@/components/dashboard';
+import {
+  analyticsCommands,
+  type SalesAnalytics,
+  type RevenueTrendPoint,
+  type TopProduct,
+  type PaymentMethodBreakdown,
+  type CustomerAnalytics,
+  type TopCustomer,
+  type InventoryHealth,
+  type LowStockAlert,
+  type RegionSales,
+  type PurchaseAnalytics,
+  type CashflowPoint,
+} from '@/lib/tauri';
+
+const getGranularity = (startDate: string, endDate: string): 'daily' | 'weekly' | 'monthly' => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (days <= 31) return 'daily';
+  if (days <= 90) return 'weekly';
+  return 'monthly';
+};
+
+const formatCurrency = (value: number): string => {
+  if (value >= 10000000) return `₹${(value / 10000000).toFixed(2)}Cr`;
+  if (value >= 100000) return `₹${(value / 100000).toFixed(2)}L`;
+  if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`;
+  return `₹${value.toLocaleString('en-IN')}`;
+};
 
 export default function Dashboard() {
-  const {
-    data: stats,
-    isLoading,
-    isError,
-  } = useQuery<DashboardStats>({
-    queryKey: ['dashboard-stats'],
-    queryFn: async () => {
-      return await analyticsCommands.getDashboardStats();
-    },
-    staleTime: 30_000,
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
+
+  const granularity = useMemo(
+    () => getGranularity(dateRange.startDate, dateRange.endDate),
+    [dateRange]
+  );
+
+  // Sales Analytics
+  const { data: salesAnalytics, isLoading: salesLoading } = useQuery<SalesAnalytics>({
+    queryKey: ['sales-analytics', dateRange.startDate, dateRange.endDate],
+    queryFn: () => analyticsCommands.getSalesAnalytics(dateRange.startDate, dateRange.endDate),
+    staleTime: 60_000,
   });
 
-  if (isLoading) return <div>Loading...</div>;
-  if (isError || !stats) return <div>Error loading stats</div>;
+  // Revenue Trend
+  const { data: revenueTrend, isLoading: trendLoading } = useQuery<RevenueTrendPoint[]>({
+    queryKey: ['revenue-trend', dateRange.startDate, dateRange.endDate, granularity],
+    queryFn: () => analyticsCommands.getRevenueTrend(dateRange.startDate, dateRange.endDate, granularity),
+    staleTime: 60_000,
+  });
 
-  const statCards = [
-    {
-      title: 'Total Revenue',
-      value: `₹${stats.total_revenue.toFixed(0)}`,
-      helper: 'Overall billed amount',
-      icon: TrendingUp,
-      gradient: 'from-sky-500 via-cyan-400 to-emerald-400',
-      glow: 'shadow-[0_20px_60px_-28px_rgba(14,165,233,0.65)]',
-      valueClass: 'text-white',
-    },
-    {
-      title: 'Total Orders',
-      value: stats.total_orders.toLocaleString(),
-      helper: 'Invoices created',
-      icon: Receipt,
-      gradient: 'from-indigo-500 via-sky-500 to-cyan-400',
-      glow: 'shadow-[0_20px_60px_-28px_rgba(79,70,229,0.5)]',
-      valueClass: 'text-white',
-    },
-    {
-      title: 'Low Stock',
-      value: stats.low_stock_count.toLocaleString(),
-      helper: 'Items under threshold',
-      icon: AlertTriangle,
-      gradient: 'from-amber-500 via-orange-500 to-rose-500',
-      glow: 'shadow-[0_20px_60px_-28px_rgba(249,115,22,0.55)]',
-      valueClass: 'text-amber-50',
-    },
-    {
-      title: 'Inventory Value',
-      value: `₹${stats.total_valuation.toFixed(0)}`,
-      helper: 'Current stock worth',
-      icon: Package,
-      gradient: 'from-emerald-500 via-sky-500 to-indigo-500',
-      glow: 'shadow-[0_20px_60px_-28px_rgba(16,185,129,0.55)]',
-      valueClass: 'text-white',
-    },
-  ];
+  // Top Products
+  const { data: topProducts, isLoading: productsLoading } = useQuery<TopProduct[]>({
+    queryKey: ['top-products', dateRange.startDate, dateRange.endDate],
+    queryFn: () => analyticsCommands.getTopProducts(dateRange.startDate, dateRange.endDate, 10),
+    staleTime: 60_000,
+  });
+
+  // Payment Methods
+  const { data: paymentMethods, isLoading: paymentsLoading } = useQuery<PaymentMethodBreakdown[]>({
+    queryKey: ['payment-methods', dateRange.startDate, dateRange.endDate],
+    queryFn: () => analyticsCommands.getSalesByPaymentMethod(dateRange.startDate, dateRange.endDate),
+    staleTime: 60_000,
+  });
+
+  // Region Sales
+  const { data: regionSales, isLoading: regionLoading } = useQuery<RegionSales[]>({
+    queryKey: ['region-sales', dateRange.startDate, dateRange.endDate],
+    queryFn: () => analyticsCommands.getSalesByRegion(dateRange.startDate, dateRange.endDate),
+    staleTime: 60_000,
+  });
+
+  // Customer Analytics
+  const { data: customerAnalytics, isLoading: customersLoading } = useQuery<CustomerAnalytics>({
+    queryKey: ['customer-analytics', dateRange.startDate, dateRange.endDate],
+    queryFn: () => analyticsCommands.getCustomerAnalytics(dateRange.startDate, dateRange.endDate),
+    staleTime: 60_000,
+  });
+
+  // Top Customers
+  const { data: topCustomers, isLoading: topCustomersLoading } = useQuery<TopCustomer[]>({
+    queryKey: ['top-customers', dateRange.startDate, dateRange.endDate],
+    queryFn: () => analyticsCommands.getTopCustomers(dateRange.startDate, dateRange.endDate, 10),
+    staleTime: 60_000,
+  });
+
+  // Inventory Health
+  const { data: inventoryHealth, isLoading: inventoryLoading } = useQuery<InventoryHealth>({
+    queryKey: ['inventory-health'],
+    queryFn: () => analyticsCommands.getInventoryHealth(),
+    staleTime: 60_000,
+  });
+
+  // Low Stock Alerts
+  const { data: lowStockAlerts, isLoading: lowStockLoading } = useQuery<LowStockAlert[]>({
+    queryKey: ['low-stock-alerts'],
+    queryFn: () => analyticsCommands.getLowStockAlerts(),
+    staleTime: 60_000,
+  });
+
+  // Purchase Analytics
+  const { data: purchaseAnalytics, isLoading: purchaseLoading } = useQuery<PurchaseAnalytics>({
+    queryKey: ['purchase-analytics', dateRange.startDate, dateRange.endDate],
+    queryFn: () => analyticsCommands.getPurchaseAnalytics(dateRange.startDate, dateRange.endDate),
+    staleTime: 60_000,
+  });
+
+  // Cashflow Trend
+  const { data: cashflowTrend, isLoading: cashflowLoading } = useQuery<CashflowPoint[]>({
+    queryKey: ['cashflow-trend', dateRange.startDate, dateRange.endDate, granularity],
+    queryFn: () => analyticsCommands.getCashflowTrend(dateRange.startDate, dateRange.endDate, granularity),
+    staleTime: 60_000,
+  });
 
   return (
-    <div className="relative space-y-10">
-      <div
-        className="pointer-events-none absolute inset-x-0 -top-10 h-48 bg-[radial-gradient(120%_60%_at_50%_10%,rgba(14,165,233,0.18),transparent)] blur-2xl"
-        aria-hidden
-      />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Card
-              key={card.title}
-              className={`relative overflow-hidden border-0 bg-gradient-to-br ${card.gradient} text-white ${card.glow} hover:-translate-y-1 duration-300`}
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.28),transparent_35%)] opacity-60" />
-              <CardContent className="relative space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="rounded-2xl bg-white/15 p-2.5 shadow-inner shadow-white/10">
-                    <Icon size={18} />
-                  </div>
-                  <span className="text-[11px] uppercase tracking-[0.18em] text-white/70">
-                    Snapshot
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-white/80">{card.title}</p>
-                  <p
-                    className={`text-3xl font-semibold leading-tight drop-shadow-sm ${card.valueClass}`}
-                  >
-                    {card.value}
-                  </p>
-                </div>
-                <p className="text-xs text-white/75">{card.helper}</p>
-              </CardContent>
-            </Card>
-          );
-        })}
+    <div className="space-y-4 pb-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Business analytics overview</p>
+        </div>
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
       </div>
 
-      <Card className="relative overflow-hidden border border-slate-200/80 dark:border-slate-700/60 bg-white/95 dark:bg-slate-800/85 shadow-[0_12px_30px_-20px_rgba(15,23,42,0.22)]">
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-500 via-cyan-500 to-emerald-400" />
-        <CardHeader className="flex flex-col gap-2 pb-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
-              Recent Sales
-            </CardTitle>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white text-slate-700 text-xs font-semibold px-3 py-1 border border-slate-200/70 shadow-[0_10px_30px_-20px_rgba(15,23,42,0.4)] dark:bg-slate-700 dark:text-slate-100 dark:border-slate-600">
-              Last 5 invoices
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            A crisp snapshot of movement, with sharper contrast to stay readable.
-          </p>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="px-5 pb-5">
-            <div className="table-container overflow-hidden rounded-2xl border border-slate-200/70 dark:border-slate-700/60 bg-white dark:bg-slate-800/70 shadow-[0_10px_26px_-18px_rgba(15,23,42,0.2)]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="rounded-none text-center font-bold text-black">Invoice #</TableHead>
-                    <TableHead className="text-center font-bold text-black">Customer</TableHead>
-                    <TableHead className="text-center font-bold text-black">Date</TableHead>
-                    <TableHead className="text-center font-bold text-black">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stats.recent_sales.map((sale) => (
-                    <TableRow key={sale.id} className="group">
-                      <TableCell className="font-semibold text-slate-900 dark:text-slate-50 text-center">
-                        {sale.invoice_number}
-                      </TableCell>
-                      <TableCell className="text-slate-700 dark:text-slate-200 text-center">
-                        {sale.customer_name ?? 'Walk-in Customer'}
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-300 text-center">
-                        {new Date(sale.created_at).toLocaleDateString('en-GB', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </TableCell>
-                      <TableCell className="font-semibold text-slate-900 dark:text-slate-50 text-center">
-                        ₹{sale.total_amount.toFixed(0)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {stats.recent_sales.length === 0 && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={4}
-                        className="text-center text-muted-foreground py-6 bg-white/60 dark:bg-slate-800/50"
-                      >
-                        No recent sales
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Row 1: Primary KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {salesLoading ? (
+          <>
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+          </>
+        ) : (
+          <>
+            <KPICard
+              title="Total Revenue"
+              value={salesAnalytics?.total_revenue ?? 0}
+              format="currency"
+              change={salesAnalytics?.revenue_change_percent}
+              variant="highlight"
+              compact
+            />
+            <KPICard
+              title="Total Orders"
+              value={salesAnalytics?.total_orders ?? 0}
+              format="number"
+              change={salesAnalytics?.orders_change_percent}
+              compact
+            />
+            <KPICard
+              title="Avg Order Value"
+              value={salesAnalytics?.avg_order_value ?? 0}
+              format="currency"
+              compact
+            />
+            <KPICard
+              title="Gross Profit"
+              value={salesAnalytics?.gross_profit ?? 0}
+              format="currency"
+              variant="accent"
+              compact
+            />
+          </>
+        )}
+      </div>
+
+      {/* Row 2: Revenue Chart + Top Products + Payment Methods */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <div className="lg:col-span-6">
+          <RevenueChart data={revenueTrend ?? []} loading={trendLoading} />
+        </div>
+        <div className="lg:col-span-3">
+          <TopProductsChart data={topProducts ?? []} loading={productsLoading} />
+        </div>
+        <div className="lg:col-span-3">
+          <PaymentMethodChart data={paymentMethods ?? []} loading={paymentsLoading} />
+        </div>
+      </div>
+
+      {/* Row 3: Customer KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {customersLoading ? (
+          <>
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+          </>
+        ) : (
+          <>
+            <KPICard
+              title="Active Customers"
+              value={customerAnalytics?.total_customers ?? 0}
+              format="number"
+              subtitle="In period"
+              compact
+            />
+            <KPICard
+              title="New Customers"
+              value={customerAnalytics?.new_customers ?? 0}
+              format="number"
+              subtitle="First-time"
+              compact
+            />
+            <KPICard
+              title="Repeat Rate"
+              value={customerAnalytics?.repeat_rate ?? 0}
+              format="percent"
+              subtitle={`${customerAnalytics?.repeat_customers ?? 0} repeat`}
+              compact
+            />
+            <KPICard
+              title="Avg Lifetime Value"
+              value={customerAnalytics?.avg_lifetime_value ?? 0}
+              format="currency"
+              compact
+            />
+          </>
+        )}
+      </div>
+
+      {/* Row 4: Top Customers + Region Sales + Inventory Health + Low Stock */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <TopCustomersChart data={topCustomers ?? []} loading={topCustomersLoading} />
+        <RegionSalesChart data={regionSales ?? []} loading={regionLoading} />
+        <InventoryHealthChart data={inventoryHealth ?? null} loading={inventoryLoading} />
+        <LowStockTable data={lowStockAlerts ?? []} loading={lowStockLoading} />
+      </div>
+
+      {/* Row 5: Purchase KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {purchaseLoading ? (
+          <>
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+            <KPICardSkeleton compact />
+          </>
+        ) : (
+          <>
+            <KPICard
+              title="Total Purchases"
+              value={purchaseAnalytics?.total_purchases ?? 0}
+              format="currency"
+              subtitle="In period"
+              compact
+            />
+            <KPICard
+              title="Amount Paid"
+              value={purchaseAnalytics?.total_paid ?? 0}
+              format="currency"
+              subtitle="To suppliers"
+              compact
+            />
+            <KPICard
+              title="Pending Payments"
+              value={purchaseAnalytics?.pending_payments ?? 0}
+              format="currency"
+              subtitle="Outstanding"
+              compact
+            />
+            <KPICard
+              title="Active Suppliers"
+              value={purchaseAnalytics?.active_suppliers ?? 0}
+              format="number"
+              subtitle="With orders"
+              compact
+            />
+          </>
+        )}
+      </div>
+
+      {/* Row 6: Cashflow Chart */}
+      <CashflowChart data={cashflowTrend ?? []} loading={cashflowLoading} />
     </div>
   );
 }

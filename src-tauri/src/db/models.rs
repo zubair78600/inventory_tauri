@@ -13,6 +13,7 @@ pub struct Product {
     pub supplier_id: Option<i32>,
     pub created_at: String,
     pub updated_at: String,
+    pub image_path: Option<String>,
 }
 
 /// Supplier model matching Prisma schema

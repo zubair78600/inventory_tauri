@@ -9,6 +9,9 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Calendar, MapPin, Phone, Mail, FileText, Package, ChevronDown, ChevronUp, Home } from 'lucide-react';
 
+import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
+import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
+
 function CustomerDetailsContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -23,6 +26,7 @@ function CustomerDetailsContent() {
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [showPdfPreview, setShowPdfPreview] = useState(false);
     const [pdfFileName, setPdfFileName] = useState('');
+    const [showImagePreview, setShowImagePreview] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -83,11 +87,12 @@ function CustomerDetailsContent() {
     const { customer, invoices, stats } = report;
 
     return (
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="-mt-8 pt-2.5 px-6 pb-6 space-y-6 max-w-7xl mx-auto">
             {/* Header */}
-            <div className="flex items-start justify-between">
-                <div>
-                    <div className="flex items-center gap-2 mb-2">
+            <div>
+                {/* Row 1: Buttons and Date */}
+                <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-2">
                         <Button variant="ghost" onClick={() => router.back()} className="pl-0 hover:pl-2 transition-all">
                             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Customers
                         </Button>
@@ -104,35 +109,49 @@ function CustomerDetailsContent() {
                             Export PDF
                         </Button>
                     </div>
-                    <h1 className="text-3xl font-bold text-slate-900">{customer.name}</h1>
-                    <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
-                        {customer.place && (
-                            <div className="flex items-center gap-1">
-                                <MapPin className="w-4 h-4" /> {customer.place}
-                            </div>
-                        )}
-                        {customer.phone && (
-                            <div className="flex items-center gap-1">
-                                <Phone className="w-4 h-4" /> {customer.phone}
-                            </div>
-                        )}
-                        {customer.email && (
-                            <div className="flex items-center gap-1">
-                                <Mail className="w-4 h-4" /> {customer.email}
-                            </div>
-                        )}
-                        {customer.address && (
-                            <div className="flex items-center gap-1">
-                                <Home className="w-4 h-4" /> {customer.address}
-                            </div>
-                        )}
+                    <div className="text-right text-sm text-slate-500">
+                        <div className="flex items-center justify-end gap-1">
+                            <Calendar className="w-4 h-4" />
+                            Joined {new Date(customer.created_at).toLocaleDateString()}
+                        </div>
                     </div>
                 </div>
-                <div className="text-right text-sm text-slate-500">
-                    <div className="flex items-center justify-end gap-1">
-                        <Calendar className="w-4 h-4" />
-                        Joined {new Date(customer.created_at).toLocaleDateString()}
+
+                {/* Row 2: Title and Image */}
+                <div className="flex items-center justify-between gap-5">
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900">{customer.name}</h1>
+                        <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
+                            {customer.place && (
+                                <div className="flex items-center gap-1">
+                                    <MapPin className="w-4 h-4" /> {customer.place}
+                                </div>
+                            )}
+                            {customer.phone && (
+                                <div className="flex items-center gap-1">
+                                    <Phone className="w-4 h-4" /> {customer.phone}
+                                </div>
+                            )}
+                            {customer.email && (
+                                <div className="flex items-center gap-1">
+                                    <Mail className="w-4 h-4" /> {customer.email}
+                                </div>
+                            )}
+                            {customer.address && (
+                                <div className="flex items-center gap-1">
+                                    <Home className="w-4 h-4" /> {customer.address}
+                                </div>
+                            )}
+                        </div>
                     </div>
+                    <EntityThumbnail
+                        entityId={customer.id}
+                        entityType="customer"
+                        imagePath={customer.image_path}
+                        size="lg"
+                        className="w-24 h-24 rounded-lg shadow-sm border border-slate-200"
+                        onClick={() => setShowImagePreview(true)}
+                    />
                 </div>
             </div>
 
@@ -243,6 +262,16 @@ function CustomerDetailsContent() {
                 url={pdfUrl}
                 fileName={pdfFileName}
             />
+            {customer && (
+                <EntityImagePreviewModal
+                    open={showImagePreview}
+                    onOpenChange={setShowImagePreview}
+                    entityId={customer.id}
+                    entityType="customer"
+                    entityName={customer.name}
+                    onImageUpdate={(path) => report && setReport({ ...report, customer: { ...customer, image_path: path } })}
+                />
+            )}
         </div>
     );
 }

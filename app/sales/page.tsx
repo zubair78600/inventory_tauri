@@ -220,56 +220,154 @@ export default function Sales() {
               )}
             </div>
           </CardHeader>
-          <CardContent className="space-y-4 flex-1 overflow-y-auto p-4">
-            {selected && (
-              <>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Customer:</span>
-                    <p className="font-medium">{selected.customer_name || 'Walk-in Customer'}</p>
+          <CardContent className="p-0 flex-1 overflow-y-auto bg-white dark:bg-slate-900">
+            {selected ? (
+              <div className="flex flex-col min-h-full p-8 max-w-[210mm] mx-auto">
+                {/* Document Header: Company Info & Title */}
+                <div className="flex justify-between items-start border-b border-slate-300 pb-6 mb-8">
+                  <div className="space-y-1">
+                    <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                      Inventory System
+                    </h1>
+                    <div className="text-sm text-slate-600 dark:text-slate-400 space-y-0.5">
+                      <p>123 Business Street, Tech City, 560001</p>
+                      <p>Phone: +91 98765 43210</p>
+                      <p>Email: support@inventorysystem.com</p>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Date:</span>
-                    <p className="font-medium">{new Date(selected.created_at).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Amount:</span>
-                    <p className="font-medium">₹{selected.total_amount.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Items:</span>
-                    <p className="font-medium">{selected.item_count || 0}</p>
+                  <div className="text-right">
+                    <h2 className="text-2xl font-normal text-slate-900 dark:text-slate-100 tracking-widest uppercase">
+                      INVOICE
+                    </h2>
                   </div>
                 </div>
-              </>
-            )}
 
-            <div className="divide-y divide-slate-200 dark:divide-slate-700 rounded-xl border border-slate-200">
-              {selected && itemsLoading && (
-                <div className="px-4 py-3 text-sm text-muted-foreground">Loading items…</div>
-              )}
-              {selected && !itemsLoading && items.length === 0 && (
-                <div className="px-4 py-3 text-sm text-muted-foreground">
-                  No items for this order.
-                </div>
-              )}
-              {items.map((item) => (
-                <div key={item.id} className="px-4 py-3 flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{item.product_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      ₹{item.unit_price.toFixed(0)} • Qty {item.quantity}
+                {/* Bill To & Invoice Meta */}
+                <div className="flex justify-between items-start mb-12">
+                  <div className="w-1/2">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-2">
+                      Bill To:
+                    </h3>
+                    <div className="text-sm text-slate-900 dark:text-slate-100 space-y-1">
+                      <p className="font-medium text-base">
+                        {selected.customer_name || 'Walk-in Customer'}
+                      </p>
+                      {selected.customer_phone && <p>{selected.customer_phone}</p>}
+                      {/* Placeholder for address if we had it in the view model, matching PDF style */}
+                      {/* <p>H.No. 57, Varughese Street, Dehradun 116137</p> */}
+                    </div>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <p className="text-sm text-slate-900 dark:text-slate-100">
+                      <span className="font-semibold">Invoice #:</span> {selected.invoice_number}
+                    </p>
+                    <p className="text-sm text-slate-900 dark:text-slate-100">
+                      <span className="font-semibold">Date:</span>{' '}
+                      {new Date(selected.created_at).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </p>
+                    <p className="text-sm text-slate-900 dark:text-slate-100">
+                      <span className="font-semibold">Status:</span> Paid
                     </p>
                   </div>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">₹{item.total.toFixed(0)}</p>
                 </div>
-              ))}
-              {!selected && (
-                <div className="px-4 py-4 text-sm text-muted-foreground">
-                  Select a sale to view details.
+
+                {/* Items Table - PDF Style */}
+                <div className="mb-8">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[#333333] text-white">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-bold">Item</th>
+                        <th className="px-4 py-2 text-left font-bold w-32">SKU</th>
+                        <th className="px-4 py-2 text-center font-bold w-20">Qty</th>
+                        <th className="px-4 py-2 text-right font-bold w-32">Price</th>
+                        <th className="px-4 py-2 text-right font-bold w-32">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                      {itemsLoading ? (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                            Loading items...
+                          </td>
+                        </tr>
+                      ) : items.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                            No items found for this order.
+                          </td>
+                        </tr>
+                      ) : (
+                        items.map((item) => (
+                          <tr key={item.id} className="text-slate-700 dark:text-slate-300">
+                            <td className="px-4 py-3 font-medium">{item.product_name}</td>
+                            <td className="px-4 py-3 text-slate-500">{item.sku || '-'}</td>
+                            <td className="px-4 py-3 text-center">{item.quantity}</td>
+                            <td className="px-4 py-3 text-right">
+                              ₹{item.unit_price.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold">
+                              ₹{item.total.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-            </div>
+
+                {/* Summary Section */}
+                <div className="flex justify-end">
+                  <div className="w-72 space-y-2">
+                    <div className="flex justify-between text-sm text-slate-800 dark:text-slate-200">
+                      <span className="font-medium">Subtotal:</span>
+                      <span>
+                        Rs. {(selected.total_amount - (selected.tax_amount || 0) + (selected.discount_amount || 0)).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm text-slate-800 dark:text-slate-200">
+                      <span className="font-medium">Discount:</span>
+                      <span>-Rs. {(selected.discount_amount || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-slate-800 dark:text-slate-200">
+                      <span className="font-medium">Tax:</span>
+                      <span>Rs. {(selected.tax_amount || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 mt-2">
+                      <span className="text-xl font-bold text-slate-900 dark:text-slate-100">Total:</span>
+                      <span className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                        Rs. {selected.total_amount.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+                <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                  <svg
+                    className="w-8 h-8 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-1">
+                  No Order Selected
+                </h3>
+                <p>Select an order from the list to view details.</p>
+              </div>
+            )}
           </CardContent>
         </Card >
       </div >

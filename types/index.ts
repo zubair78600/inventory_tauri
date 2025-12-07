@@ -40,6 +40,7 @@ export type Product = {
   supplier_id: number | null;
   created_at: string;
   updated_at: string;
+  image_path: string | null;
 };
 
 export type Customer = {

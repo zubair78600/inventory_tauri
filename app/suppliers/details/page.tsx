@@ -8,6 +8,8 @@ import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Calendar, MapPin, Phone, Mail, Package, Building } from 'lucide-react';
+import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
+import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 
 function SupplierDetailsContent() {
     const searchParams = useSearchParams();
@@ -22,6 +24,8 @@ function SupplierDetailsContent() {
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [showPdfPreview, setShowPdfPreview] = useState(false);
     const [pdfFileName, setPdfFileName] = useState('');
+
+    const [showImagePreview, setShowImagePreview] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -92,11 +96,12 @@ function SupplierDetailsContent() {
     }, 0);
 
     return (
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="-mt-8 pt-2.5 px-6 pb-6 space-y-6 max-w-7xl mx-auto">
             {/* Header */}
-            <div className="flex items-start justify-between">
-                <div>
-                    <div className="flex items-center gap-2 mb-2">
+            <div>
+                {/* Row 1: Buttons and Date */}
+                <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-2">
                         <Button variant="ghost" onClick={() => router.back()} className="pl-0 hover:pl-2 transition-all">
                             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Suppliers
                         </Button>
@@ -119,36 +124,50 @@ function SupplierDetailsContent() {
                             Export PDF
                         </Button>
                     </div>
-                    <h1 className="text-3xl font-bold text-slate-900">{supplier.name}</h1>
-                    <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
-                        {(supplier.state || supplier.district || supplier.town) && (
-                            <div className="flex items-center gap-1">
-                                <MapPin className="w-4 h-4" />
-                                {[supplier.town, supplier.district, supplier.state].filter(Boolean).join(', ')}
-                            </div>
-                        )}
-                        {supplier.contact_info && (
-                            <div className="flex items-center gap-1">
-                                <Phone className="w-4 h-4" /> {supplier.contact_info}
-                            </div>
-                        )}
-                        {supplier.email && (
-                            <div className="flex items-center gap-1">
-                                <Mail className="w-4 h-4" /> {supplier.email}
-                            </div>
-                        )}
-                        {supplier.address && (
-                            <div className="flex items-center gap-1">
-                                <Building className="w-4 h-4" /> {supplier.address}
-                            </div>
-                        )}
+                    <div className="text-right text-sm text-slate-500">
+                        <div className="flex items-center justify-end gap-1">
+                            <Calendar className="w-4 h-4" />
+                            Joined {new Date(supplier.created_at).toLocaleDateString()}
+                        </div>
                     </div>
                 </div>
-                <div className="text-right text-sm text-slate-500">
-                    <div className="flex items-center justify-end gap-1">
-                        <Calendar className="w-4 h-4" />
-                        Joined {new Date(supplier.created_at).toLocaleDateString()}
+
+                {/* Row 2: Title and Image */}
+                <div className="flex items-center justify-between gap-5">
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900">{supplier.name}</h1>
+                        <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
+                            {(supplier.state || supplier.district || supplier.town) && (
+                                <div className="flex items-center gap-1">
+                                    <MapPin className="w-4 h-4" />
+                                    {[supplier.town, supplier.district, supplier.state].filter(Boolean).join(', ')}
+                                </div>
+                            )}
+                            {supplier.contact_info && (
+                                <div className="flex items-center gap-1">
+                                    <Phone className="w-4 h-4" /> {supplier.contact_info}
+                                </div>
+                            )}
+                            {supplier.email && (
+                                <div className="flex items-center gap-1">
+                                    <Mail className="w-4 h-4" /> {supplier.email}
+                                </div>
+                            )}
+                            {supplier.address && (
+                                <div className="flex items-center gap-1">
+                                    <Building className="w-4 h-4" /> {supplier.address}
+                                </div>
+                            )}
+                        </div>
                     </div>
+                    <EntityThumbnail
+                        entityId={supplier.id}
+                        entityType="supplier"
+                        imagePath={supplier.image_path}
+                        size="lg"
+                        className="w-24 h-24 rounded-lg shadow-sm border border-slate-200"
+                        onClick={() => setShowImagePreview(true)}
+                    />
                 </div>
             </div>
 
@@ -251,9 +270,20 @@ function SupplierDetailsContent() {
                 url={pdfUrl}
                 fileName={pdfFileName}
             />
+            {supplier && (
+                <EntityImagePreviewModal
+                    open={showImagePreview}
+                    onOpenChange={setShowImagePreview}
+                    entityId={supplier.id}
+                    entityType="supplier"
+                    entityName={supplier.name}
+                    onImageUpdate={(path) => supplier && setSupplier({ ...supplier, image_path: path })}
+                />
+            )}
         </div>
     );
 }
+
 
 export default function SupplierDetailsPage() {
     return (
