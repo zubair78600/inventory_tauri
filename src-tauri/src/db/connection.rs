@@ -239,6 +239,25 @@ impl Database {
             conn.execute("ALTER TABLE invoices ADD COLUMN town TEXT", [])?;
         }
 
+        // Migration: Add product_name to invoice_items (snapshot of name at time of sale)
+        let invoice_items_product_name_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('invoice_items') WHERE name = 'product_name'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !invoice_items_product_name_exists {
+            log::info!("Migrating: Adding product_name column to invoice_items table");
+            conn.execute("ALTER TABLE invoice_items ADD COLUMN product_name TEXT", [])?;
+            
+            // Optional: Backfill product names for existing items if possible
+            // This is complex as it depends on product_id existing, but safe to skip for now or do simple update
+            log::info!("Migrating: Backfilling product_name from products table");
+            conn.execute("UPDATE invoice_items SET product_name = (SELECT name FROM products WHERE products.id = invoice_items.product_id)", [])?;
+        }
+
         // Migration: Create users table if it doesn't exist (handled by init_tables but good to be safe or for specific updates)
         // Seed default admin user if users table is empty
         let user_count: i32 = conn

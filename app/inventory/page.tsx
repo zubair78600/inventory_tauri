@@ -182,8 +182,7 @@ export default function Inventory() {
 
       invalidateProducts();
       setShowAddProduct(false);
-      // Open edit form immediately to allow further edits
-      setEditProduct(createdProduct);
+      // Removed auto-opening of edit form to prevent confusion
     } catch (error) {
       console.error('Error creating product:', error);
       alert(`Error saving product: ${error}`);
@@ -253,8 +252,8 @@ export default function Inventory() {
   if (loading && !displayedProducts.length) return <div>Loading...</div>;
 
   return (
-    <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col relative">
-      <div className="flex items-center justify-between h-14 min-h-[3.5rem]">
+    <div className="space-y-4 flex flex-col h-full min-h-[calc(100vh-6rem)] pb-8">
+      <div className="flex items-center justify-between h-14 min-h-[3.5rem] sticky top-0 bg-slate-50 dark:bg-slate-900 z-30 px-1">
         <div className="flex flex-col items-start gap-0.5">
           <div className="flex items-center gap-[25px]">
             <h1 className="page-title !mb-0">Inventory</h1>
@@ -295,7 +294,7 @@ export default function Inventory() {
             variant={showAddProduct ? 'default' : 'outline'}
             onClick={() => setShowAddProduct(!showAddProduct)}
           >
-            Add Product
+            {showAddProduct ? 'Cancel Add' : 'Add Product'}
           </Button>
         </div>
       </div>
@@ -303,7 +302,7 @@ export default function Inventory() {
       {/* Add Product Form */}
       {
         showAddProduct && (
-          <Card className="space-y-4 p-5">
+          <Card className="space-y-4 p-5 animate-in slide-in-from-top-2 duration-200">
             <h2 className="text-lg font-semibold">Add New Product</h2>
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -417,21 +416,19 @@ export default function Inventory() {
                 />
               </div>
               <Button type="submit" className="mt-4">
-                Save Product
+                Add Product
               </Button>
             </form>
           </Card>
         )
       }
 
-      {/* ... rest of component ... */}
-
 
 
       {/* Edit Product Form */}
       {
         editProduct && (
-          <Card className="space-y-4 p-5">
+          <Card className="space-y-4 p-5 animate-in slide-in-from-top-2 duration-200">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Edit Product</h2>
               <Button variant="ghost" onClick={() => setEditProduct(null)}>
@@ -538,9 +535,9 @@ export default function Inventory() {
       }
 
       {/* Products Table - Always Visible */}
-      <div className="w-full flex-1 overflow-hidden relative">
-        <Card className="table-container p-0 h-full flex flex-col">
-          <div className="flex-1 overflow-y-auto">
+      <div className="w-full flex-1 relative">
+        <Card className="table-container p-0 min-h-[400px] flex flex-col">
+          <div className="flex-1 overflow-x-auto">
             <Table>
               <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
                 <TableRow>

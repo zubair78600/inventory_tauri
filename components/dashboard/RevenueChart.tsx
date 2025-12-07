@@ -84,7 +84,7 @@ export function RevenueChart({ data, loading, compact = false }: RevenueChartPro
           </span>
         </div>
       </div>
-      <div style={{ height }}>
+      <div style={{ height }} className="w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
             <defs>

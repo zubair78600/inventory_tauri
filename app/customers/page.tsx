@@ -81,7 +81,8 @@ export default function Customers() {
       return undefined;
     },
     placeholderData: keepPreviousData, // Keep showing old data while fetching new search results
-    staleTime: 30 * 1000, // Data fresh for 30 seconds
+    refetchOnMount: 'always', // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window gains focus
   });
 
   // Flatten paginated data
@@ -98,8 +99,8 @@ export default function Customers() {
   };
 
   // Invalidate queries after mutations
-  const invalidateCustomers = () => {
-    void queryClient.invalidateQueries({ queryKey: ['customers'] });
+  const invalidateCustomers = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['customers'], exact: false });
   };
 
   const loadReport = async (customer: Customer) => {
@@ -175,7 +176,7 @@ export default function Customers() {
       }
 
       await customerCommands.delete(id);
-      invalidateCustomers();
+      await invalidateCustomers();
       setSelectedReport(null);
     } catch (error) {
       console.error('Error deleting customer:', error);
