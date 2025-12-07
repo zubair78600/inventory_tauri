@@ -11,6 +11,7 @@ pub fn run() {
     .plugin(tauri_plugin_log::Builder::default().build())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
+    .plugin(tauri_plugin_biometry::init())
     .setup(|app| {
       // Initialize database
       let app_handle = app.handle();
@@ -70,13 +71,15 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
-      commands::get_products,
-      commands::get_product,
-      commands::get_products_by_supplier,
-      commands::create_product,
-      commands::update_product,
-      commands::delete_product,
-      commands::add_mock_products,
+            commands::products::get_products,
+            commands::products::get_product,
+            commands::products::get_products_by_supplier,
+            commands::products::create_product,
+            commands::products::update_product,
+            commands::products::delete_product,
+            commands::products::add_mock_products,
+            commands::products::get_top_selling_products,
+            commands::products::get_products_by_ids,
       commands::get_suppliers,
       commands::get_supplier,
       commands::create_supplier,
@@ -168,6 +171,13 @@ pub fn run() {
       commands::save_customer_image,
       commands::get_customer_image_path,
       commands::delete_customer_image,
+      // Biometric authentication commands
+      commands::generate_biometric_token,
+      commands::verify_biometric_token,
+      commands::disable_biometric,
+      commands::get_biometric_status,
+      commands::get_biometric_status_by_username,
+      commands::has_any_biometric_enrollment,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

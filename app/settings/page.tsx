@@ -37,10 +37,22 @@ const PERMISSIONS = [
 
 import { ModeToggle } from '@/components/shared/ModeToggle';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  checkBiometricCapability,
+  enrollBiometric,
+  disableBiometric,
+  isBiometricEnabled,
+  getBiometricTypeName,
+  getBiometricErrorMessage,
+  type BiometricCapability,
+} from '@/lib/biometric';
+import { Fingerprint, AlertTriangle } from 'lucide-react';
+import { LocationSelector } from '@/components/shared/LocationSelector';
+import type { LocationValue } from '@/types/location';
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'api' | 'users' | 'themes'>('deleted-data');
+  const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'api' | 'users' | 'security' | 'themes'>('deleted-data');
   const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
@@ -72,6 +84,19 @@ export default function SettingsPage() {
   const [testError, setTestError] = useState<string | null>(null);
   const [apiVerified, setApiVerified] = useState<boolean | null>(null);
 
+  // Biometric state
+  const [biometricCapability, setBiometricCapability] = useState<BiometricCapability | null>(null);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricError, setBiometricError] = useState<string | null>(null);
+
+  // Default Location
+  const [defaultLocation, setDefaultLocation] = useState<LocationValue>({
+    state: '',
+    district: '',
+    town: ''
+  });
+
   useEffect(() => {
     if (activeTab === 'deleted-data') {
       void fetchDeletedItems();
@@ -79,8 +104,50 @@ export default function SettingsPage() {
       void fetchUsers();
     } else if (activeTab === 'general' || activeTab === 'api') {
       void fetchGoogleSettings();
+      if (activeTab === 'general') {
+        void fetchDefaultLocation();
+      }
+    } else if (activeTab === 'security') {
+      void fetchBiometricStatus();
     }
   }, [activeTab]);
+
+  const fetchBiometricStatus = async () => {
+    if (!user) return;
+    setBiometricError(null);
+    try {
+      const [capability, enabled] = await Promise.all([
+        checkBiometricCapability(),
+        isBiometricEnabled(user.id),
+      ]);
+      setBiometricCapability(capability);
+      setBiometricEnabled(enabled);
+    } catch (err) {
+      console.error('Failed to fetch biometric status:', err);
+      setBiometricError('Failed to check biometric availability');
+    }
+  };
+
+  const handleToggleBiometric = async () => {
+    if (!user) return;
+    setBiometricLoading(true);
+    setBiometricError(null);
+
+    try {
+      if (biometricEnabled) {
+        await disableBiometric(user.id, user.username);
+        setBiometricEnabled(false);
+      } else {
+        await enrollBiometric(user.id, user.username);
+        setBiometricEnabled(true);
+      }
+    } catch (err) {
+      console.error('Failed to toggle biometric:', err);
+      setBiometricError(getBiometricErrorMessage(err));
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
 
   const fetchGoogleSettings = async () => {
     try {
@@ -89,6 +156,34 @@ export default function SettingsPage() {
       setGoogleCxId(settings['google_cx_id'] || '');
     } catch (err) {
       console.error('Error fetching settings:', err);
+    }
+  };
+
+  const fetchDefaultLocation = async () => {
+    try {
+      const settings = await settingsCommands.getAll();
+      setDefaultLocation({
+        state: settings['default_state'] || '',
+        district: settings['default_district'] || '',
+        town: settings['default_town'] || ''
+      });
+    } catch (err) {
+      console.error('Error fetching default location:', err);
+    }
+  };
+
+  const handleSaveDefaultLocation = async () => {
+    setSavingSettings(true);
+    try {
+      await settingsCommands.set('default_state', defaultLocation.state);
+      await settingsCommands.set('default_district', defaultLocation.district);
+      await settingsCommands.set('default_town', defaultLocation.town);
+      alert('Default location saved successfully!');
+    } catch (err) {
+      console.error('Error saving default location:', err);
+      alert('Failed to save default location');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -459,6 +554,15 @@ export default function SettingsPage() {
             </button>
           )}
           <button
+            onClick={() => setActiveTab('security')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'security'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-300'
+              }`}
+          >
+            Security
+          </button>
+          <button
             onClick={() => setActiveTab('themes')}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'themes'
               ? 'border-primary text-primary'
@@ -572,6 +676,36 @@ export default function SettingsPage() {
       {/* General Tab */}
       {activeTab === 'general' && (
         <div className="space-y-6">
+          {/* Current Place Defaults */}
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">Current Place</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              Set your default location. This will be automatically filled in new invoices.
+            </p>
+
+            <div className="max-w-3xl">
+              <LocationSelector
+                value={defaultLocation}
+                onChange={setDefaultLocation}
+              />
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => void handleSaveDefaultLocation()}
+                  disabled={savingSettings}
+                  className="btn btn-primary"
+                >
+                  {savingSettings ? (
+                    <Loader2 size={16} className="animate-spin mr-2" />
+                  ) : (
+                    <Save size={16} className="mr-2" />
+                  )}
+                  Save Defaults
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Google Image Search API Section */}
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">General Settings</h2>
@@ -978,6 +1112,109 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Security Tab */}
+      {activeTab === 'security' && (
+        <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Fingerprint size={20} />
+              Fingerprint Login
+            </h2>
+
+            {biometricError && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-sm text-red-600 dark:text-red-400">{biometricError}</p>
+              </div>
+            )}
+
+            {!biometricCapability ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="animate-spin text-primary" size={24} />
+                <span className="ml-2 text-slate-600 dark:text-slate-400">Checking biometric availability...</span>
+              </div>
+            ) : !biometricCapability.isAvailable ? (
+              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <p className="text-amber-700 dark:text-amber-300 font-medium">
+                  Fingerprint authentication is not available on this device
+                </p>
+                <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
+                  {biometricCapability.error || 'Please ensure you have Touch ID or Windows Hello configured in your system settings.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                  <div>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {getBiometricTypeName(biometricCapability.biometryType)}
+                    </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Use fingerprint to sign in quickly without entering your password
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => void handleToggleBiometric()}
+                    disabled={biometricLoading}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${biometricEnabled ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'
+                      } ${biometricLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${biometricEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                    />
+                  </button>
+                </div>
+
+                {biometricEnabled && (
+                  <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                    <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
+                      <CheckCircle size={16} />
+                      Fingerprint login is enabled. You can now sign in using your fingerprint on the login screen.
+                    </p>
+                  </div>
+                )}
+
+                {/* Security Warning about OS-level biometrics */}
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 flex items-start gap-3">
+                  <AlertTriangle className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" size={16} />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                      Important Security Note
+                    </p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      This feature uses the fingerprints registered to this computer&apos;s System Account.
+                      Any fingerprint that can unlock this computer will be able to log in as <strong>{user?.username}</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {!biometricEnabled && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Enable fingerprint login to quickly sign in without entering your password each time.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Security Info */}
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">Security Information</h2>
+            <div className="space-y-3 text-sm text-slate-600 dark:text-slate-400">
+              <p>
+                <strong className="text-slate-900 dark:text-slate-100">How it works:</strong> When you enable fingerprint login, a secure token is generated and stored in your system&apos;s secure storage. Your actual fingerprint data never leaves your device.
+              </p>
+              <p>
+                <strong className="text-slate-900 dark:text-slate-100">Per-user setting:</strong> Each user account can independently enable or disable fingerprint login.
+              </p>
+              <p>
+                <strong className="text-slate-900 dark:text-slate-100">Password fallback:</strong> You can always use your password to sign in, even if fingerprint is enabled.
+              </p>
+            </div>
           </div>
         </div>
       )}

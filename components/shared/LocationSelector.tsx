@@ -109,7 +109,7 @@ export function LocationSelector({
 
   return (
     <div className={className}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* State Dropdown */}
         <div>
           <label className="form-label">
@@ -144,7 +144,7 @@ export function LocationSelector({
             required
           >
             <option value="">
-              {value.state ? 'Select District' : 'Select a state first'}
+              {value.state ? 'Select District' : 'Select State First'}
             </option>
             {availableDistricts.map(district => (
               <option key={district} value={district}>
@@ -152,6 +152,22 @@ export function LocationSelector({
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Town Input */}
+        <div>
+          <label className="form-label">
+            Town <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            className="form-input"
+            value={value.town}
+            onChange={(e) => onChange({ ...value, town: e.target.value })}
+            placeholder="Enter Town"
+            disabled={disabled}
+            required
+          />
         </div>
       </div>
       {!value.state && (

@@ -46,13 +46,24 @@ pub fn get_products(
     let mut products = Vec::new();
     let total_count: i64;
 
-    let base_query = "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products";
-    let count_query = "SELECT COUNT(*) FROM products";
+    // Modified query to include total_sold
+    let base_query = "
+        SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
+               p.supplier_id, p.created_at, p.updated_at, p.image_path,
+               COALESCE(SUM(ii.quantity), 0) as total_sold
+        FROM products p
+        LEFT JOIN invoice_items ii ON p.id = ii.product_id
+    ";
+    
+    // We need to GROUP BY p.id to get correct SUM
+    let group_by = "GROUP BY p.id";
+
+    let count_query = "SELECT COUNT(DISTINCT p.id) FROM products p";
 
     if let Some(search_term) = search {
         // Search by name or SKU
         let search_pattern = format!("%{}%", search_term);
-        let where_clause = "WHERE name LIKE ?1 OR sku LIKE ?1";
+        let where_clause = "WHERE p.name LIKE ?1 OR p.sku LIKE ?1";
         
         // Get total count
         let count_sql = format!("{} {}", count_query, where_clause);
@@ -61,7 +72,8 @@ pub fn get_products(
             .map_err(|e| e.to_string())?;
 
         // Get paginated items
-        let query = format!("{} {} ORDER BY name LIMIT ?2 OFFSET ?3", base_query, where_clause);
+        // Note: ORDER BY name is standard for search
+        let query = format!("{} {} {} ORDER BY p.name LIMIT ?2 OFFSET ?3", base_query, where_clause, group_by);
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let product_iter = stmt
@@ -78,6 +90,10 @@ pub fn get_products(
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
                     image_path: row.get(10)?,
+                    total_sold: {
+                        let sold: i64 = row.get(11)?;
+                        if sold > 0 { Some(sold) } else { None } 
+                    },
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -92,7 +108,7 @@ pub fn get_products(
             .map_err(|e| e.to_string())?;
 
         // Get paginated items
-        let query = format!("{} ORDER BY name LIMIT ?1 OFFSET ?2", base_query);
+        let query = format!("{} {} ORDER BY p.name LIMIT ?1 OFFSET ?2", base_query, group_by);
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let product_iter = stmt
@@ -109,6 +125,10 @@ pub fn get_products(
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
                     image_path: row.get(10)?,
+                    total_sold: {
+                        let sold: i64 = row.get(11)?;
+                        if sold > 0 { Some(sold) } else { None }
+                    },
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -134,7 +154,13 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
 
     let product = conn
         .query_row(
-            "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
+            "SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
+                    p.supplier_id, p.created_at, p.updated_at, p.image_path,
+                    COALESCE(SUM(ii.quantity), 0) as total_sold
+             FROM products p
+             LEFT JOIN invoice_items ii ON p.id = ii.product_id
+             WHERE p.id = ?1
+             GROUP BY p.id",
             [id],
             |row| {
                 Ok(Product {
@@ -149,6 +175,10 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
                     image_path: row.get(10)?,
+                    total_sold: {
+                        let sold: i64 = row.get(11)?;
+                        if sold > 0 { Some(sold) } else { None }
+                    },
                 })
             },
         )
@@ -185,6 +215,7 @@ pub fn get_products_by_supplier(
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
                 image_path: row.get(10)?,
+                total_sold: None, 
             })
         })
         .map_err(|e| e.to_string())?;
@@ -283,28 +314,15 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
     }
 
     // Fetch the created product to get timestamps
-    let product = conn.query_row(
-        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
-        [id],
-        |row| {
-            Ok(Product {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                sku: row.get(2)?,
-                price: row.get(3)?,
-                selling_price: row.get(4)?,
-                initial_stock: row.get(5)?,
-                stock_quantity: row.get(6)?,
-                supplier_id: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
-                image_path: row.get(10)?,
-            })
+    let product_res = get_product(id, db.clone());
+    
+    match product_res {
+        Ok(p) => {
+             log::info!("Created product with id: {}", id);
+             Ok(p)
         },
-    ).map_err(|e| format!("Failed to fetch created product: {}", e))?;
-
-    log::info!("Created product with id: {}", id);
-    Ok(product)
+        Err(e) => Err(format!("Failed to fetch created product: {}", e))
+    }
 }
 
 /// Update an existing product
@@ -347,29 +365,9 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
         return Err(format!("Product with id {} not found", input.id));
     }
 
-    // Fetch updated product to get new timestamp
-    let product = conn.query_row(
-        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
-        [input.id],
-        |row| {
-            Ok(Product {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                sku: row.get(2)?,
-                price: row.get(3)?,
-                selling_price: row.get(4)?,
-                initial_stock: row.get(5)?,
-                stock_quantity: row.get(6)?,
-                supplier_id: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
-                image_path: row.get(10)?,
-            })
-        },
-    ).map_err(|e| format!("Failed to fetch updated product: {}", e))?;
-
-    log::info!("Updated product with id: {}", input.id);
-    Ok(product)
+    // Fetch updated product
+    let product_res = get_product(input.id, db.clone());
+    product_res
 }
 
 /// Delete a product by ID
@@ -396,6 +394,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
     }
 
     // Get product data before deletion for audit trail
+    // We can use simple query here as we don't strictly need total_sold for audit
     let product = conn.query_row(
         "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
         [id],
@@ -412,6 +411,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
                 image_path: row.get(10)?,
+                total_sold: None,
             })
         },
     )
@@ -483,4 +483,118 @@ pub fn add_mock_products(db: State<Database>) -> Result<String, String> {
 
     log::info!("Added {} mock products", inserted);
     Ok(format!("Successfully added {} mock products", inserted))
+}
+
+/// Get top selling products based on invoice items
+#[tauri::command]
+pub fn get_top_selling_products(page: i32, limit: i32, db: State<Database>) -> Result<Vec<Product>, String> {
+    log::info!("get_top_selling_products called with page: {}, limit: {}", page, limit);
+
+    let conn = db.get_conn()?;
+    let offset = (page - 1) * limit;
+
+    let query = "
+        SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
+               p.supplier_id, p.created_at, p.updated_at, p.image_path,
+               COALESCE(SUM(ii.quantity), 0) as total_sold
+        FROM products p
+        LEFT JOIN invoice_items ii ON p.id = ii.product_id
+        GROUP BY p.id
+        ORDER BY total_sold DESC, p.name ASC
+        LIMIT ?1 OFFSET ?2
+    ";
+
+    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+
+    let product_iter = stmt.query_map([limit, offset], |row| {
+        Ok(Product {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            sku: row.get(2)?,
+            price: row.get(3)?,
+            selling_price: row.get(4)?,
+            initial_stock: row.get(5)?,
+            stock_quantity: row.get(6)?,
+            supplier_id: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+            image_path: row.get(10)?,
+            total_sold: {
+                let sold: i64 = row.get(11)?;
+                if sold > 0 { Some(sold) } else { None }
+            },
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut products = Vec::new();
+    for product in product_iter {
+        products.push(product.map_err(|e| e.to_string())?);
+    }
+
+    Ok(products)
+}
+
+/// Get products by a list of IDs
+#[tauri::command]
+pub fn get_products_by_ids(ids: Vec<i32>, db: State<Database>) -> Result<Vec<Product>, String> {
+    log::info!("get_products_by_ids called with {} ids", ids.len());
+
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let conn = db.get_conn()?;
+
+    // Dynamic query building involves repeat '?,', strictly safe for ints
+    let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let query = format!("
+        SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
+               p.supplier_id, p.created_at, p.updated_at, p.image_path,
+               COALESCE(SUM(ii.quantity), 0) as total_sold
+        FROM products p
+        LEFT JOIN invoice_items ii ON p.id = ii.product_id
+        WHERE p.id IN ({})
+        GROUP BY p.id
+    ", placeholders);
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    
+    // Rusqlite with dynamic params using params_from_iter
+    let params = rusqlite::params_from_iter(ids.iter());
+    
+    let product_iter = stmt.query_map(params, |row| {
+        Ok(Product {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            sku: row.get(2)?,
+            price: row.get(3)?,
+            selling_price: row.get(4)?,
+            initial_stock: row.get(5)?,
+            stock_quantity: row.get(6)?,
+            supplier_id: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+            image_path: row.get(10)?,
+            total_sold: {
+                let sold: i64 = row.get(11)?;
+                if sold > 0 { Some(sold) } else { None }
+            },
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut products_map = std::collections::HashMap::new();
+    for p in product_iter {
+        let product = p.map_err(|e| e.to_string())?;
+        products_map.insert(product.id, product);
+    }
+
+    // Return in the order of requested IDs
+    let mut ordered_products = Vec::new();
+    for id in ids {
+        if let Some(p) = products_map.get(&id) {
+            ordered_products.push(p.clone());
+        }
+    }
+
+    Ok(ordered_products)
 }

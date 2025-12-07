@@ -47,22 +47,89 @@ export default function Billing() {
 
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
 
-  const fetchTopProducts = async (showLoader = false) => {
-    if (showLoader) setLoading(true);
+  // Quick Add State
+  const [quickAddIds, setQuickAddIds] = useState<number[]>([]);
+  const [showQuickAddSettings, setShowQuickAddSettings] = useState(false);
+  const importQuickAddSettingsModal = () => import('@/components/billing/QuickAddSettingsModal');
+  const [QuickAddModal, setQuickAddModal] = useState<any>(null);
+
+  useEffect(() => {
+    // Load the modal component dynamically to avoid circular dependencies if any, or just performance
+    importQuickAddSettingsModal().then(mod => setQuickAddModal(() => mod.QuickAddSettingsModal));
+  }, []);
+
+  const fetchQuickAddProducts = async () => {
     try {
-      const data = await productCommands.getAll(1, 20);
-      // Only keep first 20 products for initial display
-      setTopProducts(data.items);
-      setTotalProductCount(data.total_count);
+      const { settingsCommands } = await import('@/lib/tauri');
+      const settings = await settingsCommands.getAll();
+      const savedIdsJson = settings['quick_add_ids'];
+
+      let ids: number[] = [];
+      if (savedIdsJson) {
+        try {
+          ids = JSON.parse(savedIdsJson);
+        } catch (e) {
+          console.error("Failed to parse quick add ids", e);
+        }
+      }
+
+      if (ids.length > 0) {
+        setQuickAddIds(ids);
+        const products = await productCommands.getByIds(ids);
+        setTopProducts(products);
+        setTotalProductCount(products.length); // Just display count of Quick Add
+      } else {
+        // Fallback to top 20 sellers
+        const products = await productCommands.getTopSelling(20);
+        setTopProducts(products);
+        setQuickAddIds(products.map(p => p.id));
+        setTotalProductCount(products.length);
+      }
     } catch (error) {
-      console.error(error);
+      console.error("Error fetching quick add products", error);
     } finally {
-      if (showLoader) setLoading(false);
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateQuickAdd = async (newIds: number[]) => {
+    setQuickAddIds(newIds);
+    // Persist
+    try {
+      const { settingsCommands } = await import('@/lib/tauri');
+      await settingsCommands.set('quick_add_ids', JSON.stringify(newIds));
+
+      // Refresh display
+      const products = await productCommands.getByIds(newIds);
+      setTopProducts(products);
+    } catch (err) {
+      console.error("Failed to save quick add settings", err);
+    }
+  };
+
+  const fetchDefaultLocation = async () => {
+    try {
+      // Import dynamically to avoid SSR issues if any, though 'use client' is set
+      const { settingsCommands } = await import('@/lib/tauri');
+      const settings = await settingsCommands.getAll();
+
+      // Only set if we found defaults and current location is empty (or just overwrite? User said "default this only in every new invoice i can manually change")
+      // So we overwrite on mount.
+      if (settings['default_state']) {
+        setLocation({
+          state: settings['default_state'] || '',
+          district: settings['default_district'] || '',
+          town: settings['default_town'] || ''
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching default location:', err);
     }
   };
 
   useEffect(() => {
-    void fetchTopProducts(true);
+    void fetchQuickAddProducts();
+    void fetchDefaultLocation();
   }, []);
 
   // Debounced product search
@@ -76,6 +143,7 @@ export default function Billing() {
         setTotalSearchCount(0);
         setSearchPage(1);
         setIsSearching(false);
+        // If search cleared, show Quick Add list again
         return;
       }
 
@@ -103,14 +171,23 @@ export default function Billing() {
   useEffect(() => {
     const controller = new AbortController();
     const lookup = async () => {
-      const trimmed = customerName.trim();
-      if (trimmed.length < 2) {
+      // Lookup by Phone Number now
+      const trimmedPhone = customerPhone.trim();
+      if (trimmedPhone.length < 3) { // Start searching after 3 digits
         setCustomerSuggestions([]);
         return;
       }
       try {
-        const result = await customerCommands.getAll(1, 50, trimmed);
+        // We use getAll but we filter results on client or use backend search if supported
+        // customerCommands.getAll searches name/phone/email
+        const result = await customerCommands.getAll(1, 10, trimmedPhone);
+
+        // Filter to prioritize phone matches if generic search
         setCustomerSuggestions(result.items);
+
+        // Auto-fill logic: If exact match on phone, set name
+        // (Be careful not to overwrite if user is typing a NEW name for an existing number?)
+        // Let's just show suggestions and let user click
       } catch (error) {
         console.error(error);
       }
@@ -121,7 +198,7 @@ export default function Billing() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [customerName]);
+  }, [customerPhone]);
 
   const loadMoreSearchResults = async () => {
     const trimmed = productSearch.trim();
@@ -244,7 +321,7 @@ export default function Billing() {
       setCustomerName('');
       setCustomerPhone('');
       setSelectedCustomerId(null);
-      await fetchTopProducts();
+      await fetchQuickAddProducts();
     } catch (error) {
       console.error(error);
       alert('Checkout failed: ' + error);
@@ -255,24 +332,41 @@ export default function Billing() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      {QuickAddModal && (
+        <QuickAddModal
+          isOpen={showQuickAddSettings}
+          onClose={() => setShowQuickAddSettings(false)}
+          currentIds={quickAddIds}
+          onSave={handleUpdateQuickAdd}
+        />
+      )}
       <div>
         <div className="card space-y-4">
           <h2 className="section-title">Current Bill</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Phone Number - First and Mandatory */}
             <div className="relative">
-              <label className="form-label">Customer Name</label>
+              <label className="form-label">Phone <span className="text-red-500">*</span></label>
               <input
                 className="form-input"
-                value={customerName}
-                onFocus={() => setShowCustomerSuggestions(true)}
+                value={customerPhone}
                 onChange={(e) => {
-                  setCustomerName(e.target.value);
-                  setSelectedCustomerId(null); // Reset selected ID when typing
+                  const newVal = e.target.value;
+                  setCustomerPhone(newVal);
                   setShowCustomerSuggestions(true);
+
+                  // If a customer was previously selected from suggestions,
+                  // changing the phone number should reset the selection and name
+                  // to avoid data mismatch (e.g. valid name with invalid/new phone)
+                  if (selectedCustomerId) {
+                    setSelectedCustomerId(null);
+                    setCustomerName('');
+                  }
                 }}
-                onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 120)}
-                placeholder="Enter Name"
+                onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
+                placeholder="Enter Phone"
+                required
               />
               {showCustomerSuggestions && customerSuggestions.length > 0 && (
                 <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-[0_12px_30px_-22px_rgba(15,23,42,0.4)] max-h-56 overflow-auto">
@@ -288,20 +382,25 @@ export default function Billing() {
                         setShowCustomerSuggestions(false);
                       }}
                     >
-                      <span className="font-semibold text-slate-800">{c.name}</span>
-                      <span className="text-xs text-slate-500">{c.phone ?? ''}</span>
+                      <div className="text-left">
+                        <span className="font-semibold text-slate-800 block">{c.phone}</span>
+                        <span className="text-xs text-slate-500">{c.name}</span>
+                      </div>
                     </button>
                   ))}
                 </div>
               )}
             </div>
+
+            {/* Customer Name - Second */}
             <div>
-              <label className="form-label">Phone (Optional)</label>
+              <label className="form-label">Customer Name <span className="text-red-500">*</span></label>
               <input
                 className="form-input"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="Enter Phone"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Enter Name"
+                required
               />
             </div>
           </div>
@@ -481,15 +580,30 @@ export default function Billing() {
           </div>
         ) : (
           <div>
-            <h3 className="text-lg font-semibold mb-3">Quick Add (Top 20 Products)</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">Quick Add</h3>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowQuickAddSettings(true)}
+                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
+                  title="Customize Quick Add List"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
-              {topProducts.map((product) => (
+              {topProducts.map((product, index) => (
                 <button
                   type="button"
                   key={product.id}
-                  className="card text-left hover:-translate-y-0.5 transition"
+                  className="card text-left hover:-translate-y-0.5 transition relative"
                   onClick={() => addToCart(product)}
                 >
+                  <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500">
+                    {index + 1}
+                  </div>
                   <div className="flex gap-3">
                     <EntityThumbnail
                       entityId={product.id}
@@ -497,7 +611,7 @@ export default function Billing() {
                       imagePath={product.image_path}
                       size="md"
                     />
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 pr-6">
                       <div className="font-semibold truncate">{product.name}</div>
                       <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
                       <div className="flex justify-between mt-2 text-sm">
