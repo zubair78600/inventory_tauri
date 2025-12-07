@@ -90,7 +90,8 @@ export default function Suppliers() {
       }
       return undefined;
     },
-    staleTime: 30 * 1000, // Data fresh for 30 seconds
+    refetchOnMount: 'always', // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window gains focus
   });
 
   // Flatten paginated data
@@ -107,8 +108,8 @@ export default function Suppliers() {
   };
 
   // Invalidate queries after mutations
-  const invalidateSuppliers = () => {
-    void queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+  const invalidateSuppliers = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['suppliers'], exact: false });
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -136,7 +137,7 @@ export default function Suppliers() {
 
       setShowAddForm(false);
       setNewSupplier({ name: '', contact_info: '', address: '', email: '', comments: '', state: defaults?.state || '', district: defaults?.district || '', town: defaults?.town || '' });
-      invalidateSuppliers();
+      await invalidateSuppliers();
     } catch (error) {
       console.error('Error creating supplier:', error);
       alert(`Error adding supplier: ${error}`);
@@ -159,7 +160,7 @@ export default function Suppliers() {
         town: editSupplier.town,
       });
       setEditSupplier(null);
-      invalidateSuppliers();
+      await invalidateSuppliers();
     } catch (error) {
       console.error('Error updating supplier:', error);
       alert(`Error updating supplier: ${error}`);
@@ -183,7 +184,7 @@ export default function Suppliers() {
       }
 
       await supplierCommands.delete(id);
-      invalidateSuppliers();
+      await invalidateSuppliers();
     } catch (error) {
       console.error('Error deleting supplier:', error);
       const message = error instanceof Error ? error.message : String(error);
@@ -195,7 +196,7 @@ export default function Suppliers() {
     try {
       const result = await supplierCommands.addMockData();
       alert(result);
-      invalidateSuppliers();
+      await invalidateSuppliers();
     } catch (error) {
       console.error('Error adding mock data:', error);
       alert(`Failed to add mock data: ${error}`);

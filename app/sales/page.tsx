@@ -58,6 +58,8 @@ export default function Sales() {
       return undefined;
     },
     placeholderData: keepPreviousData, // Keep showing old data while fetching new search results
+    refetchOnMount: 'always', // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window gains focus
   });
 
   const sales = data?.pages.flatMap((page) => page.items) ?? [];

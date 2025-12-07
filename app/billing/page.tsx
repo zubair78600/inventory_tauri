@@ -3,6 +3,7 @@
 import type { Product } from '@/types';
 import { useEffect, useState } from 'react';
 import { productCommands, customerCommands, invoiceCommands } from '@/lib/tauri';
+import { useQueryClient } from '@tanstack/react-query';
 import { LocationSelector } from '@/components/shared/LocationSelector';
 import { useLocationDefaults } from '@/hooks/useLocationDefaults';
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
@@ -16,6 +17,7 @@ type CartItem = {
 };
 
 export default function Billing() {
+  const queryClient = useQueryClient();
   const [topProducts, setTopProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
@@ -287,7 +289,7 @@ export default function Billing() {
           phone: customerPhone || null,
           email: null,
           address: null,
-          place: null,
+          place: location.town || null, // Set place to invoice town
         });
         finalCustomerId = newCustomer.id;
       }
@@ -313,6 +315,13 @@ export default function Billing() {
       if (location.state && location.district && location.town) {
         recordSelection(location);
       }
+
+      // Invalidate queries to refresh data across the app
+      await queryClient.invalidateQueries({ queryKey: ['sales'], exact: false });
+      await queryClient.invalidateQueries({ queryKey: ['customers'], exact: false });
+      await queryClient.invalidateQueries({ queryKey: ['inventory'], exact: false }); // Update stock levels
+      await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'], exact: false }); // Update KPIs
+      await queryClient.invalidateQueries({ queryKey: ['recent-sales'], exact: false }); // Update Dashboard recent sales
 
       setShowSuccessModal(true);
       setCart([]);
