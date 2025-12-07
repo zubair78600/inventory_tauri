@@ -8,6 +8,8 @@ pub mod deleted_items;
 pub mod auth;
 pub mod purchase_orders;
 pub mod migration;
+pub mod settings;
+pub mod images;
 
 use serde::{Deserialize, Serialize};
 
@@ -27,3 +29,5 @@ pub use deleted_items::*;
 pub use auth::*;
 pub use purchase_orders::*;
 pub use migration::*;
+pub use settings::*;
+pub use images::*;

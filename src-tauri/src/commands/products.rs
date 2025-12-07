@@ -46,7 +46,7 @@ pub fn get_products(
     let mut products = Vec::new();
     let total_count: i64;
 
-    let base_query = "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products";
+    let base_query = "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products";
     let count_query = "SELECT COUNT(*) FROM products";
 
     if let Some(search_term) = search {
@@ -77,6 +77,7 @@ pub fn get_products(
                     supplier_id: row.get(7)?,
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
+                    image_path: row.get(10)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -107,6 +108,7 @@ pub fn get_products(
                     supplier_id: row.get(7)?,
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
+                    image_path: row.get(10)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -132,7 +134,7 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
 
     let product = conn
         .query_row(
-            "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+            "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
             [id],
             |row| {
                 Ok(Product {
@@ -146,6 +148,7 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
                     supplier_id: row.get(7)?,
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
+                    image_path: row.get(10)?,
                 })
             },
         )
@@ -165,7 +168,7 @@ pub fn get_products_by_supplier(
     let conn = db.get_conn()?;
 
     let mut stmt = conn
-        .prepare("SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE supplier_id = ?1 ORDER BY name")
+        .prepare("SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE supplier_id = ?1 ORDER BY name")
         .map_err(|e| e.to_string())?;
 
     let product_iter = stmt
@@ -181,6 +184,7 @@ pub fn get_products_by_supplier(
                 supplier_id: row.get(7)?,
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
+                image_path: row.get(10)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -280,7 +284,7 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
 
     // Fetch the created product to get timestamps
     let product = conn.query_row(
-        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
         [id],
         |row| {
             Ok(Product {
@@ -294,6 +298,7 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
                 supplier_id: row.get(7)?,
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
+                image_path: row.get(10)?,
             })
         },
     ).map_err(|e| format!("Failed to fetch created product: {}", e))?;
@@ -344,7 +349,7 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 
     // Fetch updated product to get new timestamp
     let product = conn.query_row(
-        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
         [input.id],
         |row| {
             Ok(Product {
@@ -358,6 +363,7 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
                 supplier_id: row.get(7)?,
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
+                image_path: row.get(10)?,
             })
         },
     ).map_err(|e| format!("Failed to fetch updated product: {}", e))?;
@@ -391,7 +397,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
 
     // Get product data before deletion for audit trail
     let product = conn.query_row(
-        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at FROM products WHERE id = ?1",
+        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
         [id],
         |row| {
             Ok(Product {
@@ -405,6 +411,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
                 supplier_id: row.get(7)?,
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
+                image_path: row.get(10)?,
             })
         },
     )

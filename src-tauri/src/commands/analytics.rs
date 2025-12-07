@@ -28,6 +28,153 @@ pub struct LowStockProduct {
     pub stock_quantity: i32,
 }
 
+// ============== New Analytics Types ==============
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SalesAnalytics {
+    pub total_revenue: f64,
+    pub total_orders: i32,
+    pub avg_order_value: f64,
+    pub total_tax: f64,
+    pub total_discount: f64,
+    pub gross_profit: f64,
+    pub previous_period_revenue: f64,
+    pub previous_period_orders: i32,
+    pub revenue_change_percent: f64,
+    pub orders_change_percent: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RevenueTrendPoint {
+    pub date: String,
+    pub revenue: f64,
+    pub order_count: i32,
+    pub avg_order_value: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TopProduct {
+    pub product_id: i32,
+    pub product_name: String,
+    pub sku: String,
+    pub revenue: f64,
+    pub quantity_sold: i32,
+    pub order_count: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaymentMethodBreakdown {
+    pub payment_method: String,
+    pub total_amount: f64,
+    pub order_count: i32,
+    pub percentage: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegionSales {
+    pub state: String,
+    pub district: Option<String>,
+    pub revenue: f64,
+    pub order_count: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomerAnalytics {
+    pub total_customers: i32,
+    pub new_customers: i32,
+    pub repeat_customers: i32,
+    pub repeat_rate: f64,
+    pub avg_lifetime_value: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TopCustomer {
+    pub customer_id: i32,
+    pub customer_name: String,
+    pub phone: Option<String>,
+    pub total_spent: f64,
+    pub order_count: i32,
+    pub avg_order_value: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomerTrendPoint {
+    pub date: String,
+    pub new_customers: i32,
+    pub cumulative_customers: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InventoryHealth {
+    pub total_products: i32,
+    pub low_stock_count: i32,
+    pub out_of_stock_count: i32,
+    pub healthy_stock_count: i32,
+    pub total_valuation: f64,
+    pub avg_stock_level: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PurchaseAnalytics {
+    pub total_purchases: f64,
+    pub total_paid: f64,
+    pub pending_payments: f64,
+    pub active_suppliers: i32,
+    pub purchase_order_count: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CashflowPoint {
+    pub date: String,
+    pub sales: f64,
+    pub purchases: f64,
+    pub net: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TopSupplier {
+    pub supplier_id: i32,
+    pub supplier_name: String,
+    pub total_spent: f64,
+    pub products_count: i32,
+    pub orders_count: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StateTax {
+    pub state: String,
+    pub tax_amount: f64,
+    pub invoice_count: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TaxSummary {
+    pub total_tax: f64,
+    pub cgst_total: f64,
+    pub sgst_total: f64,
+    pub igst_total: f64,
+    pub by_state: Vec<StateTax>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiscountAnalysis {
+    pub total_discounts: f64,
+    pub discount_percentage: f64,
+    pub orders_with_discount: i32,
+    pub avg_discount_per_order: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LowStockAlert {
+    pub id: i32,
+    pub name: String,
+    pub sku: String,
+    pub stock_quantity: i32,
+    pub selling_price: Option<f64>,
+    pub avg_daily_sales: f64,
+    pub days_until_stockout: Option<i32>,
+}
+
 /// Get dashboard statistics
 #[tauri::command]
 pub fn get_dashboard_stats(db: State<Database>) -> Result<DashboardStats, String> {
@@ -375,4 +522,838 @@ pub fn get_customer_report(id: i32, db: State<Database>) -> Result<CustomerRepor
 
     log::info!("Returning report for customer id: {}", id);
     Ok(report)
+}
+
+// ============== New Analytics Commands ==============
+
+/// Get sales analytics with date filtering and comparison
+#[tauri::command]
+pub fn get_sales_analytics(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<SalesAnalytics, String> {
+    log::info!("get_sales_analytics called: {} to {}", start_date, end_date);
+
+    let conn = db.get_conn()?;
+
+    // Current period stats
+    let (total_revenue, total_orders, total_tax, total_discount): (f64, i32, f64, f64) = conn
+        .query_row(
+            "SELECT
+                COALESCE(SUM(total_amount), 0.0),
+                COUNT(*),
+                COALESCE(SUM(tax_amount), 0.0),
+                COALESCE(SUM(discount_amount), 0.0)
+             FROM invoices
+             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+            [&start_date, &end_date],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let avg_order_value = if total_orders > 0 {
+        total_revenue / total_orders as f64
+    } else {
+        0.0
+    };
+
+    // Calculate previous period (same duration before start_date)
+    let (prev_revenue, prev_orders): (f64, i32) = conn
+        .query_row(
+            "WITH date_diff AS (
+                SELECT julianday(?2) - julianday(?1) AS days
+            )
+            SELECT
+                COALESCE(SUM(total_amount), 0.0),
+                COUNT(*)
+             FROM invoices, date_diff
+             WHERE date(created_at) >= date(?1, '-' || (days + 1) || ' days')
+               AND date(created_at) < date(?1)",
+            [&start_date, &end_date],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let revenue_change = if prev_revenue > 0.0 {
+        ((total_revenue - prev_revenue) / prev_revenue) * 100.0
+    } else if total_revenue > 0.0 {
+        100.0
+    } else {
+        0.0
+    };
+
+    let orders_change = if prev_orders > 0 {
+        ((total_orders as f64 - prev_orders as f64) / prev_orders as f64) * 100.0
+    } else if total_orders > 0 {
+        100.0
+    } else {
+        0.0
+    };
+
+    // Gross profit = Revenue - Cost (using FIFO batches if available, else product price)
+    let gross_profit: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(ii.quantity * (ii.unit_price - COALESCE(p.price, 0))), 0.0)
+             FROM invoice_items ii
+             JOIN invoices i ON ii.invoice_id = i.id
+             JOIN products p ON ii.product_id = p.id
+             WHERE date(i.created_at) >= date(?1) AND date(i.created_at) <= date(?2)",
+            [&start_date, &end_date],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+
+    Ok(SalesAnalytics {
+        total_revenue,
+        total_orders,
+        avg_order_value,
+        total_tax,
+        total_discount,
+        gross_profit,
+        previous_period_revenue: prev_revenue,
+        previous_period_orders: prev_orders,
+        revenue_change_percent: revenue_change,
+        orders_change_percent: orders_change,
+    })
+}
+
+/// Get revenue trend data for charts
+#[tauri::command]
+pub fn get_revenue_trend(
+    start_date: String,
+    end_date: String,
+    granularity: String, // "daily", "weekly", "monthly"
+    db: State<Database>,
+) -> Result<Vec<RevenueTrendPoint>, String> {
+    log::info!("get_revenue_trend called: {} to {} ({})", start_date, end_date, granularity);
+
+    let conn = db.get_conn()?;
+
+    let date_format = match granularity.as_str() {
+        "weekly" => "%Y-W%W",
+        "monthly" => "%Y-%m",
+        _ => "%Y-%m-%d", // daily
+    };
+
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT
+                strftime('{}', created_at) as period,
+                COALESCE(SUM(total_amount), 0.0) as revenue,
+                COUNT(*) as order_count
+             FROM invoices
+             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+             GROUP BY period
+             ORDER BY period ASC",
+            date_format
+        ))
+        .map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map([&start_date, &end_date], |row| {
+            let revenue: f64 = row.get(1)?;
+            let order_count: i32 = row.get(2)?;
+            Ok(RevenueTrendPoint {
+                date: row.get(0)?,
+                revenue,
+                order_count,
+                avg_order_value: if order_count > 0 { revenue / order_count as f64 } else { 0.0 },
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}
+
+/// Get top products by revenue
+#[tauri::command]
+pub fn get_top_products(
+    start_date: String,
+    end_date: String,
+    limit: i32,
+    db: State<Database>,
+) -> Result<Vec<TopProduct>, String> {
+    log::info!("get_top_products called: {} to {}, limit {}", start_date, end_date, limit);
+
+    let conn = db.get_conn()?;
+
+    let query = format!(
+        "SELECT
+            p.id,
+            p.name,
+            p.sku,
+            COALESCE(SUM(ii.quantity * ii.unit_price), 0.0) as revenue,
+            COALESCE(SUM(ii.quantity), 0) as quantity_sold,
+            COUNT(DISTINCT ii.invoice_id) as order_count
+         FROM products p
+         JOIN invoice_items ii ON p.id = ii.product_id
+         JOIN invoices i ON ii.invoice_id = i.id
+         WHERE date(i.created_at) >= date(?1) AND date(i.created_at) <= date(?2)
+         GROUP BY p.id
+         ORDER BY revenue DESC
+         LIMIT {}",
+        limit
+    );
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map([&start_date, &end_date], |row| {
+            Ok(TopProduct {
+                product_id: row.get(0)?,
+                product_name: row.get(1)?,
+                sku: row.get(2)?,
+                revenue: row.get(3)?,
+                quantity_sold: row.get(4)?,
+                order_count: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    log::info!("get_top_products returning {} products", results.len());
+    Ok(results)
+}
+
+/// Get sales by payment method
+#[tauri::command]
+pub fn get_sales_by_payment_method(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<Vec<PaymentMethodBreakdown>, String> {
+    log::info!("get_sales_by_payment_method called: {} to {}", start_date, end_date);
+
+    let conn = db.get_conn()?;
+
+    // Get total for percentage calculation
+    let total: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(total_amount), 0.0) FROM invoices
+             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+            [&start_date, &end_date],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT
+                COALESCE(payment_method, 'Unknown') as method,
+                COALESCE(SUM(total_amount), 0.0) as total,
+                COUNT(*) as count
+             FROM invoices
+             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+             GROUP BY payment_method
+             ORDER BY total DESC"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map([&start_date, &end_date], |row| {
+            let amount: f64 = row.get(1)?;
+            Ok(PaymentMethodBreakdown {
+                payment_method: row.get(0)?,
+                total_amount: amount,
+                order_count: row.get(2)?,
+                percentage: if total > 0.0 { (amount / total) * 100.0 } else { 0.0 },
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}
+
+/// Get sales by region (state)
+#[tauri::command]
+pub fn get_sales_by_region(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<Vec<RegionSales>, String> {
+    log::info!("get_sales_by_region called: {} to {}", start_date, end_date);
+
+    let conn = db.get_conn()?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT
+                COALESCE(state, 'Unknown') as state,
+                district,
+                COALESCE(SUM(total_amount), 0.0) as revenue,
+                COUNT(*) as order_count
+             FROM invoices
+             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+             GROUP BY state
+             ORDER BY revenue DESC"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map([&start_date, &end_date], |row| {
+            Ok(RegionSales {
+                state: row.get(0)?,
+                district: row.get(1)?,
+                revenue: row.get(2)?,
+                order_count: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}
+
+/// Get customer analytics
+#[tauri::command]
+pub fn get_customer_analytics(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<CustomerAnalytics, String> {
+    log::info!("get_customer_analytics called: {} to {}", start_date, end_date);
+
+    let conn = db.get_conn()?;
+
+    // Total customers with orders in period
+    let total_customers: i32 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT customer_id) FROM invoices
+             WHERE customer_id IS NOT NULL
+               AND date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+            [&start_date, &end_date],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    // New customers (first order in this period)
+    let new_customers: i32 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT customer_id) FROM invoices i1
+             WHERE customer_id IS NOT NULL
+               AND date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+               AND NOT EXISTS (
+                   SELECT 1 FROM invoices i2
+                   WHERE i2.customer_id = i1.customer_id
+                     AND date(i2.created_at) < date(?1)
+               )",
+            [&start_date, &end_date],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    // Repeat customers (more than 1 order ever)
+    let repeat_customers: i32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM (
+                SELECT customer_id FROM invoices
+                WHERE customer_id IS NOT NULL
+                  AND date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+                GROUP BY customer_id
+                HAVING COUNT(*) > 1
+             )",
+            [&start_date, &end_date],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let repeat_rate = if total_customers > 0 {
+        (repeat_customers as f64 / total_customers as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    // Average lifetime value
+    let avg_lifetime_value: f64 = conn
+        .query_row(
+            "SELECT COALESCE(AVG(total), 0.0) FROM (
+                SELECT SUM(total_amount) as total
+                FROM invoices
+                WHERE customer_id IS NOT NULL
+                GROUP BY customer_id
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+
+    Ok(CustomerAnalytics {
+        total_customers,
+        new_customers,
+        repeat_customers,
+        repeat_rate,
+        avg_lifetime_value,
+    })
+}
+
+/// Get top customers by spend
+#[tauri::command]
+pub fn get_top_customers(
+    start_date: String,
+    end_date: String,
+    limit: i32,
+    db: State<Database>,
+) -> Result<Vec<TopCustomer>, String> {
+    log::info!("get_top_customers called: {} to {}, limit {}", start_date, end_date, limit);
+
+    let conn = db.get_conn()?;
+
+    let query = format!(
+        "SELECT
+            c.id,
+            c.name,
+            c.phone,
+            COALESCE(SUM(i.total_amount), 0.0) as total_spent,
+            COUNT(i.id) as order_count
+         FROM customers c
+         JOIN invoices i ON c.id = i.customer_id
+         WHERE date(i.created_at) >= date(?1) AND date(i.created_at) <= date(?2)
+         GROUP BY c.id
+         ORDER BY total_spent DESC
+         LIMIT {}",
+        limit
+    );
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map([&start_date, &end_date], |row| {
+            let total_spent: f64 = row.get(3)?;
+            let order_count: i32 = row.get(4)?;
+            Ok(TopCustomer {
+                customer_id: row.get(0)?,
+                customer_name: row.get(1)?,
+                phone: row.get(2)?,
+                total_spent,
+                order_count,
+                avg_order_value: if order_count > 0 { total_spent / order_count as f64 } else { 0.0 },
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}
+
+/// Get customer acquisition trend
+#[tauri::command]
+pub fn get_customer_trend(
+    start_date: String,
+    end_date: String,
+    granularity: String,
+    db: State<Database>,
+) -> Result<Vec<CustomerTrendPoint>, String> {
+    log::info!("get_customer_trend called: {} to {} ({})", start_date, end_date, granularity);
+
+    let conn = db.get_conn()?;
+
+    let date_format = match granularity.as_str() {
+        "weekly" => "%Y-W%W",
+        "monthly" => "%Y-%m",
+        _ => "%Y-%m-%d",
+    };
+
+    let mut stmt = conn
+        .prepare(&format!(
+            "WITH first_orders AS (
+                SELECT customer_id, MIN(created_at) as first_order_date
+                FROM invoices
+                WHERE customer_id IS NOT NULL
+                GROUP BY customer_id
+            )
+            SELECT
+                strftime('{}', first_order_date) as period,
+                COUNT(*) as new_customers
+            FROM first_orders
+            WHERE date(first_order_date) >= date(?1) AND date(first_order_date) <= date(?2)
+            GROUP BY period
+            ORDER BY period ASC",
+            date_format
+        ))
+        .map_err(|e| e.to_string())?;
+
+    let mut cumulative = 0;
+    let results = stmt
+        .query_map([&start_date, &end_date], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(date, new_count)| {
+            cumulative += new_count;
+            CustomerTrendPoint {
+                date,
+                new_customers: new_count,
+                cumulative_customers: cumulative,
+            }
+        })
+        .collect();
+
+    Ok(results)
+}
+
+/// Get inventory health metrics
+#[tauri::command]
+pub fn get_inventory_health(db: State<Database>) -> Result<InventoryHealth, String> {
+    log::info!("get_inventory_health called");
+
+    let conn = db.get_conn()?;
+
+    let (total, low, out, valuation, avg): (i32, i32, i32, f64, f64) = conn
+        .query_row(
+            "SELECT
+                COUNT(*),
+                SUM(CASE WHEN stock_quantity > 0 AND stock_quantity < 10 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN stock_quantity = 0 THEN 1 ELSE 0 END),
+                COALESCE(SUM(price * stock_quantity), 0.0),
+                COALESCE(AVG(stock_quantity), 0.0)
+             FROM products",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(InventoryHealth {
+        total_products: total,
+        low_stock_count: low,
+        out_of_stock_count: out,
+        healthy_stock_count: total - low - out,
+        total_valuation: valuation,
+        avg_stock_level: avg,
+    })
+}
+
+/// Get low stock alerts with sales velocity
+#[tauri::command]
+pub fn get_low_stock_alerts(db: State<Database>) -> Result<Vec<LowStockAlert>, String> {
+    log::info!("get_low_stock_alerts called");
+
+    let conn = db.get_conn()?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT
+                p.id,
+                p.name,
+                p.sku,
+                p.stock_quantity,
+                p.selling_price,
+                COALESCE(
+                    (SELECT SUM(ii.quantity) * 1.0 / 30
+                     FROM invoice_items ii
+                     JOIN invoices i ON ii.invoice_id = i.id
+                     WHERE ii.product_id = p.id
+                       AND date(i.created_at) >= date('now', '-30 days')
+                    ), 0.0
+                ) as avg_daily_sales
+             FROM products p
+             WHERE p.stock_quantity < 10
+             ORDER BY p.stock_quantity ASC"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map([], |row| {
+            let stock: i32 = row.get(3)?;
+            let avg_sales: f64 = row.get(5)?;
+            let days_until = if avg_sales > 0.0 {
+                Some((stock as f64 / avg_sales).floor() as i32)
+            } else {
+                None
+            };
+            Ok(LowStockAlert {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                sku: row.get(2)?,
+                stock_quantity: stock,
+                selling_price: row.get(4)?,
+                avg_daily_sales: avg_sales,
+                days_until_stockout: days_until,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}
+
+/// Get purchase analytics
+#[tauri::command]
+pub fn get_purchase_analytics(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<PurchaseAnalytics, String> {
+    log::info!("get_purchase_analytics called: {} to {}", start_date, end_date);
+
+    let conn = db.get_conn()?;
+
+    let (total_purchases, po_count): (f64, i32) = conn
+        .query_row(
+            "SELECT
+                COALESCE(SUM(total_amount), 0.0),
+                COUNT(*)
+             FROM purchase_orders
+             WHERE date(order_date) >= date(?1) AND date(order_date) <= date(?2)",
+            [&start_date, &end_date],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap_or((0.0, 0));
+
+    let total_paid: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(sp.amount), 0.0)
+             FROM supplier_payments sp
+             JOIN purchase_orders po ON sp.supplier_id = po.supplier_id
+             WHERE date(sp.paid_at) >= date(?1) AND date(sp.paid_at) <= date(?2)",
+            [&start_date, &end_date],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+
+    let active_suppliers: i32 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT supplier_id) FROM purchase_orders
+             WHERE date(order_date) >= date(?1) AND date(order_date) <= date(?2)",
+            [&start_date, &end_date],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    Ok(PurchaseAnalytics {
+        total_purchases,
+        total_paid,
+        pending_payments: total_purchases - total_paid,
+        active_suppliers,
+        purchase_order_count: po_count,
+    })
+}
+
+/// Get cashflow trend (sales vs purchases)
+#[tauri::command]
+pub fn get_cashflow_trend(
+    start_date: String,
+    end_date: String,
+    granularity: String,
+    db: State<Database>,
+) -> Result<Vec<CashflowPoint>, String> {
+    log::info!("get_cashflow_trend called: {} to {} ({})", start_date, end_date, granularity);
+
+    let conn = db.get_conn()?;
+
+    let date_format = match granularity.as_str() {
+        "weekly" => "%Y-W%W",
+        "monthly" => "%Y-%m",
+        _ => "%Y-%m-%d",
+    };
+
+    let mut stmt = conn
+        .prepare(&format!(
+            "WITH sales_data AS (
+                SELECT strftime('{}', created_at) as period, SUM(total_amount) as amount
+                FROM invoices
+                WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+                GROUP BY period
+            ),
+            purchase_data AS (
+                SELECT strftime('{}', order_date) as period, SUM(total_amount) as amount
+                FROM purchase_orders
+                WHERE date(order_date) >= date(?1) AND date(order_date) <= date(?2)
+                GROUP BY period
+            ),
+            all_periods AS (
+                SELECT period FROM sales_data
+                UNION
+                SELECT period FROM purchase_data
+            )
+            SELECT
+                ap.period,
+                COALESCE(s.amount, 0.0) as sales,
+                COALESCE(p.amount, 0.0) as purchases
+            FROM all_periods ap
+            LEFT JOIN sales_data s ON ap.period = s.period
+            LEFT JOIN purchase_data p ON ap.period = p.period
+            ORDER BY ap.period ASC",
+            date_format, date_format
+        ))
+        .map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map([&start_date, &end_date], |row| {
+            let sales: f64 = row.get(1)?;
+            let purchases: f64 = row.get(2)?;
+            Ok(CashflowPoint {
+                date: row.get(0)?,
+                sales,
+                purchases,
+                net: sales - purchases,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}
+
+/// Get top suppliers by spend
+#[tauri::command]
+pub fn get_top_suppliers(
+    start_date: String,
+    end_date: String,
+    limit: i32,
+    db: State<Database>,
+) -> Result<Vec<TopSupplier>, String> {
+    log::info!("get_top_suppliers called: {} to {}, limit {}", start_date, end_date, limit);
+
+    let conn = db.get_conn()?;
+
+    let query = format!(
+        "SELECT
+            s.id,
+            s.name,
+            COALESCE(SUM(po.total_amount), 0.0) as total_spent,
+            COUNT(DISTINCT poi.product_id) as products_count,
+            COUNT(DISTINCT po.id) as orders_count
+         FROM suppliers s
+         JOIN purchase_orders po ON s.id = po.supplier_id
+         LEFT JOIN purchase_order_items poi ON po.id = poi.po_id
+         WHERE date(po.order_date) >= date(?1) AND date(po.order_date) <= date(?2)
+         GROUP BY s.id
+         ORDER BY total_spent DESC
+         LIMIT {}",
+        limit
+    );
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map([&start_date, &end_date], |row| {
+            Ok(TopSupplier {
+                supplier_id: row.get(0)?,
+                supplier_name: row.get(1)?,
+                total_spent: row.get(2)?,
+                products_count: row.get(3)?,
+                orders_count: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}
+
+/// Get tax summary
+#[tauri::command]
+pub fn get_tax_summary(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<TaxSummary, String> {
+    log::info!("get_tax_summary called: {} to {}", start_date, end_date);
+
+    let conn = db.get_conn()?;
+
+    let (total_tax, cgst, sgst, igst): (f64, f64, f64, f64) = conn
+        .query_row(
+            "SELECT
+                COALESCE(SUM(tax_amount), 0.0),
+                COALESCE(SUM(cgst_amount), 0.0),
+                COALESCE(SUM(sgst_amount), 0.0),
+                COALESCE(SUM(igst_amount), 0.0)
+             FROM invoices
+             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+            [&start_date, &end_date],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT
+                COALESCE(state, 'Unknown'),
+                COALESCE(SUM(tax_amount), 0.0),
+                COUNT(*)
+             FROM invoices
+             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+             GROUP BY state
+             ORDER BY SUM(tax_amount) DESC"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let by_state = stmt
+        .query_map([&start_date, &end_date], |row| {
+            Ok(StateTax {
+                state: row.get(0)?,
+                tax_amount: row.get(1)?,
+                invoice_count: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(TaxSummary {
+        total_tax,
+        cgst_total: cgst,
+        sgst_total: sgst,
+        igst_total: igst,
+        by_state,
+    })
+}
+
+/// Get discount analysis
+#[tauri::command]
+pub fn get_discount_analysis(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<DiscountAnalysis, String> {
+    log::info!("get_discount_analysis called: {} to {}", start_date, end_date);
+
+    let conn = db.get_conn()?;
+
+    let (total_discounts, total_revenue, orders_with_discount): (f64, f64, i32) = conn
+        .query_row(
+            "SELECT
+                COALESCE(SUM(discount_amount), 0.0),
+                COALESCE(SUM(total_amount), 0.0),
+                SUM(CASE WHEN discount_amount > 0 THEN 1 ELSE 0 END)
+             FROM invoices
+             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+            [&start_date, &end_date],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let discount_percentage = if total_revenue > 0.0 {
+        (total_discounts / (total_revenue + total_discounts)) * 100.0
+    } else {
+        0.0
+    };
+
+    let avg_discount = if orders_with_discount > 0 {
+        total_discounts / orders_with_discount as f64
+    } else {
+        0.0
+    };
+
+    Ok(DiscountAnalysis {
+        total_discounts,
+        discount_percentage,
+        orders_with_discount,
+        avg_discount_per_order: avg_discount,
+    })
 }

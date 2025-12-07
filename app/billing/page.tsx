@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { productCommands, customerCommands, invoiceCommands } from '@/lib/tauri';
 import { LocationSelector } from '@/components/shared/LocationSelector';
 import { useLocationDefaults } from '@/hooks/useLocationDefaults';
+import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 
 type CartItem = {
   product_id: number;
@@ -443,13 +444,23 @@ export default function Billing() {
                   className="card border border-sky-100 text-left hover:-translate-y-0.5 transition"
                   onClick={() => addToCart(product)}
                 >
-                  <div className="font-semibold">{product.name}</div>
-                  <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
-                  <div className="flex justify-between mt-2 text-sm">
-                    <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
-                    <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
-                      Stock: {product.stock_quantity}
-                    </span>
+                  <div className="flex gap-3">
+                    <EntityThumbnail
+                      entityId={product.id}
+                      entityType="product"
+                      imagePath={product.image_path}
+                      size="md"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">{product.name}</div>
+                      <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
+                      <div className="flex justify-between mt-2 text-sm">
+                        <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
+                        <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
+                          Stock: {product.stock_quantity}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </button>
               ))}
@@ -479,13 +490,23 @@ export default function Billing() {
                   className="card text-left hover:-translate-y-0.5 transition"
                   onClick={() => addToCart(product)}
                 >
-                  <div className="font-semibold">{product.name}</div>
-                  <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
-                  <div className="flex justify-between mt-2 text-sm">
-                    <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
-                    <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
-                      Stock: {product.stock_quantity}
-                    </span>
+                  <div className="flex gap-3">
+                    <EntityThumbnail
+                      entityId={product.id}
+                      entityType="product"
+                      imagePath={product.image_path}
+                      size="md"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">{product.name}</div>
+                      <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
+                      <div className="flex justify-between mt-2 text-sm">
+                        <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
+                        <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
+                          Stock: {product.stock_quantity}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </button>
               ))}

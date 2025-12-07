@@ -29,28 +29,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
 
     useEffect(() => {
-        // Check for persisted session
-        const storedUser = localStorage.getItem('user_session');
-        if (storedUser) {
-            try {
-                setUser(JSON.parse(storedUser));
-            } catch (e) {
-                console.error('Failed to parse stored user session', e);
-                localStorage.removeItem('user_session');
-            }
-        }
         setLoading(false);
     }, []);
 
     const login = (userData: User) => {
         setUser(userData);
-        localStorage.setItem('user_session', JSON.stringify(userData));
         router.push('/');
     };
 
     const logout = () => {
         setUser(null);
-        localStorage.removeItem('user_session');
         router.push('/login');
     };
 

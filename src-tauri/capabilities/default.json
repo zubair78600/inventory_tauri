@@ -14,6 +14,14 @@
     "fs:default",
     "fs:allow-download-write",
     "fs:allow-desktop-write",
-    "fs:allow-document-write"
+    "fs:allow-document-write",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    }
   ]
 }

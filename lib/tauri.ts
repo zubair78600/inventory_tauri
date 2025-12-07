@@ -21,6 +21,7 @@ export interface Product {
   supplier_id: number | null;
   created_at: string;
   updated_at: string;
+  image_path: string | null;
 }
 
 export interface CreateProductInput {
@@ -56,6 +57,7 @@ export interface Supplier {
   town: string | null;
   created_at: string;
   updated_at: string;
+  image_path: string | null;
 }
 
 export interface SupplierPayment {
@@ -107,6 +109,7 @@ export interface Customer {
   place: string | null;
   created_at: string;
   updated_at: string;
+  image_path: string | null;
   invoice_count?: number;
   last_billed?: string | null;
 }
@@ -149,6 +152,139 @@ export interface LowStockProduct {
   name: string;
   sku: string;
   stock_quantity: number;
+}
+
+// =============================================
+// NEW ANALYTICS TYPES
+// =============================================
+
+export interface SalesAnalytics {
+  total_revenue: number;
+  total_orders: number;
+  avg_order_value: number;
+  total_tax: number;
+  total_discount: number;
+  gross_profit: number;
+  previous_period_revenue: number;
+  previous_period_orders: number;
+  revenue_change_percent: number;
+  orders_change_percent: number;
+}
+
+export interface RevenueTrendPoint {
+  date: string;
+  revenue: number;
+  order_count: number;
+  avg_order_value: number;
+}
+
+export interface TopProduct {
+  product_id: number;
+  product_name: string;
+  sku: string;
+  revenue: number;
+  quantity_sold: number;
+  order_count: number;
+}
+
+export interface PaymentMethodBreakdown {
+  payment_method: string;
+  total_amount: number;
+  order_count: number;
+  percentage: number;
+}
+
+export interface RegionSales {
+  state: string;
+  district: string | null;
+  revenue: number;
+  order_count: number;
+}
+
+export interface CustomerAnalytics {
+  total_customers: number;
+  new_customers: number;
+  repeat_customers: number;
+  repeat_rate: number;
+  avg_lifetime_value: number;
+}
+
+export interface TopCustomer {
+  customer_id: number;
+  customer_name: string;
+  phone: string | null;
+  total_spent: number;
+  order_count: number;
+  avg_order_value: number;
+}
+
+export interface CustomerTrendPoint {
+  date: string;
+  new_customers: number;
+  cumulative_customers: number;
+}
+
+export interface InventoryHealth {
+  total_products: number;
+  low_stock_count: number;
+  out_of_stock_count: number;
+  healthy_stock_count: number;
+  total_valuation: number;
+  avg_stock_level: number;
+}
+
+export interface LowStockAlert {
+  id: number;
+  name: string;
+  sku: string;
+  stock_quantity: number;
+  selling_price: number | null;
+  avg_daily_sales: number;
+  days_until_stockout: number | null;
+}
+
+export interface PurchaseAnalytics {
+  total_purchases: number;
+  total_paid: number;
+  pending_payments: number;
+  active_suppliers: number;
+  purchase_order_count: number;
+}
+
+export interface CashflowPoint {
+  date: string;
+  sales: number;
+  purchases: number;
+  net: number;
+}
+
+export interface TopSupplier {
+  supplier_id: number;
+  supplier_name: string;
+  total_spent: number;
+  products_count: number;
+  orders_count: number;
+}
+
+export interface StateTax {
+  state: string;
+  tax_amount: number;
+  invoice_count: number;
+}
+
+export interface TaxSummary {
+  total_tax: number;
+  cgst_total: number;
+  sgst_total: number;
+  igst_total: number;
+  by_state: StateTax[];
+}
+
+export interface DiscountAnalysis {
+  total_discounts: number;
+  discount_percentage: number;
+  orders_with_discount: number;
+  avg_discount_per_order: number;
 }
 
 export interface Invoice {
@@ -481,6 +617,127 @@ export const analyticsCommands = {
    */
   getReport: async (id: number): Promise<CustomerReport> => {
     return await invoke<CustomerReport>('get_customer_report', { id });
+  },
+
+  // =============================================
+  // NEW ANALYTICS COMMANDS
+  // =============================================
+
+  /**
+   * Get sales analytics with date filtering and period comparison
+   */
+  getSalesAnalytics: async (startDate: string, endDate: string): Promise<SalesAnalytics> => {
+    return await invoke<SalesAnalytics>('get_sales_analytics', { startDate, endDate });
+  },
+
+  /**
+   * Get revenue trend data for charts
+   */
+  getRevenueTrend: async (
+    startDate: string,
+    endDate: string,
+    granularity: 'daily' | 'weekly' | 'monthly' = 'daily'
+  ): Promise<RevenueTrendPoint[]> => {
+    return await invoke<RevenueTrendPoint[]>('get_revenue_trend', { startDate, endDate, granularity });
+  },
+
+  /**
+   * Get top products by revenue
+   */
+  getTopProducts: async (startDate: string, endDate: string, limit: number = 10): Promise<TopProduct[]> => {
+    return await invoke<TopProduct[]>('get_top_products', { startDate, endDate, limit });
+  },
+
+  /**
+   * Get sales breakdown by payment method
+   */
+  getSalesByPaymentMethod: async (startDate: string, endDate: string): Promise<PaymentMethodBreakdown[]> => {
+    return await invoke<PaymentMethodBreakdown[]>('get_sales_by_payment_method', { startDate, endDate });
+  },
+
+  /**
+   * Get sales by region (state)
+   */
+  getSalesByRegion: async (startDate: string, endDate: string): Promise<RegionSales[]> => {
+    return await invoke<RegionSales[]>('get_sales_by_region', { startDate, endDate });
+  },
+
+  /**
+   * Get customer analytics
+   */
+  getCustomerAnalytics: async (startDate: string, endDate: string): Promise<CustomerAnalytics> => {
+    return await invoke<CustomerAnalytics>('get_customer_analytics', { startDate, endDate });
+  },
+
+  /**
+   * Get top customers by spend
+   */
+  getTopCustomers: async (startDate: string, endDate: string, limit: number = 10): Promise<TopCustomer[]> => {
+    return await invoke<TopCustomer[]>('get_top_customers', { startDate, endDate, limit });
+  },
+
+  /**
+   * Get customer acquisition trend
+   */
+  getCustomerTrend: async (
+    startDate: string,
+    endDate: string,
+    granularity: 'daily' | 'weekly' | 'monthly' = 'daily'
+  ): Promise<CustomerTrendPoint[]> => {
+    return await invoke<CustomerTrendPoint[]>('get_customer_trend', { startDate, endDate, granularity });
+  },
+
+  /**
+   * Get inventory health metrics
+   */
+  getInventoryHealth: async (): Promise<InventoryHealth> => {
+    return await invoke<InventoryHealth>('get_inventory_health');
+  },
+
+  /**
+   * Get low stock alerts with sales velocity
+   */
+  getLowStockAlerts: async (): Promise<LowStockAlert[]> => {
+    return await invoke<LowStockAlert[]>('get_low_stock_alerts');
+  },
+
+  /**
+   * Get purchase analytics
+   */
+  getPurchaseAnalytics: async (startDate: string, endDate: string): Promise<PurchaseAnalytics> => {
+    return await invoke<PurchaseAnalytics>('get_purchase_analytics', { startDate, endDate });
+  },
+
+  /**
+   * Get cashflow trend (sales vs purchases)
+   */
+  getCashflowTrend: async (
+    startDate: string,
+    endDate: string,
+    granularity: 'daily' | 'weekly' | 'monthly' = 'daily'
+  ): Promise<CashflowPoint[]> => {
+    return await invoke<CashflowPoint[]>('get_cashflow_trend', { startDate, endDate, granularity });
+  },
+
+  /**
+   * Get top suppliers by spend
+   */
+  getTopSuppliers: async (startDate: string, endDate: string, limit: number = 10): Promise<TopSupplier[]> => {
+    return await invoke<TopSupplier[]>('get_top_suppliers', { startDate, endDate, limit });
+  },
+
+  /**
+   * Get tax summary (GST breakdown)
+   */
+  getTaxSummary: async (startDate: string, endDate: string): Promise<TaxSummary> => {
+    return await invoke<TaxSummary>('get_tax_summary', { startDate, endDate });
+  },
+
+  /**
+   * Get discount analysis
+   */
+  getDiscountAnalysis: async (startDate: string, endDate: string): Promise<DiscountAnalysis> => {
+    return await invoke<DiscountAnalysis>('get_discount_analysis', { startDate, endDate });
   },
 };
 
@@ -869,5 +1126,201 @@ export const migrationCommands = {
    */
   validateMigration: async (): Promise<ValidationResult> => {
     return await invoke<ValidationResult>('validate_migration');
+  },
+};
+
+// =============================================
+// IMAGE TYPES & COMMANDS
+// =============================================
+
+export interface GoogleImageResult {
+  title: string;
+  link: string;           // Full-size image URL
+  thumbnail_link: string; // Small preview from Google
+  display_link: string;   // Source website
+}
+
+/**
+ * Image Commands
+ * For managing product photos - upload, download from URL, search Google Images
+ */
+export const imageCommands = {
+  /**
+   * Save an uploaded image file for a product
+   * @param productId - The product ID
+   * @param fileData - The image file data as Uint8Array
+   * @param fileExtension - File extension (jpg, png, gif, webp)
+   * @returns The saved image filename
+   */
+  saveProductImage: async (
+    productId: number,
+    fileData: number[],
+    fileExtension: string
+  ): Promise<string> => {
+    return await invoke<string>('save_product_image', {
+      productId,
+      fileData,
+      fileExtension,
+    });
+  },
+
+  /**
+   * Download an image from a URL and save it for a product
+   * @param productId - The product ID
+   * @param imageUrl - The URL to download from
+   * @returns The saved image filename
+   */
+  downloadProductImage: async (
+    productId: number,
+    imageUrl: string
+  ): Promise<string> => {
+    return await invoke<string>('download_product_image', {
+      productId,
+      imageUrl,
+    });
+  },
+
+  /**
+   * Get the full filesystem path for a product's image
+   * @param productId - The product ID
+   * @param thumbnail - Whether to get the thumbnail (80x80) or full image
+   * @returns The full path or null if no image
+   */
+  getProductImagePath: async (
+    productId: number,
+    thumbnail: boolean = false
+  ): Promise<string | null> => {
+    return await invoke<string | null>('get_product_image_path', {
+      productId,
+      thumbnail,
+    });
+  },
+
+  /**
+   * Delete a product's image file
+   * @param productId - The product ID
+   */
+  deleteProductImage: async (productId: number): Promise<void> => {
+    return await invoke<void>('delete_product_image', { productId });
+  },
+
+  /**
+   * Search Google Images for product photos
+   * @param query - Search query (e.g., product name)
+   * @param limit - Max results (1-10, default 10)
+   * @returns Array of image search results
+   */
+  searchGoogleImages: async (
+    query: string,
+    limit: number = 10
+  ): Promise<GoogleImageResult[]> => {
+    return await invoke<GoogleImageResult[]>('search_google_images', {
+      query,
+      limit,
+    });
+  },
+
+  /**
+   * Get the pictures directory path
+   * @returns The full path to the pictures-Inventry folder
+   */
+  getPicturesDirectory: async (): Promise<string> => {
+    return await invoke<string>('get_pictures_directory');
+  },
+
+  /**
+   * Save a cropped image (creates generic backup of original if needed)
+   */
+  saveCroppedImage: async (productId: number, fileData: number[], extension: string): Promise<string> => {
+    return await invoke<string>('save_cropped_image', { productId, fileData, fileExtension: extension });
+  },
+
+  /**
+   * Get the original image path if it exists, otherwise the current image path
+   */
+  getOriginalImagePath: async (productId: number): Promise<string | null> => {
+    return await invoke<string | null>('get_original_image_path', { productId });
+  },
+
+  // Supplier Image Commands
+  saveSupplierImage: async (supplierId: number, fileData: number[], fileExtension: string): Promise<string> => {
+    return await invoke<string>('save_supplier_image', { supplierId, fileData, fileExtension });
+  },
+  getSupplierImagePath: async (supplierId: number, thumbnail: boolean = false): Promise<string | null> => {
+    return await invoke<string | null>('get_supplier_image_path', { supplierId, thumbnail });
+  },
+  deleteSupplierImage: async (supplierId: number): Promise<void> => {
+    return await invoke<void>('delete_supplier_image', { supplierId });
+  },
+
+  // Customer Image Commands
+  saveCustomerImage: async (customerId: number, fileData: number[], fileExtension: string): Promise<string> => {
+    return await invoke<string>('save_customer_image', { customerId, fileData, fileExtension });
+  },
+  getCustomerImagePath: async (customerId: number, thumbnail: boolean = false): Promise<string | null> => {
+    return await invoke<string | null>('get_customer_image_path', { customerId, thumbnail });
+  },
+  deleteCustomerImage: async (customerId: number): Promise<void> => {
+    return await invoke<void>('delete_customer_image', { customerId });
+  },
+};
+
+// =============================================
+// SETTINGS COMMANDS
+// =============================================
+
+/**
+ * Settings Commands
+ * For managing app settings like Google API credentials
+ */
+export const settingsCommands = {
+  /**
+   * Get a single setting value by key
+   * @param key - Setting key (e.g., 'google_api_key', 'google_cx_id')
+   * @returns The setting value or null if not set
+   */
+  get: async (key: string): Promise<string | null> => {
+    return await invoke<string | null>('get_app_setting', { key });
+  },
+
+  /**
+   * Set a setting value (insert or update)
+   * @param key - Setting key
+   * @param value - Setting value
+   */
+  set: async (key: string, value: string): Promise<void> => {
+    return await invoke<void>('set_app_setting', { key, value });
+  },
+
+  /**
+   * Get all settings as a key-value map
+   * @returns Map of all settings
+   */
+  getAll: async (): Promise<Record<string, string>> => {
+    return await invoke<Record<string, string>>('get_all_settings');
+  },
+
+  /**
+   * Delete a setting by key
+   * @param key - Setting key to delete
+   */
+  delete: async (key: string): Promise<void> => {
+    return await invoke<void>('delete_app_setting', { key });
+  },
+
+  /**
+   * Export all settings as JSON string
+   */
+  exportJson: async (): Promise<string> => {
+    return await invoke<string>('export_settings_json');
+  },
+
+  /**
+   * Import settings from JSON string
+   * @param jsonContent - The JSON string to import
+   * @returns Number of settings imported
+   */
+  importJson: async (jsonContent: string): Promise<number> => {
+    return await invoke<number>('import_settings_json', { jsonContent });
   },
 };

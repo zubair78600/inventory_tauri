@@ -14,9 +14,10 @@ import {
   Truck,
   Users,
   Receipt,
-  Settings,
+  // Settings icon removed as it moved to header
 } from 'lucide-react';
 
+// PasswordModal removed from here
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Sidebar() {
@@ -33,7 +34,7 @@ export default function Sidebar() {
     { href: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory' },
     { href: '/suppliers', label: 'Suppliers', icon: Truck, permission: 'suppliers' },
     { href: '/reports', label: 'Reports', icon: BarChart3, permission: 'reports' },
-    { href: '/settings', label: 'Settings', icon: Settings, permission: 'settings' },
+    // Settings moved to Header
   ];
 
   const links = useMemo(
@@ -43,6 +44,13 @@ export default function Sidebar() {
 
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+
+  // Security logic removed from here
+
+  const handleNavClick = (e: React.MouseEvent, href: string, permission: string) => {
+    // Normal navigation
+    setIsOpen(false);
+  };
 
   useEffect(() => {
     links.forEach((link) => {
@@ -104,7 +112,7 @@ export default function Sidebar() {
                 href={link.href}
                 className={`nav-link ${active ? 'active' : ''} ${isCollapsed ? 'justify-center px-3' : ''
                   }`}
-                onClick={() => setIsOpen(false)}
+                onClick={(e) => handleNavClick(e, link.href, link.permission)}
                 title={isCollapsed ? link.label : undefined}
               >
                 <Icon size={18} className={active ? 'text-primary' : 'text-slate-400'} />

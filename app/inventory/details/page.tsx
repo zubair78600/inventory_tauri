@@ -11,6 +11,10 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { ArrowLeft, Calendar, Package, Tag, BarChart3, FileText, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
+import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
+import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
+
+
 
 function InventoryDetailsContent() {
     const searchParams = useSearchParams();
@@ -36,6 +40,7 @@ function InventoryDetailsContent() {
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [showPdfPreview, setShowPdfPreview] = useState(false);
     const [pdfFileName, setPdfFileName] = useState('');
+    const [showImagePreview, setShowImagePreview] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -181,11 +186,12 @@ function InventoryDetailsContent() {
     // Since we only have the invoice list, we can show "Invoices containing this item"
 
     return (
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="-mt-8 pt-2.5 px-6 pb-6 space-y-6 max-w-7xl mx-auto">
             {/* Header */}
-            <div className="flex items-start justify-between">
-                <div>
-                    <div className="flex items-center gap-2 mb-2">
+            <div>
+                {/* Row 1: Buttons and Date */}
+                <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-2">
                         <Button variant="ghost" onClick={() => router.back()} className="pl-0 hover:pl-2 transition-all">
                             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Inventory
                         </Button>
@@ -202,23 +208,37 @@ function InventoryDetailsContent() {
                             Export PDF
                         </Button>
                     </div>
-                    <h1 className="text-3xl font-bold text-slate-900">{product.name}</h1>
-                    <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
-                        <div className="flex items-center gap-1">
-                            <Tag className="w-4 h-4" /> SKU: {product.sku}
+                    <div className="text-right text-sm text-slate-500">
+                        <div className="flex items-center justify-end gap-1">
+                            <Calendar className="w-4 h-4" />
+                            Added {new Date(product.created_at).toLocaleDateString()}
                         </div>
-                        {product.supplier_id && (
-                            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-600" onClick={() => router.push(`/suppliers/details?id=${product.supplier_id}`)}>
-                                <Package className="w-4 h-4" /> Supplier #{product.supplier_id}
-                            </div>
-                        )}
                     </div>
                 </div>
-                <div className="text-right text-sm text-slate-500">
-                    <div className="flex items-center justify-end gap-1">
-                        <Calendar className="w-4 h-4" />
-                        Added {new Date(product.created_at).toLocaleDateString()}
+
+                {/* Row 2: Title and Image */}
+                <div className="flex items-center justify-between gap-5">
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900">{product.name}</h1>
+                        <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
+                            <div className="flex items-center gap-1">
+                                <Tag className="w-4 h-4" /> SKU: {product.sku}
+                            </div>
+                            {product.supplier_id && (
+                                <div className="flex items-center gap-1 cursor-pointer hover:text-sky-600" onClick={() => router.push(`/suppliers/details?id=${product.supplier_id}`)}>
+                                    <Package className="w-4 h-4" /> Supplier #{product.supplier_id}
+                                </div>
+                            )}
+                        </div>
                     </div>
+                    <EntityThumbnail
+                        entityId={product.id}
+                        entityType="product"
+                        imagePath={product.image_path}
+                        size="lg"
+                        className="w-24 h-24 rounded-lg shadow-sm border border-slate-200"
+                        onClick={() => setShowImagePreview(true)}
+                    />
                 </div>
             </div>
 
@@ -276,166 +296,168 @@ function InventoryDetailsContent() {
             </div>
 
             {/* Payment History Section (per product/supplier) */}
-            {product.supplier_id && (
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-semibold text-slate-900">Payment History</h2>
-                        <Button
-                            size="sm"
-                            variant={showPaymentForm ? 'outline' : 'default'}
-                            onClick={async () => {
-                                if (isCleared && paymentSummary) {
-                                    await ask(
-                                        `All payments are already cleared for this product.\n\nTotal Paid: ₹${paymentSummary.total_paid.toFixed(0)}\nTotal Payable: ₹${paymentSummary.total_payable.toFixed(0)}`,
-                                        {
-                                            title: 'Payments Cleared',
-                                            kind: 'info',
-                                            okLabel: 'OK',
-                                        },
-                                    );
-                                    return;
-                                }
-                                setShowPaymentForm(!showPaymentForm);
-                            }}
-                        >
-                            {showPaymentForm ? 'Cancel' : 'Add Payment'}
-                        </Button>
-                    </div>
-
-                    {showPaymentForm && (
-                        <Card className="p-4 bg-white border-slate-200 shadow-sm">
-                            {paymentSummary && (
-                                <div className="mb-3 text-xs text-slate-500 space-y-1">
-                                    <div>
-                                        Already paid:{' '}
-                                        <span className="font-semibold text-slate-700">
-                                            ₹{paymentSummary.total_paid.toFixed(0)}
-                                        </span>{' '}
-                                        of ₹{paymentSummary.total_payable.toFixed(0)}
-                                    </div>
-                                    {paymentSummary.pending_amount > 0 && (
-                                        <div className="text-red-600 font-semibold">
-                                            Pending: ₹{paymentSummary.pending_amount.toFixed(0)}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                    <label className="form-label">
-                                        Amount
-                                        <span className="ml-2 text-xs text-slate-400">
-                                            Stock Amount (
-                                            ₹{(purchaseSummary?.total_value ?? 0).toFixed(0)})
-                                        </span>
-                                    </label>
-                                    <Input
-                                        type="number"
-                                        value={newPayment.amount}
-                                        onChange={(e) =>
-                                            setNewPayment({ ...newPayment, amount: e.target.value })
-                                        }
-                                    />
-                                </div>
-                                <div>
-                                    <label className="form-label">Payment Mode</label>
-                                    <Select
-                                        value={newPayment.payment_method}
-                                        onChange={(e) =>
-                                            setNewPayment({
-                                                ...newPayment,
-                                                payment_method: e.target.value,
-                                            })
-                                        }
-                                    >
-                                        <option value="">Select mode</option>
-                                        <option value="Cash">Cash</option>
-                                        <option value="UPI">UPI</option>
-                                        <option value="Card">Card</option>
-                                        <option value="Bank Transfer">Bank Transfer</option>
-                                        <option value="Other">Other</option>
-                                    </Select>
-                                </div>
-                                <div>
-                                    <label className="form-label">Note</label>
-                                    <Input
-                                        value={newPayment.note}
-                                        onChange={(e) =>
-                                            setNewPayment({ ...newPayment, note: e.target.value })
-                                        }
-                                    />
-                                </div>
-                            </div>
+            {
+                product.supplier_id && (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-semibold text-slate-900">Payment History</h2>
                             <Button
-                                className="mt-4"
-                                disabled={savingPayment}
-                                onClick={handleAddPayment}
+                                size="sm"
+                                variant={showPaymentForm ? 'outline' : 'default'}
+                                onClick={async () => {
+                                    if (isCleared && paymentSummary) {
+                                        await ask(
+                                            `All payments are already cleared for this product.\n\nTotal Paid: ₹${paymentSummary.total_paid.toFixed(0)}\nTotal Payable: ₹${paymentSummary.total_payable.toFixed(0)}`,
+                                            {
+                                                title: 'Payments Cleared',
+                                                kind: 'info',
+                                                okLabel: 'OK',
+                                            },
+                                        );
+                                        return;
+                                    }
+                                    setShowPaymentForm(!showPaymentForm);
+                                }}
                             >
-                                {savingPayment ? 'Saving...' : 'Save Payment'}
+                                {showPaymentForm ? 'Cancel' : 'Add Payment'}
                             </Button>
-                        </Card>
-                    )}
-
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="grid grid-cols-[1.7fr,1fr,1fr,2fr,0.9fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
-                            <div>Paid At</div>
-                            <div>Amount</div>
-                            <div>Mode</div>
-                            <div>Note</div>
-                            <div>Actions</div>
                         </div>
-                        <div className="divide-y divide-slate-100">
-                            {payments.map((payment) => (
-                                <div
-                                    key={payment.id}
-                                    className="grid grid-cols-[1.7fr,1fr,1fr,2fr,0.9fr] gap-4 p-3 items-center text-sm"
-                                >
-                                    <div className="text-slate-500 text-center">
-                                        {new Date(payment.paid_at).toLocaleString()}
+
+                        {showPaymentForm && (
+                            <Card className="p-4 bg-white border-slate-200 shadow-sm">
+                                {paymentSummary && (
+                                    <div className="mb-3 text-xs text-slate-500 space-y-1">
+                                        <div>
+                                            Already paid:{' '}
+                                            <span className="font-semibold text-slate-700">
+                                                ₹{paymentSummary.total_paid.toFixed(0)}
+                                            </span>{' '}
+                                            of ₹{paymentSummary.total_payable.toFixed(0)}
+                                        </div>
+                                        {paymentSummary.pending_amount > 0 && (
+                                            <div className="text-red-600 font-semibold">
+                                                Pending: ₹{paymentSummary.pending_amount.toFixed(0)}
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="font-medium text-slate-900 text-center">
-                                        ₹{payment.amount.toFixed(0)}
+                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="form-label">
+                                            Amount
+                                            <span className="ml-2 text-xs text-slate-400">
+                                                Stock Amount (
+                                                ₹{(purchaseSummary?.total_value ?? 0).toFixed(0)})
+                                            </span>
+                                        </label>
+                                        <Input
+                                            type="number"
+                                            value={newPayment.amount}
+                                            onChange={(e) =>
+                                                setNewPayment({ ...newPayment, amount: e.target.value })
+                                            }
+                                        />
                                     </div>
-                                    <div className="text-slate-500 text-center">
-                                        {payment.payment_method || '-'}
-                                    </div>
-                                    <div className="text-slate-500 text-center">
-                                        {payment.note || '-'}
-                                    </div>
-                                    <div className="text-center">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                                            onClick={async () => {
-                                                const confirmed = await ask(
-                                                    'Are you sure you want to delete this payment entry?',
-                                                    {
-                                                        title: 'Delete Payment',
-                                                        kind: 'warning',
-                                                        okLabel: 'Delete',
-                                                        cancelLabel: 'Cancel',
-                                                    },
-                                                );
-                                                if (!confirmed) return;
-                                                await supplierCommands.deletePayment(payment.id);
-                                                await loadData();
-                                            }}
+                                    <div>
+                                        <label className="form-label">Payment Mode</label>
+                                        <Select
+                                            value={newPayment.payment_method}
+                                            onChange={(e) =>
+                                                setNewPayment({
+                                                    ...newPayment,
+                                                    payment_method: e.target.value,
+                                                })
+                                            }
                                         >
-                                            Delete
-                                        </Button>
+                                            <option value="">Select mode</option>
+                                            <option value="Cash">Cash</option>
+                                            <option value="UPI">UPI</option>
+                                            <option value="Card">Card</option>
+                                            <option value="Bank Transfer">Bank Transfer</option>
+                                            <option value="Other">Other</option>
+                                        </Select>
+                                    </div>
+                                    <div>
+                                        <label className="form-label">Note</label>
+                                        <Input
+                                            value={newPayment.note}
+                                            onChange={(e) =>
+                                                setNewPayment({ ...newPayment, note: e.target.value })
+                                            }
+                                        />
                                     </div>
                                 </div>
-                            ))}
-                            {payments.length === 0 && (
-                                <div className="p-6 text-center text-slate-500">
-                                    No payments recorded for this product yet.
-                                </div>
-                            )}
+                                <Button
+                                    className="mt-4"
+                                    disabled={savingPayment}
+                                    onClick={handleAddPayment}
+                                >
+                                    {savingPayment ? 'Saving...' : 'Save Payment'}
+                                </Button>
+                            </Card>
+                        )}
+
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="grid grid-cols-[1.7fr,1fr,1fr,2fr,0.9fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
+                                <div>Paid At</div>
+                                <div>Amount</div>
+                                <div>Mode</div>
+                                <div>Note</div>
+                                <div>Actions</div>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {payments.map((payment) => (
+                                    <div
+                                        key={payment.id}
+                                        className="grid grid-cols-[1.7fr,1fr,1fr,2fr,0.9fr] gap-4 p-3 items-center text-sm"
+                                    >
+                                        <div className="text-slate-500 text-center">
+                                            {new Date(payment.paid_at).toLocaleString()}
+                                        </div>
+                                        <div className="font-medium text-slate-900 text-center">
+                                            ₹{payment.amount.toFixed(0)}
+                                        </div>
+                                        <div className="text-slate-500 text-center">
+                                            {payment.payment_method || '-'}
+                                        </div>
+                                        <div className="text-slate-500 text-center">
+                                            {payment.note || '-'}
+                                        </div>
+                                        <div className="text-center">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                                onClick={async () => {
+                                                    const confirmed = await ask(
+                                                        'Are you sure you want to delete this payment entry?',
+                                                        {
+                                                            title: 'Delete Payment',
+                                                            kind: 'warning',
+                                                            okLabel: 'Delete',
+                                                            cancelLabel: 'Cancel',
+                                                        },
+                                                    );
+                                                    if (!confirmed) return;
+                                                    await supplierCommands.deletePayment(payment.id);
+                                                    await loadData();
+                                                }}
+                                            >
+                                                Delete
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {payments.length === 0 && (
+                                    <div className="p-6 text-center text-slate-500">
+                                        No payments recorded for this product yet.
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Purchase History Section */}
             <div className="space-y-4">
@@ -551,7 +573,19 @@ function InventoryDetailsContent() {
                 url={pdfUrl}
                 fileName={pdfFileName}
             />
-        </div>
+            {
+                product && (
+                    <EntityImagePreviewModal
+                        open={showImagePreview}
+                        onOpenChange={setShowImagePreview}
+                        entityId={product.id}
+                        entityType="product"
+                        entityName={product.name}
+                        onImageUpdate={(path) => product && setProduct({ ...product, image_path: path })}
+                    />
+                )
+            }
+        </div >
     );
 }
 

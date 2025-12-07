@@ -396,6 +396,65 @@ impl Database {
         conn.execute_batch(PURCHASE_ORDER_MIGRATION_SQL)?;
         log::info!("Purchase Order and FIFO migration completed successfully");
 
+        // Migration: Create app_settings table for Google API configuration
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            [],
+        )?;
+        log::info!("app_settings table created/verified");
+
+        // Migration: Add image_path column to products
+        let image_path_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('products') WHERE name = 'image_path'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !image_path_exists {
+            log::info!("Migrating: Adding image_path column to products table");
+            conn.execute("ALTER TABLE products ADD COLUMN image_path TEXT", [])?;
+        }
+
+        // Migration: Add image_path to suppliers
+        let supplier_image_path_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('suppliers') WHERE name = 'image_path'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !supplier_image_path_exists {
+            log::info!("Migrating: Adding image_path column to suppliers table");
+            conn.execute("ALTER TABLE suppliers ADD COLUMN image_path TEXT", [])?;
+        }
+
+        // Migration: Add image_path to customers
+        let customer_image_path_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('customers') WHERE name = 'image_path'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !customer_image_path_exists {
+            log::info!("Migrating: Adding image_path column to customers table");
+            conn.execute("ALTER TABLE customers ADD COLUMN image_path TEXT", [])?;
+        }
+
+        // Auto-fix: Ensure Admin password is the specific code requested
+        conn.execute(
+            "UPDATE users SET password = ?1 WHERE username = 'Admin' AND password = ?2",
+            ("1014209932", "admin"),
+        )?;
+
         Ok(())
     }
 }
