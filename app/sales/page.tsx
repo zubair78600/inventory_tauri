@@ -5,10 +5,14 @@ import { useState, useDeferredValue } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SearchPill } from '@/components/shared/SearchPill';
-import { invoiceCommands, customerCommands, type PaginatedResult, type Customer } from '@/lib/tauri';
+import { invoiceCommands, customerCommands, type PaginatedResult, type Customer, type UpdateInvoiceInput } from '@/lib/tauri';
 import { generateInvoicePDF } from '@/lib/pdf-generator';
-import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
+import { Pencil, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 
 type InvoiceItem = {
   id: number;
@@ -33,6 +37,19 @@ export default function Sales() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
+
+  // Edit/Delete State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<UpdateInvoiceInput>>({});
+  const queryClient = useQueryClient();
+
+  // Fetch customers for edit dropdown
+  const { data: customersData } = useQuery({
+    queryKey: ['customers-list'],
+    queryFn: () => customerCommands.getAll(1, 1000), // Fetch all reasonable amount
+  });
+  const customers = customersData?.items ?? [];
 
   // Fetch sales with infinite query for pagination + search
   const {
@@ -96,6 +113,44 @@ export default function Sales() {
   };
 
   const totalCount = data?.pages[0]?.total_count ?? 0;
+
+  const openEditDialog = () => {
+    if (!selected) return;
+    setEditForm({
+      id: selected.id,
+      customer_id: selected.customer_id,
+      payment_method: selected.payment_method,
+      created_at: selected.created_at,
+      status: 'paid', // Default to paid if not present, though we don't really use it yet
+    });
+    setIsEditOpen(true);
+  };
+
+  const handleUpdateInvoice = async () => {
+    if (!editForm.id) return;
+    try {
+      await invoiceCommands.update(editForm as UpdateInvoiceInput);
+      await queryClient.invalidateQueries({ queryKey: ['sales'] });
+      await queryClient.invalidateQueries({ queryKey: ['invoice-details', editForm.id] });
+      setIsEditOpen(false);
+    } catch (error) {
+      console.error('Failed to update invoice:', error);
+      alert('Failed to update invoice');
+    }
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!selected?.id) return;
+    try {
+      await invoiceCommands.delete(selected.id);
+      await queryClient.invalidateQueries({ queryKey: ['sales'] });
+      setSelectedId(null);
+      setIsDeleteOpen(false);
+    } catch (error) {
+      console.error('Failed to delete invoice:', error);
+      alert('Failed to delete invoice');
+    }
+  };
 
   return (
     <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col relative">
@@ -179,46 +234,56 @@ export default function Sales() {
                 </p>
               </div>
               {selected && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    if (!selected) return;
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (!selected) return;
 
-                    try {
-                      // Fetch full invoice details
-                      const fullInvoice = await invoiceCommands.getById(selected.id);
+                      try {
+                        // Fetch full invoice details
+                        const fullInvoice = await invoiceCommands.getById(selected.id);
 
-                      let customer = null;
-                      if (selected.customer_id) {
-                        try {
-                          customer = await customerCommands.getById(selected.customer_id);
-                        } catch (e) {
-                          console.error("Could not fetch customer details", e);
+                        let customer = null;
+                        if (selected.customer_id) {
+                          try {
+                            customer = await customerCommands.getById(selected.customer_id);
+                          } catch (e) {
+                            console.error("Could not fetch customer details", e);
+                            customer = {
+                              name: selected.customer_name || 'Customer',
+                              phone: selected.customer_phone,
+                            } as unknown as Customer;
+                          }
+                        } else if (selected.customer_name) {
                           customer = {
-                            name: selected.customer_name || 'Customer',
+                            name: selected.customer_name,
                             phone: selected.customer_phone,
                           } as unknown as Customer;
                         }
-                      } else if (selected.customer_name) {
-                        customer = {
-                          name: selected.customer_name,
-                          phone: selected.customer_phone,
-                        } as unknown as Customer;
-                      }
 
-                      const url = generateInvoicePDF(fullInvoice.invoice, fullInvoice.items, customer);
-                      setPdfUrl(url);
-                      setPdfFileName(`Invoice_${selected.invoice_number}.pdf`);
-                      setShowPdfPreview(true);
-                    } catch (error) {
-                      console.error("Error generating PDF:", error);
-                      alert("Failed to generate PDF");
-                    }
-                  }}
-                >
-                  Download PDF
-                </Button>
+                        const url = generateInvoicePDF(fullInvoice.invoice, fullInvoice.items, customer);
+                        setPdfUrl(url);
+                        setPdfFileName(`Invoice_${selected.invoice_number}.pdf`);
+                        setShowPdfPreview(true);
+                      } catch (error) {
+                        console.error("Error generating PDF:", error);
+                        alert("Failed to generate PDF");
+                      }
+                    }}
+                  >
+                    Download PDF
+                  </Button>
+                  <div className="flex bg-slate-100 dark:bg-slate-800 rounded-md p-1 gap-1">
+                    <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-500 hover:text-blue-600" onClick={openEditDialog}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-500 hover:text-red-600" onClick={() => setIsDeleteOpen(true)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           </CardHeader>
@@ -379,6 +444,71 @@ export default function Sales() {
         url={pdfUrl}
         fileName={pdfFileName}
       />
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Customer</label>
+              <Select
+                value={editForm.customer_id?.toString() || ''}
+                onChange={(e) => setEditForm(prev => ({ ...prev, customer_id: Number(e.target.value) || null }))}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+              >
+                <option value="">Select Customer</option>
+                {customers.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Payment Method</label>
+              <Select
+                value={editForm.payment_method || ''}
+                onChange={(e) => setEditForm(prev => ({ ...prev, payment_method: e.target.value }))}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+              >
+                <option value="cash">Cash</option>
+                <option value="upi">UPI</option>
+                <option value="card">Card</option>
+                <option value="bank_transfer">Bank Transfer</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Date</label>
+              <Input
+                type="datetime-local"
+                value={editForm.created_at ? new Date(editForm.created_at).toISOString().slice(0, 16) : ''}
+                onChange={(e) => setEditForm(prev => ({ ...prev, created_at: new Date(e.target.value).toISOString() }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateInvoice}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-slate-500">
+            Are you sure you want to delete this invoice? This will restore stock quantities. This action cannot be undone.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteInvoice}>Delete Invoice</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div >
   );
 }

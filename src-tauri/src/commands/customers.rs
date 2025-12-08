@@ -11,6 +11,9 @@ pub struct CreateCustomerInput {
     pub phone: Option<String>,
     pub address: Option<String>,
     pub place: Option<String>,
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,6 +24,9 @@ pub struct UpdateCustomerInput {
     pub phone: Option<String>,
     pub address: Option<String>,
     pub place: Option<String>,
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,7 +56,7 @@ pub fn get_customers(
     let total_count: i64;
 
     let base_query = "
-        SELECT c.id, c.name, c.email, c.phone, c.address, c.place, c.created_at, c.updated_at,
+        SELECT c.id, c.name, c.email, c.phone, c.address, c.place, c.state, c.district, c.town, c.created_at, c.updated_at,
                COUNT(i.id) as invoice_count,
                MAX(i.created_at) as last_billed
         FROM customers c
@@ -86,11 +92,14 @@ pub fn get_customers(
                         phone: row.get(3)?,
                         address: row.get(4)?,
                         place: row.get(5)?,
-                        created_at: row.get(6)?,
-                        updated_at: row.get(7)?,
+                        state: row.get(6)?,
+                        district: row.get(7)?,
+                        town: row.get(8)?,
+                        created_at: row.get(9)?,
+                        updated_at: row.get(10)?,
                     },
-                    invoice_count: row.get(8)?,
-                    last_billed: row.get(9)?,
+                    invoice_count: row.get(11)?,
+                    last_billed: row.get(12)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -118,11 +127,14 @@ pub fn get_customers(
                         phone: row.get(3)?,
                         address: row.get(4)?,
                         place: row.get(5)?,
-                        created_at: row.get(6)?,
-                        updated_at: row.get(7)?,
+                        state: row.get(6)?,
+                        district: row.get(7)?,
+                        town: row.get(8)?,
+                        created_at: row.get(9)?,
+                        updated_at: row.get(10)?,
                     },
-                    invoice_count: row.get(8)?,
-                    last_billed: row.get(9)?,
+                    invoice_count: row.get(11)?,
+                    last_billed: row.get(12)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -148,7 +160,7 @@ pub fn get_customer(id: i32, db: State<Database>) -> Result<Customer, String> {
 
     let customer = conn
         .query_row(
-            "SELECT id, name, email, phone, address, place, created_at, updated_at FROM customers WHERE id = ?1",
+            "SELECT id, name, email, phone, address, place, state, district, town, created_at, updated_at FROM customers WHERE id = ?1",
             [id],
             |row| {
                 Ok(Customer {
@@ -158,8 +170,11 @@ pub fn get_customer(id: i32, db: State<Database>) -> Result<Customer, String> {
                     phone: row.get(3)?,
                     address: row.get(4)?,
                     place: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    state: row.get(6)?,
+                    district: row.get(7)?,
+                    town: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             },
         )
@@ -168,18 +183,37 @@ pub fn get_customer(id: i32, db: State<Database>) -> Result<Customer, String> {
     Ok(customer)
 }
 
+/// Helper to validate phone number (must be 10 digits)
+fn validate_phone(phone: &Option<String>) -> Result<(), String> {
+    if let Some(p) = phone {
+        // Remove spaces/dashes just in case, though frontend sends clean strings usually.
+        // Actually, let's strict validate exactly what we receive to match frontend "10 digits" rule.
+        // Frontend Regex: ^\d{10}$
+        
+        // Check length and numeric
+        let is_valid = p.len() == 10 && p.chars().all(|c| c.is_digit(10));
+        
+        if !is_valid {
+            return Err("Phone number must be exactly 10 digits".to_string());
+        }
+    }
+    Ok(())
+}
+
 /// Create a new customer
 #[tauri::command]
 pub fn create_customer(input: CreateCustomerInput, db: State<Database>) -> Result<Customer, String> {
     log::info!("create_customer called with: {:?}", input);
+
+    validate_phone(&input.phone)?;
 
     let conn = db.get_conn()?;
 
     let now = Utc::now().to_rfc3339();
 
     conn.execute(
-        "INSERT INTO customers (name, email, phone, address, place, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        (&input.name, &input.email, &input.phone, &input.address, &input.place, &now, &now),
+        "INSERT INTO customers (name, email, phone, address, place, state, district, town, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        (&input.name, &input.email, &input.phone, &input.address, &input.place, &input.state, &input.district, &input.town, &now, &now),
     )
     .map_err(|e| format!("Failed to create customer: {}", e))?;
 
@@ -192,6 +226,9 @@ pub fn create_customer(input: CreateCustomerInput, db: State<Database>) -> Resul
         phone: input.phone,
         address: input.address,
         place: input.place,
+        state: input.state,
+        district: input.district,
+        town: input.town,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -205,14 +242,17 @@ pub fn create_customer(input: CreateCustomerInput, db: State<Database>) -> Resul
 pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Result<Customer, String> {
     log::info!("update_customer called with: {:?}", input);
 
+    validate_phone(&input.phone)?;
+
+
     let conn = db.get_conn()?;
 
     let now = Utc::now().to_rfc3339();
 
     let rows_affected = conn
         .execute(
-            "UPDATE customers SET name = ?1, email = ?2, phone = ?3, address = ?4, place = ?5, updated_at = ?6 WHERE id = ?7",
-            (&input.name, &input.email, &input.phone, &input.address, &input.place, &now, input.id),
+            "UPDATE customers SET name = ?1, email = ?2, phone = ?3, address = ?4, place = ?5, state = ?6, district = ?7, town = ?8, updated_at = ?9 WHERE id = ?10",
+            (&input.name, &input.email, &input.phone, &input.address, &input.place, &input.state, &input.district, &input.town, &now, input.id),
         )
         .map_err(|e| format!("Failed to update customer: {}", e))?;
 
@@ -236,6 +276,9 @@ pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Resul
         phone: input.phone,
         address: input.address,
         place: input.place,
+        state: input.state,
+        district: input.district,
+        town: input.town,
         created_at,
         updated_at: now,
     };
@@ -253,7 +296,7 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
 
     // Get customer data before deletion for audit trail
     let customer = conn.query_row(
-        "SELECT id, name, email, phone, address, place, created_at, updated_at FROM customers WHERE id = ?1",
+        "SELECT id, name, email, phone, address, place, state, district, town, created_at, updated_at FROM customers WHERE id = ?1",
         [id],
         |row| {
             Ok(Customer {
@@ -263,8 +306,11 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
                 phone: row.get(3)?,
                 address: row.get(4)?,
                 place: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                state: row.get(6)?,
+                district: row.get(7)?,
+                town: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
             })
         },
     )
@@ -294,6 +340,7 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
                 customer_name: None,
                 customer_phone: None,
                 item_count: None,
+                quantity: None,
             })
         }).map_err(|e| e.to_string())?;
 

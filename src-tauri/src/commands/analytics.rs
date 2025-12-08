@@ -342,6 +342,9 @@ pub fn customer_search(query: String, db: State<Database>) -> Result<Vec<Custome
                 phone: row.get(3)?,
                 address: row.get(4)?,
                 place: row.get(5)?,
+                state: None, // Not fetched in this query
+                district: None,
+                town: None,
                 created_at: row.get(6)?,
                 updated_at: row.get(7)?,
             })
@@ -447,8 +450,11 @@ pub fn get_customer_report(id: i32, db: State<Database>) -> Result<CustomerRepor
                     phone: row.get(3)?,
                     address: row.get(4)?,
                     place: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                state: None,
+                district: None,
+                town: None,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
                 })
             },
         )

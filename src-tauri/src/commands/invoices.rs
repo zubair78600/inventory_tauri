@@ -21,7 +21,17 @@ pub struct CreateInvoiceInput {
     pub payment_method: Option<String>,
     pub state: Option<String>,
     pub district: Option<String>,
+
     pub town: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateInvoiceInput {
+    pub id: i32,
+    pub customer_id: Option<i32>,
+    pub payment_method: Option<String>,
+    pub created_at: Option<String>,
+    pub status: Option<String>, // Reserved for future use (e.g., 'paid', 'void')
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -147,6 +157,7 @@ pub fn get_invoices(
                 customer_name: row.get(16)?,
                 customer_phone: row.get(17)?,
                 item_count: row.get(18)?,
+                quantity: None,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -172,7 +183,7 @@ pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<V
 
     let mut stmt = conn
         .prepare(
-            "SELECT DISTINCT i.id, i.invoice_number, i.customer_id, i.total_amount, i.tax_amount, i.discount_amount, i.payment_method, i.created_at, i.cgst_amount, i.fy_year, i.gst_rate, i.igst_amount, i.sgst_amount, i.state, i.district, i.town
+            "SELECT i.id, i.invoice_number, i.customer_id, i.total_amount, i.tax_amount, i.discount_amount, i.payment_method, i.created_at, i.cgst_amount, i.fy_year, i.gst_rate, i.igst_amount, i.sgst_amount, i.state, i.district, i.town, ii.quantity
              FROM invoices i
              JOIN invoice_items ii ON i.id = ii.invoice_id
              WHERE ii.product_id = ?1
@@ -202,6 +213,7 @@ pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<V
                 customer_name: None,
                 customer_phone: None,
                 item_count: None,
+                quantity: Some(row.get(16)?),
             })
         })
         .map_err(|e| e.to_string())?;
@@ -257,6 +269,7 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
                     customer_name: row.get(16)?,
                     customer_phone: row.get(17)?,
                     item_count: row.get(18)?,
+                    quantity: None,
                 })
             },
         )
@@ -382,10 +395,13 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
         }
     }
 
-    // Calculate total amount
-    let total_amount: f64 = input.items.iter().map(|item| item.unit_price * item.quantity as f64).sum();
+    // Calculate total amount (Final Payable)
+    let items_total: f64 = input.items.iter().map(|item| item.unit_price * item.quantity as f64).sum();
     let tax_amount = input.tax_amount.unwrap_or(0.0);
     let discount_amount = input.discount_amount.unwrap_or(0.0);
+    
+    // Final Amount = (Items Total + Tax) - Discount
+    let total_amount = items_total + tax_amount - discount_amount;
 
     // Generate invoice number - get the highest number and increment
     let next_number: i32 = conn
@@ -469,13 +485,68 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
         customer_name: None,
         customer_phone: None,
         item_count: Some(input.items.len() as i32),
+        quantity: None,
     };
 
     log::info!("Created invoice with id: {}", invoice_id);
     Ok(invoice)
 }
 
-/// Delete an invoice and restore stock
+
+
+/// Update an invoice (Metadata only)
+#[tauri::command]
+pub fn update_invoice(input: UpdateInvoiceInput, db: State<Database>) -> Result<Invoice, String> {
+    log::info!("update_invoice called with id: {}", input.id);
+
+    let mut conn = db.get_conn()?;
+
+    let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    // Prepare update query dynamically based on inputs
+    let mut updates = Vec::new();
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if let Some(cid) = input.customer_id {
+        updates.push("customer_id = ?");
+        params.push(Box::new(cid));
+    }
+    if let Some(pm) = input.payment_method {
+        updates.push("payment_method = ?");
+        params.push(Box::new(pm));
+    }
+    if let Some(created_at) = input.created_at {
+        updates.push("created_at = ?");
+        params.push(Box::new(created_at));
+    }
+
+    if updates.is_empty() {
+        return Err("No fields to update".to_string());
+    }
+
+    // Add ID to params
+    params.push(Box::new(input.id));
+
+    let query = format!("UPDATE invoices SET {} WHERE id = ?", updates.join(", "));
+    
+    // Rusqlite params
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+    let rows_affected = tx.execute(&query, rusqlite::params_from_iter(param_refs.iter()))
+        .map_err(|e| format!("Failed to update invoice: {}", e))?;
+
+    if rows_affected == 0 {
+        return Err(format!("Invoice with id {} not found", input.id));
+    }
+
+    tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
+
+    // Fetch and return updated invoice (skipping extended details for simplicity, or reusing existing query)
+    let invoice = get_invoice(input.id, db)?.invoice;
+    Ok(invoice)
+}
+
+/// Delete an invoice and restore inventory
 #[tauri::command]
 pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
     log::info!("delete_invoice called with id: {}", id);
@@ -483,6 +554,7 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
     let mut conn = db.get_conn()?;
 
     // Get invoice data before deletion for audit trail
+    // We fetch a simple Invoice struct
     let invoice = conn.query_row(
         "SELECT id, invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, cgst_amount, fy_year, gst_rate, igst_amount, sgst_amount, state, district, town FROM invoices WHERE id = ?1",
         [id],
@@ -507,32 +579,29 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
                 customer_name: None,
                 customer_phone: None,
                 item_count: None,
+                quantity: None,
             })
         },
     )
     .map_err(|e| format!("Invoice with id {} not found: {}", id, e))?;
 
-    // Get invoice items before deletion (scoped to release borrow before transaction)
-    let items = {
-        let mut stmt = conn
-            .prepare("SELECT product_id, quantity FROM invoice_items WHERE invoice_id = ?1")
-            .map_err(|e| e.to_string())?;
-
-        let items_iter = stmt
-            .query_map([id], |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)))
-            .map_err(|e| e.to_string())?;
-
-        let mut items = Vec::new();
-        for item in items_iter {
-            items.push(item.map_err(|e| e.to_string())?);
-        }
-        items
-    };
-
-    // Start transaction
     let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
 
-    // Save to deleted_items
+    // 1. Get invoice items to identify what products need restocking
+    let items: Vec<(i32, i32)> = {
+        let mut stmt = tx.prepare("SELECT product_id, quantity FROM invoice_items WHERE invoice_id = ?")
+            .map_err(|e| e.to_string())?;
+        
+        let rows = stmt.query_map([id], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
+
+    // 2. Save to deleted_items (Audit Trail)
     let invoice_json = serde_json::to_string(&invoice).map_err(|e| format!("Failed to serialize invoice: {}", e))?;
     let now = Utc::now().to_rfc3339();
     tx.execute(
@@ -541,31 +610,24 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
     )
     .map_err(|e| format!("Failed to save to trash: {}", e))?;
 
-    // Restore stock for each item
+    // 3. Restore stock for each item using FIFO reversal
     for (product_id, quantity) in items {
-        tx.execute(
-            "UPDATE products SET stock_quantity = stock_quantity + ?1 WHERE id = ?2",
-            (quantity, product_id),
-        )
-        .map_err(|e| format!("Failed to restore product stock: {}", e))?;
+        inventory_service::restore_stock_from_invoice(&tx, product_id, quantity, id)?;
     }
 
-    // Delete invoice items (CASCADE will handle this, but being explicit)
-    tx.execute("DELETE FROM invoice_items WHERE invoice_id = ?1", [id])
+    // 4. Delete invoice items
+    tx.execute("DELETE FROM invoice_items WHERE invoice_id = ?", [id])
         .map_err(|e| format!("Failed to delete invoice items: {}", e))?;
 
-    // Delete invoice
-    let rows_affected = tx
-        .execute("DELETE FROM invoices WHERE id = ?1", [id])
+    // 5. Delete invoice
+    let rows_affected = tx.execute("DELETE FROM invoices WHERE id = ?", [id])
         .map_err(|e| format!("Failed to delete invoice: {}", e))?;
 
     if rows_affected == 0 {
         return Err(format!("Invoice with id {} not found", id));
     }
 
-    // Commit transaction
     tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
-
-    log::info!("Deleted invoice with id: {} and saved to trash", id);
+    log::info!("Deleted invoice {} and restored inventory", id);
     Ok(())
 }

@@ -94,6 +94,9 @@ pub fn get_products(
                         let sold: i64 = row.get(11)?;
                         if sold > 0 { Some(sold) } else { None } 
                     },
+                    initial_stock_sold: None,
+                    quantity_sold: None,
+                    sold_revenue: None,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -129,6 +132,9 @@ pub fn get_products(
                         let sold: i64 = row.get(11)?;
                         if sold > 0 { Some(sold) } else { None }
                     },
+                    initial_stock_sold: None,
+                    quantity_sold: None,
+                    sold_revenue: None,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -156,20 +162,37 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
         .query_row(
             "SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
                     p.supplier_id, p.created_at, p.updated_at, p.image_path,
-                    COALESCE(SUM(ii.quantity), 0) as total_sold
+                    COALESCE(SUM(ii.quantity), 0) as total_sold,
+                    (SELECT quantity_remaining FROM inventory_batches WHERE product_id = p.id AND po_item_id IS NULL LIMIT 1) as initial_remaining
              FROM products p
              LEFT JOIN invoice_items ii ON p.id = ii.product_id
              WHERE p.id = ?1
              GROUP BY p.id",
             [id],
             |row| {
+                let initial_stock: Option<i32> = row.get(5)?;
+                let initial_remaining: Option<i32> = row.get(12)?;
+                
+                let initial_stock_sold = match (initial_stock, initial_remaining) {
+                    (Some(stock), Some(remaining)) => Some(stock - remaining),
+                    (Some(stock), None) => {
+                        // If no batch found but we have initial stock, it means the batch was fully depleted and deleted.
+                        if stock > 0 { 
+                             Some(stock) 
+                         } else { 
+                             None 
+                         }
+                    },
+                    _ => None
+                };
+
                 Ok(Product {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     sku: row.get(2)?,
                     price: row.get(3)?,
                     selling_price: row.get(4)?,
-                    initial_stock: row.get(5)?,
+                    initial_stock,
                     stock_quantity: row.get(6)?,
                     supplier_id: row.get(7)?,
                     created_at: row.get(8)?,
@@ -179,6 +202,9 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
                         let sold: i64 = row.get(11)?;
                         if sold > 0 { Some(sold) } else { None }
                     },
+                    initial_stock_sold,
+                    quantity_sold: None,
+                    sold_revenue: None,
                 })
             },
         )
@@ -215,7 +241,10 @@ pub fn get_products_by_supplier(
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
                 image_path: row.get(10)?,
-                total_sold: None, 
+                total_sold: None,
+                initial_stock_sold: None,
+                quantity_sold: None,
+                sold_revenue: None,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -412,6 +441,9 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
                 updated_at: row.get(9)?,
                 image_path: row.get(10)?,
                 total_sold: None,
+                initial_stock_sold: None,
+                quantity_sold: None,
+                sold_revenue: None,
             })
         },
     )
@@ -523,6 +555,9 @@ pub fn get_top_selling_products(page: i32, limit: i32, db: State<Database>) -> R
                 let sold: i64 = row.get(11)?;
                 if sold > 0 { Some(sold) } else { None }
             },
+            initial_stock_sold: None,
+            quantity_sold: None,
+            sold_revenue: None,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -579,6 +614,9 @@ pub fn get_products_by_ids(ids: Vec<i32>, db: State<Database>) -> Result<Vec<Pro
                 let sold: i64 = row.get(11)?;
                 if sold > 0 { Some(sold) } else { None }
             },
+            initial_stock_sold: None,
+            quantity_sold: None,
+            sold_revenue: None,
         })
     }).map_err(|e| e.to_string())?;
 

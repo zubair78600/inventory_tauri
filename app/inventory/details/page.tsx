@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { ArrowLeft, Calendar, Package, Tag, BarChart3, FileText, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
@@ -155,32 +156,25 @@ function InventoryDetailsContent() {
         quantity: number;
         unit_cost: number;
         total_cost: number;
+        selling_price?: number;
+        sold_qty?: number;
+        sold_revenue?: number;
         po_id?: number;
     };
 
-    const displayPurchaseHistory: PurchaseRow[] = [
-        ...(product.initial_stock && product.initial_stock > 0
-            ? [
-                {
-                    key: `initial-${product.id}`,
-                    type: 'initial',
-                    date: product.created_at,
-                    quantity: product.initial_stock,
-                    unit_cost: product.price,
-                    total_cost: product.initial_stock * product.price,
-                } satisfies PurchaseRow,
-            ]
-            : []),
-        ...purchaseHistory.map<PurchaseRow>((purchase) => ({
-            key: `po-${purchase.id}`,
-            type: 'po',
-            date: purchase.created_at,
-            quantity: purchase.quantity,
-            unit_cost: purchase.unit_cost,
-            total_cost: purchase.total_cost,
-            po_id: purchase.po_id,
-        })),
-    ];
+    const displayPurchaseHistory: PurchaseRow[] = purchaseHistory.map((purchase) => ({
+        key: purchase.po_id ? `po-${purchase.id}` : 'initial-stock', // Use unique key
+        type: purchase.po_id ? 'po' : 'initial',
+        id: purchase.id,
+        date: purchase.created_at,
+        quantity: purchase.quantity,
+        unit_cost: purchase.unit_cost,
+        total_cost: purchase.total_cost,
+        selling_price: purchase.selling_price || undefined, // Coerce null to undefined
+        sold_qty: purchase.quantity_sold,
+        sold_revenue: purchase.sold_revenue,
+        po_id: purchase.po_id,
+    }));
 
     // To get accurate "Total Sold" and "Revenue from this product", we would need to inspect invoice items
     // Since we only have the invoice list, we can show "Invoices containing this item"
@@ -423,29 +417,6 @@ function InventoryDetailsContent() {
                                         <div className="text-slate-500 text-center">
                                             {payment.note || '-'}
                                         </div>
-                                        <div className="text-center">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                                                onClick={async () => {
-                                                    const confirmed = await ask(
-                                                        'Are you sure you want to delete this payment entry?',
-                                                        {
-                                                            title: 'Delete Payment',
-                                                            kind: 'warning',
-                                                            okLabel: 'Delete',
-                                                            cancelLabel: 'Cancel',
-                                                        },
-                                                    );
-                                                    if (!confirmed) return;
-                                                    await supplierCommands.deletePayment(payment.id);
-                                                    await loadData();
-                                                }}
-                                            >
-                                                Delete
-                                            </Button>
-                                        </div>
                                     </div>
                                 ))}
                                 {payments.length === 0 && (
@@ -466,58 +437,87 @@ function InventoryDetailsContent() {
                     Purchase History
                 </h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[1.2fr,1.5fr,1fr,1fr,1fr,0.8fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
+                    <div className="grid grid-cols-[1fr,1.2fr,0.8fr,1fr,1fr,1fr,1fr,0.8fr,0.8fr,0.6fr] gap-3 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
                         <div>Purchase Date</div>
                         <div>PO Number</div>
-                        <div>Quantity</div>
+                        <div>Qty</div>
                         <div>Unit Cost</div>
+                        <div>Sell Price</div>
                         <div>Total Cost</div>
+                        <div>Exp. Profit</div>
+                        <div>Act. Profit</div>
+                        <div>Sold Amt</div>
                         <div>View</div>
                     </div>
 
                     <div className="divide-y divide-slate-100">
-                        {displayPurchaseHistory.map((purchase) => (
-                            <div
-                                key={purchase.key}
-                                className="grid grid-cols-[1.2fr,1.5fr,1fr,1fr,1fr,0.8fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors"
-                            >
-                                <div className="text-slate-500 text-sm text-center">
-                                    {new Date(purchase.date).toLocaleDateString('en-IN', {
-                                        year: 'numeric',
-                                        month: 'short',
-                                        day: 'numeric'
-                                    })}
+                        {displayPurchaseHistory.map((purchase) => {
+                            const expectedProfit = purchase.selling_price
+                                ? (purchase.quantity * purchase.selling_price) - purchase.total_cost
+                                : 0;
+                            const soldQty = purchase.sold_qty || 0;
+                            const soldRevenue = purchase.sold_revenue || 0;
+                            const actualProfit = soldRevenue - (soldQty * purchase.unit_cost);
+
+                            return (
+                                <div
+                                    key={purchase.key}
+                                    className="grid grid-cols-[1fr,1.2fr,0.8fr,1fr,1fr,1fr,1fr,0.8fr,0.8fr,0.6fr] gap-3 p-4 items-center hover:bg-slate-50 transition-colors"
+                                >
+                                    <div className="text-slate-500 text-sm text-center">
+                                        {new Date(purchase.date).toLocaleDateString('en-IN', {
+                                            year: 'numeric',
+                                            month: 'short',
+                                            day: 'numeric'
+                                        })}
+                                    </div>
+                                    <div className={`font-medium text-center ${purchase.type === 'po' ? 'text-blue-600' : 'text-slate-600'}`}>
+                                        {purchase.type === 'po' && purchase.po_id
+                                            ? `PO-${purchase.po_id.toString().padStart(3, '0')}`
+                                            : 'Initial Stock'}
+                                    </div>
+                                    <div className="text-center font-medium text-slate-900">
+                                        {purchase.quantity}
+                                    </div>
+                                    <div className="text-center text-slate-700">
+                                        ₹{purchase.unit_cost.toFixed(2)}
+                                    </div>
+                                    <div className="text-center text-slate-700">
+                                        {purchase.selling_price ? `₹${purchase.selling_price.toFixed(2)}` : '-'}
+                                    </div>
+                                    <div className="text-center font-semibold text-slate-700">
+                                        ₹{purchase.total_cost.toFixed(2)}
+                                    </div>
+                                    <div className="text-center">
+                                        <Badge className={`${expectedProfit >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'} border`}>
+                                            ₹{expectedProfit.toFixed(0)}
+                                        </Badge>
+                                    </div>
+                                    <div className="text-center">
+                                        <Badge className={`${actualProfit >= 0 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-red-50 text-red-700 border-red-200'} border`}>
+                                            ₹{actualProfit.toFixed(0)}
+                                        </Badge>
+                                    </div>
+                                    <div className="text-center font-medium text-slate-900">
+                                        ₹{soldRevenue.toFixed(0)}
+                                    </div>
+                                    <div className="text-center">
+                                        {purchase.type === 'po' && purchase.po_id ? (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-7 px-2 text-xs"
+                                                onClick={() => router.push(`/purchase-orders/details?id=${purchase.po_id}`)}
+                                            >
+                                                View PO
+                                            </Button>
+                                        ) : (
+                                            <span className="text-xs text-slate-400">-</span>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className={`font-medium text-center ${purchase.type === 'po' ? 'text-blue-600' : 'text-slate-600'}`}>
-                                    {purchase.type === 'po' && purchase.po_id
-                                        ? `PO-${purchase.po_id.toString().padStart(3, '0')}`
-                                        : 'Initial Stock'}
-                                </div>
-                                <div className="text-center font-medium text-slate-900">
-                                    {purchase.quantity}
-                                </div>
-                                <div className="text-center text-slate-700">
-                                    ₹{purchase.unit_cost.toFixed(2)}
-                                </div>
-                                <div className="text-center font-semibold text-emerald-600">
-                                    ₹{purchase.total_cost.toFixed(2)}
-                                </div>
-                                <div className="text-center">
-                                    {purchase.type === 'po' && purchase.po_id ? (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-7 px-2 text-xs"
-                                            onClick={() => router.push(`/purchase-orders/details?id=${purchase.po_id}`)}
-                                        >
-                                            View PO
-                                        </Button>
-                                    ) : (
-                                        <span className="text-xs text-slate-400">-</span>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                         {displayPurchaseHistory.length === 0 && (
                             <div className="p-8 text-center text-slate-500">
                                 No purchase history found. Stock may have been added before the Purchase Order system was implemented.
@@ -531,9 +531,10 @@ function InventoryDetailsContent() {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-slate-900">Sales History</h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
+                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
                         <div>Sale Date</div>
                         <div>Invoice</div>
+                        <div>Quantity</div>
                         <div>Total Amount</div>
                         <div>Payment</div>
                     </div>
@@ -542,14 +543,25 @@ function InventoryDetailsContent() {
                         {invoices.map((invoice) => (
                             <div
                                 key={invoice.id}
-                                className="grid grid-cols-[1.2fr,2fr,1fr,1fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
+                                className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors"
                             >
                                 <div className="text-slate-500 text-sm text-center">
                                     {new Date(invoice.created_at).toLocaleString()}
                                 </div>
-                                <div className="font-medium text-slate-900 flex items-center justify-center gap-2">
-                                    <FileText className="w-4 h-4 text-slate-400" />
+                                <div
+                                    className={`font-medium text-center flex items-center justify-center gap-2 ${invoice.customer_id ? 'text-blue-600 cursor-pointer hover:underline' : 'text-slate-900'}`}
+                                    onClick={(e) => {
+                                        if (invoice.customer_id) {
+                                            e.stopPropagation();
+                                            router.push(`/customers/details?id=${invoice.customer_id}`);
+                                        }
+                                    }}
+                                >
+                                    <FileText className={`w-4 h-4 ${invoice.customer_id ? 'text-blue-600' : 'text-slate-400'}`} />
                                     {invoice.invoice_number}
+                                </div>
+                                <div className="text-center font-medium text-slate-900">
+                                    {invoice.quantity || '-'}
                                 </div>
                                 <div className="text-center font-medium text-slate-900">
                                     ₹{invoice.total_amount.toFixed(0)}

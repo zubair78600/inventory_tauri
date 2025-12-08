@@ -468,6 +468,50 @@ impl Database {
             conn.execute("ALTER TABLE customers ADD COLUMN image_path TEXT", [])?;
         }
 
+        // Migration: Add state, district, and town columns to customers
+        let customer_state_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('customers') WHERE name = 'state'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !customer_state_exists {
+            log::info!("Migrating: Adding state column to customers table");
+            conn.execute("ALTER TABLE customers ADD COLUMN state TEXT", [])?;
+        }
+
+        let customer_district_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('customers') WHERE name = 'district'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !customer_district_exists {
+            log::info!("Migrating: Adding district column to customers table");
+            conn.execute("ALTER TABLE customers ADD COLUMN district TEXT", [])?;
+        }
+
+        let customer_town_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('customers') WHERE name = 'town'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !customer_town_exists {
+            log::info!("Migrating: Adding town column to customers table");
+            conn.execute("ALTER TABLE customers ADD COLUMN town TEXT", [])?;
+
+            // Migration: Copy place data to town for existing records as a best effort
+            log::info!("Migrating: Copying place data to town column for customers");
+            conn.execute("UPDATE customers SET town = place WHERE place IS NOT NULL", [])?;
+        }
+
         // Auto-fix: Ensure Admin password is the specific code requested
         conn.execute(
             "UPDATE users SET password = ?1 WHERE username = 'Admin' AND password = ?2",
