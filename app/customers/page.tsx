@@ -8,7 +8,10 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+
 import { SearchPill } from '@/components/shared/SearchPill';
+import { LocationSelector } from '@/components/shared/LocationSelector';
+import type { LocationValue } from '@/types/location';
 import {
   Table,
   TableBody,
@@ -28,6 +31,9 @@ type NewCustomerFormState = {
   phone: string;
   address: string;
   place: string;
+  state: string;
+  district: string;
+  town: string;
 };
 
 export default function Customers() {
@@ -47,6 +53,9 @@ export default function Customers() {
     phone: '',
     address: '',
     place: '',
+    state: '',
+    district: '',
+    town: '',
   });
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
@@ -127,9 +136,12 @@ export default function Customers() {
         phone: newCustomer.phone || null,
         address: newCustomer.address || null,
         place: newCustomer.place || null,
+        state: newCustomer.state || null,
+        district: newCustomer.district || null,
+        town: newCustomer.town || null,
       });
       setShowAddForm(false);
-      setNewCustomer({ name: '', email: '', phone: '', address: '', place: '' });
+      setNewCustomer({ name: '', email: '', phone: '', address: '', place: '', state: '', district: '', town: '' });
       invalidateCustomers();
       setSelectedReport(null);
     } catch (error) {
@@ -149,6 +161,9 @@ export default function Customers() {
         phone: editCustomer.phone,
         address: editCustomer.address,
         place: editCustomer.place,
+        state: editCustomer.state,
+        district: editCustomer.district,
+        town: editCustomer.town,
       });
       setEditCustomer(null);
       invalidateCustomers();
@@ -218,7 +233,9 @@ export default function Customers() {
             onClick={() => {
               setShowAddForm(!showAddForm);
               setEditCustomer(null);
-              setNewCustomer({ name: '', email: '', phone: '', address: '', place: '' });
+              setShowAddForm(!showAddForm);
+              setEditCustomer(null);
+              setNewCustomer({ name: '', email: '', phone: '', address: '', place: '', state: '', district: '', town: '' });
             }}
           >
             {showAddForm ? 'Cancel' : 'Add Customer'}
@@ -239,12 +256,19 @@ export default function Customers() {
                     required
                   />
                 </div>
-                <div>
-                  <label className="form-label">Place</label>
-                  <Input
-                    value={newCustomer.place}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, place: e.target.value })}
-                    placeholder="City or Location"
+                <div className="md:col-span-2">
+                  <LocationSelector
+                    value={{
+                      state: newCustomer.state,
+                      district: newCustomer.district,
+                      town: newCustomer.town,
+                    }}
+                    onChange={(val: LocationValue) => setNewCustomer({
+                      ...newCustomer,
+                      state: val.state,
+                      district: val.district,
+                      town: val.town
+                    })}
                   />
                 </div>
                 <div>
@@ -259,7 +283,16 @@ export default function Customers() {
                   <label className="form-label">Phone</label>
                   <Input
                     value={newCustomer.phone}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setNewCustomer({ ...newCustomer, phone: val })
+                    }}
+                    placeholder="10-digit number"
+                    pattern="\d{10}"
+                    title="Phone number must be exactly 10 digits"
+                    minLength={10}
+                    maxLength={10}
+                    required
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -297,11 +330,19 @@ export default function Customers() {
                     required
                   />
                 </div>
-                <div>
-                  <label className="form-label">Place</label>
-                  <Input
-                    value={editCustomer.place || ''}
-                    onChange={(e) => setEditCustomer({ ...editCustomer, place: e.target.value })}
+                <div className="md:col-span-2">
+                  <LocationSelector
+                    value={{
+                      state: editCustomer.state || '',
+                      district: editCustomer.district || '',
+                      town: editCustomer.town || '',
+                    }}
+                    onChange={(val: LocationValue) => setEditCustomer({
+                      ...editCustomer,
+                      state: val.state,
+                      district: val.district,
+                      town: val.town
+                    })}
                   />
                 </div>
                 <div>
@@ -316,7 +357,16 @@ export default function Customers() {
                   <label className="form-label">Phone</label>
                   <Input
                     value={editCustomer.phone || ''}
-                    onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setEditCustomer({ ...editCustomer, phone: val })
+                    }}
+                    placeholder="10-digit number"
+                    pattern="\d{10}"
+                    title="Phone number must be exactly 10 digits"
+                    minLength={10}
+                    maxLength={10}
+                    required
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -375,7 +425,7 @@ export default function Customers() {
                         <div className="text-sm text-muted-foreground">{customer.phone}</div>
                       )}
                     </TableCell>
-                    <TableCell className="text-center text-sm">{customer.place ?? '—'}</TableCell>
+                    <TableCell className="text-center text-sm">{customer.town || customer.place || '—'}</TableCell>
                     <TableCell className="text-center text-sm text-muted-foreground">
                       {customer.last_billed ? new Date(customer.last_billed).toLocaleString() : '—'}
                     </TableCell>

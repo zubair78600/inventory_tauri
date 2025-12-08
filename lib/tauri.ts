@@ -22,6 +22,8 @@ export interface Product {
   created_at: string;
   updated_at: string;
   image_path: string | null;
+  total_sold?: number;
+  initial_stock_sold?: number;
 }
 
 export interface CreateProductInput {
@@ -107,6 +109,9 @@ export interface Customer {
   phone: string | null;
   address: string | null;
   place: string | null;
+  state: string | null;
+  district: string | null;
+  town: string | null;
   created_at: string;
   updated_at: string;
   image_path: string | null;
@@ -120,6 +125,9 @@ export interface CreateCustomerInput {
   phone: string | null;
   address: string | null;
   place: string | null;
+  state: string | null;
+  district: string | null;
+  town: string | null;
 }
 
 export interface UpdateCustomerInput {
@@ -129,6 +137,9 @@ export interface UpdateCustomerInput {
   phone: string | null;
   address: string | null;
   place: string | null;
+  state: string | null;
+  district: string | null;
+  town: string | null;
 }
 
 export interface DashboardSale {
@@ -305,6 +316,7 @@ export interface Invoice {
   district: string | null;
   town: string | null;
   item_count?: number;
+  quantity?: number; // Quantity of specific product (context-dependent)
 }
 
 export interface ProductSalesSummary {
@@ -351,6 +363,14 @@ export interface CreateInvoiceInput {
   state?: string;
   district?: string;
   town?: string;
+}
+
+export interface UpdateInvoiceInput {
+  id: number;
+  customer_id?: number | null;
+  payment_method?: string | null;
+  created_at?: string | null;
+  status?: string | null;
 }
 
 /**
@@ -802,6 +822,13 @@ export const invoiceCommands = {
   delete: async (id: number): Promise<void> => {
     return await invoke<void>('delete_invoice', { id });
   },
+
+  /**
+   * Update an invoice (metadata only)
+   */
+  update: async (input: UpdateInvoiceInput): Promise<Invoice> => {
+    return await invoke<Invoice>('update_invoice', { input });
+  },
 };
 
 export interface SearchProduct {
@@ -902,6 +929,7 @@ export interface PurchaseOrderWithDetails {
   created_at: string;
   updated_at: string;
   items_count: number;
+  quantity?: number; // Quantity of specific product (context-dependent)
   total_paid: number;
   total_pending: number;
 }
@@ -915,6 +943,9 @@ export interface PurchaseOrderItemWithProduct {
   quantity: number;
   unit_cost: number;
   total_cost: number;
+  selling_price?: number;
+  quantity_sold?: number;
+  sold_revenue?: number;
   created_at: string;
 }
 

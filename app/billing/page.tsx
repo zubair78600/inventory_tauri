@@ -289,7 +289,10 @@ export default function Billing() {
           phone: customerPhone || null,
           email: null,
           address: null,
-          place: location.town || null, // Set place to invoice town
+          place: location.town || null,
+          state: location.state || null,
+          district: location.district || null,
+          town: location.town || null,
         });
         finalCustomerId = newCustomer.id;
       }
@@ -361,7 +364,7 @@ export default function Billing() {
                 className="form-input"
                 value={customerPhone}
                 onChange={(e) => {
-                  const newVal = e.target.value;
+                  const newVal = e.target.value.replace(/\D/g, '').slice(0, 10);
                   setCustomerPhone(newVal);
                   setShowCustomerSuggestions(true);
 
@@ -374,7 +377,8 @@ export default function Billing() {
                   }
                 }}
                 onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
-                placeholder="Enter Phone"
+                placeholder="Enter Phone (10 digits)"
+                maxLength={10}
                 required
               />
               {showCustomerSuggestions && customerSuggestions.length > 0 && (

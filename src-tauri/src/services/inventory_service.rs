@@ -1,7 +1,7 @@
 /// FIFO Inventory Service
 /// Handles FIFO cost calculation, batch management, and inventory transactions
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, params, OptionalExtension};
 use chrono::Utc;
 
 use crate::db::models::{
@@ -204,6 +204,64 @@ pub fn record_purchase(
     ).map_err(|e| format!("Failed to create transaction: {}", e))?;
 
     Ok(batch_id)
+}
+
+/// Restore stock from a deleted invoice (Reverse FIFO Sale)
+pub fn restore_stock_from_invoice(
+    conn: &Connection,
+    product_id: i32,
+    quantity: i32,
+    invoice_id: i32,
+) -> Result<(), String> {
+    // 1. Find the original 'sale' transaction for this invoice to get the unit cost (COGS)
+    // We expect one 'sale' transaction per product per invoice usually.
+    // If there are multiple (split transactions?), we aggregate?
+    // Usually record_sale_fifo creates ONE 'sale' transaction per product line item.
+    let transaction: Option<(i32, f64)> = conn.query_row(
+        "SELECT id, unit_cost FROM inventory_transactions 
+         WHERE reference_type = 'invoice' AND reference_id = ? AND product_id = ? AND transaction_type = 'sale'",
+        params![invoice_id, product_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    ).optional().map_err(|e| format!("Failed to find transaction: {}", e))?;
+
+    let (transaction_id, unit_cost) = match transaction {
+        Some(t) => t,
+        None => {
+            // Fallback: If no transaction found (maybe legacy data?), use current average cost or 0?
+            // Safer to use 0 or current stock cost?
+            // Let's use 0 ensures we don't inflate value artificially if unknown.
+            // But this effectively "gifts" stock back.
+            (0, 0.0)
+        }
+    };
+
+    // 2. Create a "Restock" batch using the original cost
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let purchase_date = Utc::now().format("%Y-%m-%d").to_string();
+
+    conn.execute(
+        "INSERT INTO inventory_batches
+         (product_id, po_item_id, quantity_remaining, unit_cost, purchase_date, created_at)
+         VALUES (?, NULL, ?, ?, ?, ?)",
+        params![product_id, quantity, unit_cost, purchase_date, now],
+    ).map_err(|e| format!("Failed to create restock batch: {}", e))?;
+
+    // 3. Update Product Stock Quantity
+    conn.execute(
+        "UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+        params![quantity, product_id],
+    ).map_err(|e| format!("Failed to restock product: {}", e))?;
+
+    // 4. Delete the original 'sale' transaction to clean up history
+    // We do NOT add a new 'restock' transaction because we prefer to void the 'sale'.
+    if transaction_id > 0 {
+        conn.execute(
+            "DELETE FROM inventory_transactions WHERE id = ?",
+            params![transaction_id],
+        ).map_err(|e| format!("Failed to delete transaction: {}", e))?;
+    }
+
+    Ok(())
 }
 
 // =============================================

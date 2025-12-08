@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS customers (
     phone TEXT,
     address TEXT,
     place TEXT,
+    state TEXT,
+    district TEXT,
+    town TEXT,
     image_path TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))

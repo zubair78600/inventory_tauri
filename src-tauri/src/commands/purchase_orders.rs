@@ -1,7 +1,7 @@
 /// Purchase Order Commands
 /// Handles all purchase order operations including creation, retrieval, and status updates
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use chrono::Utc;
 use tauri::State;
 use serde::{Deserialize, Serialize};
@@ -418,6 +418,9 @@ pub fn get_purchase_order_by_id(
                 quantity: row.get(5)?,
                 unit_cost: row.get(6)?,
                 total_cost: row.get(7)?,
+                selling_price: None, // Not needed for creating PO item context
+                quantity_sold: None,
+                sold_revenue: None,
                 created_at: row.get(8)?,
             })
         })
@@ -607,34 +610,189 @@ pub fn get_product_purchase_history(
 ) -> Result<Vec<PurchaseOrderItemWithProduct>, String> {
     let conn = db.get_conn()?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT poi.id, poi.po_id, poi.product_id, p.name, p.sku,
-                    poi.quantity, poi.unit_cost, poi.total_cost, poi.created_at
-             FROM purchase_order_items poi
-             JOIN products p ON poi.product_id = p.id
-             WHERE poi.product_id = ?
-             ORDER BY poi.created_at DESC",
-        )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+    // 1. Get Initial Stock info
+    let initial_stock_info: Option<(i32, f64, String, f64)> = conn.query_row(
+        "SELECT initial_stock, price, created_at, selling_price FROM products WHERE id = ?",
+        params![product_id],
+        |row| Ok((
+            row.get::<_, Option<i32>>(0)?.unwrap_or(0),
+            row.get::<_, f64>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, Option<f64>>(3)?.unwrap_or(0.0),
+        )),
+    ).optional().map_err(|e| format!("Failed to get product info: {}", e))?;
 
-    let items = stmt
-        .query_map(params![product_id], |row| {
-            Ok(PurchaseOrderItemWithProduct {
-                id: row.get(0)?,
-                po_id: row.get(1)?,
-                product_id: row.get(2)?,
-                product_name: row.get(3)?,
-                sku: row.get(4)?,
-                quantity: row.get(5)?,
-                unit_cost: row.get(6)?,
-                total_cost: row.get(7)?,
-                created_at: row.get(8)?,
-            })
+    // 2. Get Purchase Order Items (Batches)
+    let mut po_items_stmt = conn.prepare(
+        "SELECT poi.id, poi.po_id, poi.quantity, poi.unit_cost, poi.total_cost, poi.created_at, p.name, p.sku, p.selling_price
+         FROM purchase_order_items poi
+         JOIN products p ON poi.product_id = p.id
+         WHERE poi.product_id = ?
+         ORDER BY poi.created_at ASC"
+    ).map_err(|e| format!("Failed to prepare PO items stmt: {}", e))?;
+
+    let po_batches = po_items_stmt.query_map(params![product_id], |row| {
+        Ok(PurchaseOrderItemWithProduct {
+            id: row.get(0)?,
+            po_id: row.get(1)?,
+            product_id,
+            product_name: row.get(6)?,
+            sku: row.get(7)?,
+            quantity: row.get(2)?,
+            unit_cost: row.get(3)?,
+            total_cost: row.get(4)?,
+            selling_price: row.get(8)?,
+            quantity_sold: Some(0), // Will calculate
+            sold_revenue: Some(0.0), // Will calculate
+            created_at: row.get(5)?,
         })
-        .map_err(|e| format!("Failed to query purchase history: {}", e))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect purchase history: {}", e))?;
+    }).map_err(|e| format!("Failed to query PO items: {}", e))?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|e| format!("Failed to collect PO items: {}", e))?;
 
-    Ok(items)
+    // 3. Get Sales (Invoice Items) with proportional discount
+    // Discount is distributed proportionally: item_discount = (item_value / invoice_subtotal) * invoice_discount
+    let mut sales_stmt = conn.prepare(
+        "SELECT ii.quantity, ii.unit_price,
+                COALESCE(i.discount_amount, 0) as invoice_discount,
+                (SELECT SUM(ii2.quantity * ii2.unit_price) FROM invoice_items ii2 WHERE ii2.invoice_id = i.id) as invoice_subtotal
+         FROM invoice_items ii
+         JOIN invoices i ON ii.invoice_id = i.id
+         WHERE ii.product_id = ?
+         ORDER BY i.created_at ASC"
+    ).map_err(|e| format!("Failed to prepare sales stmt: {}", e))?;
+
+    // (quantity, unit_price, item_discount_share)
+    let sales: Vec<(i32, f64, f64)> = sales_stmt.query_map(params![product_id], |row| {
+        let qty: i32 = row.get(0)?;
+        let unit_price: f64 = row.get(1)?;
+        let invoice_discount: f64 = row.get(2)?;
+        let invoice_subtotal: f64 = row.get::<_, Option<f64>>(3)?.unwrap_or(1.0); // Avoid div by 0
+        
+        let item_value = qty as f64 * unit_price;
+        let discount_share = if invoice_subtotal > 0.0 {
+            (item_value / invoice_subtotal) * invoice_discount
+        } else {
+            0.0
+        };
+        
+        Ok((qty, unit_price, discount_share))
+    }).map_err(|e| format!("Failed to query sales: {}", e))?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|e| format!("Failed to collect sales: {}", e))?;
+
+    // 4. Combine Initial Stock + PO Batches into a tracking list
+    struct BatchTracker {
+        item: PurchaseOrderItemWithProduct,
+        is_initial: bool,
+        remaining_qty: i32,
+    }
+
+    let mut trackers: Vec<BatchTracker> = Vec::new();
+
+    // Add Initial Stock if it exists
+    if let Some((qty, cost, date, selling_price)) = initial_stock_info {
+        if qty > 0 {
+            // Create a pseudo-PO item for Initial Stock
+            // We use id=-1 or similar to mark it, but frontend uses logic to identify it?
+            // Actually, we don't return this in the PO list usually?
+            // Wait, the frontend grid handles "Initial Stock" separately via get_product?
+            // No, the previous logic relied on inventory_batches which might have covered it.
+            // But get_product_purchase_history usually returns PO items.
+            // Let's create a tracker for it but we might not return it in the result list 
+            // if this function is strictly for "Purchase Orders".
+            // HOWEVER, if we consume sales against it, we must track it first.
+            // AND the user wants "Initial Stock" in the table.
+            // Previously, `get_product` returned initial stock info and `get_product_purchase_history` returned POs.
+            // The frontend merged them.
+            // PROBLEM: If we do FIFO here, we need to return the "Initial Stock" sold stats too?
+            // Yes, but `get_product_purchase_history` signature returns `Vec<PurchaseOrderItemWithProduct>`.
+            // We can treat Initial Stock as a `PurchaseOrderItemWithProduct` with po_id=None (or logic).
+            // But `get_product` ALREADY returns `initial_stock_sold`.
+            // Use that? No, we need precise revenue now.
+            // FIX: We will do the calculation for ALL batches including Initial, 
+            // BUT we can only update the PO items in the return list.
+            // For Initial Stock, we might need a separate way to return it? 
+            // OR: We return it here as a dummy PO item? 
+            // The frontend:
+            /*
+                const displayPurchaseHistory: PurchaseRow[] = [
+                ...(product?.initial_stock ? [...] : []),
+                ...purchases.map(...)
+            */
+            // So frontend constructs Initial Stock row itself.
+            // If I calculate `sold_revenue` for initial stock here, I verify it, but I can't easily pass it back 
+            // unless I change the return type or add it to the list.
+            // IF I add it to the list, I should remove the frontend `product.initial_stock` mapping to avoid dupe.
+            // Let's add it to the list! `po_id: None` works.
+            
+            trackers.push(BatchTracker {
+                item: PurchaseOrderItemWithProduct {
+                    id: 0, // Placeholder
+                    po_id: None,
+                    product_id,
+                    product_name: po_batches.first().map(|b| b.product_name.clone()).unwrap_or_default(),
+                    sku: po_batches.first().map(|b| b.sku.clone()).unwrap_or_default(),
+                    quantity: qty,
+                    unit_cost: cost,
+                    total_cost: cost * qty as f64,
+                    selling_price: Some(selling_price),
+                    quantity_sold: Some(0),
+                    sold_revenue: Some(0.0),
+                    created_at: date,
+                },
+                is_initial: true,
+                remaining_qty: qty,
+            });
+        }
+    }
+
+    // Add PO Batches
+    for batch in po_batches {
+        trackers.push(BatchTracker {
+            remaining_qty: batch.quantity, // Init with full quantity
+            is_initial: false,
+            item: batch,
+        });
+    }
+
+    // 5. Run FIFO Simulation
+    // Sales: (sale_qty, sale_price, discount_share for entire item)
+    for (mut sale_qty, sale_price, discount_share) in sales {
+        // Calculate discount per unit for this sale
+        let discount_per_unit = if sale_qty > 0 { discount_share / sale_qty as f64 } else { 0.0 };
+        
+        for tracker in &mut trackers {
+            if sale_qty <= 0 { break; }
+            if tracker.remaining_qty > 0 {
+                let take = sale_qty.min(tracker.remaining_qty);
+                tracker.remaining_qty -= take;
+                sale_qty -= take;
+                
+                // Update stats: revenue = (price - discount_per_unit) * qty
+                let effective_price = sale_price - discount_per_unit;
+                tracker.item.quantity_sold = Some(tracker.item.quantity_sold.unwrap_or(0) + take);
+                tracker.item.sold_revenue = Some(tracker.item.sold_revenue.unwrap_or(0.0) + (take as f64 * effective_price));
+            }
+        }
+    }
+
+    // 6. Return values
+    // We want to return ALL items, including the Initial Stock one if we added it.
+    // Frontend expects "Initial Stock" to be handled.
+    // If I return it here, frontend will duplicate it if I don't remove the frontend logic.
+    // The user's goal is to fix the numbers.
+    // If I return the Initial Stock item here, I must instruct frontend to NOT construct it from `product` info manually.
+    // OR: I only return PO items, but how do I update Initial Stock stats? 
+    // `get_product` is called separately. 
+    // Ideally, `get_product` should return `initial_stock_sold_revenue` too.
+    // This implies `get_product` needs this simulation too? Expensive to run twice.
+    // DECISION: Return `Initial Stock` as a `PurchaseOrderItem` in this list. 
+    // And I will Update Frontend to REMOVE the manual Initial Stock row and rely on this list.
+    // This unifies the logic.
+    
+    // Sort descending by date (newest first) for UI
+    trackers.sort_by(|a, b| b.item.created_at.cmp(&a.item.created_at));
+
+    Ok(trackers.into_iter().map(|t| t.item).collect())
 }

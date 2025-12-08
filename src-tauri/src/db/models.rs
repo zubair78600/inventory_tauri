@@ -10,12 +10,16 @@ pub struct Product {
     pub selling_price: Option<f64>,
     pub initial_stock: Option<i32>,
     pub stock_quantity: i32,
+    pub quantity_sold: Option<i32>,
+    pub sold_revenue: Option<f64>, // Added for actual revenue tracking
     pub supplier_id: Option<i32>,
     pub created_at: String,
     pub updated_at: String,
     pub image_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_sold: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initial_stock_sold: Option<i32>,
 }
 
 /// Supplier model matching Prisma schema
@@ -43,6 +47,9 @@ pub struct Customer {
     pub phone: Option<String>,
     pub address: Option<String>,
     pub place: Option<String>,
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -72,6 +79,7 @@ pub struct Invoice {
     pub customer_name: Option<String>,
     pub customer_phone: Option<String>,
     pub item_count: Option<i32>,
+    pub quantity: Option<i32>, // Quantity of specific product (context-dependent)
 }
 
 /// InvoiceItem model matching Prisma schema
@@ -187,13 +195,16 @@ pub struct PurchaseOrderItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PurchaseOrderItemWithProduct {
     pub id: i32,
-    pub po_id: i32,
+    pub po_id: Option<i32>,
     pub product_id: i32,
     pub product_name: String,
     pub sku: String,
     pub quantity: i32,
     pub unit_cost: f64,
     pub total_cost: f64,
+    pub selling_price: Option<f64>,
+    pub quantity_sold: Option<i32>,
+    pub sold_revenue: Option<f64>,
     pub created_at: String,
 }
 
