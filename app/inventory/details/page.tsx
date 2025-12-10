@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { productCommands, invoiceCommands, supplierCommands, purchaseOrderCommands, type Product, type Invoice, type SupplierPayment, type SupplierPaymentSummary, type ProductSalesSummary, type PurchaseOrderItemWithProduct, type ProductPurchaseSummary } from '@/lib/tauri';
+import { productCommands, invoiceCommands, supplierCommands, purchaseOrderCommands, type Product, type Invoice, type SupplierPayment, type SupplierPaymentWithDetails, type SupplierPaymentSummary, type ProductSalesSummary, type PurchaseOrderItemWithProduct, type ProductPurchaseSummary } from '@/lib/tauri';
 import { generateProductDetailPDF } from '@/lib/pdf-generator';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { Card } from '@/components/ui/card';
@@ -11,11 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ask } from '@tauri-apps/plugin-dialog';
-import { ArrowLeft, Calendar, Package, Tag, BarChart3, FileText, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Calendar, Package, Tag, BarChart3, FileText, ChevronDown, ChevronUp, ShoppingCart, Boxes, TrendingUp, Wallet, CheckCircle2 } from 'lucide-react';
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
-
-
 
 function InventoryDetailsContent() {
     const searchParams = useSearchParams();
@@ -27,7 +25,7 @@ function InventoryDetailsContent() {
     const [purchaseHistory, setPurchaseHistory] = useState<PurchaseOrderItemWithProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [payments, setPayments] = useState<SupplierPayment[]>([]);
+    const [payments, setPayments] = useState<SupplierPaymentWithDetails[]>([]);
     const [paymentSummary, setPaymentSummary] = useState<SupplierPaymentSummary | null>(null);
     const [salesSummary, setSalesSummary] = useState<ProductSalesSummary | null>(null);
     const [purchaseSummary, setPurchaseSummary] = useState<ProductPurchaseSummary | null>(null);
@@ -64,23 +62,20 @@ function InventoryDetailsContent() {
             setPurchaseHistory(purchasesData);
             setPurchaseSummary(purchaseSummaryData);
 
-            if (productData.supplier_id) {
-                try {
-                    const [paymentsData, summaryData] = await Promise.all([
-                        supplierCommands.getPayments(productData.supplier_id, productData.id),
-                        supplierCommands.getPaymentSummary(productData.supplier_id, productData.id),
-                    ]);
-                    setPayments(paymentsData);
-                    setPaymentSummary(summaryData);
-                } catch (paymentErr) {
-                    console.error('Failed to load supplier payment details', paymentErr);
-                    setPayments([]);
-                    setPaymentSummary(null);
-                }
-            } else {
+            // Fetch payments and summary globally (all suppliers)
+            try {
+                const [paymentsData, summaryData] = await Promise.all([
+                    supplierCommands.getAllProductPayments(productData.id),
+                    supplierCommands.getAllProductPaymentSummary(productData.id),
+                ]);
+                setPayments(paymentsData);
+                setPaymentSummary(summaryData);
+            } catch (paymentErr) {
+                console.error('Failed to load payment details', paymentErr);
                 setPayments([]);
                 setPaymentSummary(null);
             }
+
         } catch (err) {
             console.error(err);
             setError('Failed to load product details');
@@ -144,11 +139,6 @@ function InventoryDetailsContent() {
 
     const totalInvoices = salesSummary?.invoice_count ?? invoices.length;
 
-    const isCleared =
-        !!product.supplier_id &&
-        !!paymentSummary &&
-        paymentSummary.pending_amount <= 0;
-
     type PurchaseRow = {
         key: string;
         type: 'initial' | 'po';
@@ -160,6 +150,7 @@ function InventoryDetailsContent() {
         sold_qty?: number;
         sold_revenue?: number;
         po_id?: number;
+        po_number?: string;
     };
 
     const displayPurchaseHistory: PurchaseRow[] = purchaseHistory.map((purchase) => ({
@@ -171,13 +162,11 @@ function InventoryDetailsContent() {
         unit_cost: purchase.unit_cost,
         total_cost: purchase.total_cost,
         selling_price: purchase.selling_price || undefined, // Coerce null to undefined
-        sold_qty: purchase.quantity_sold,
-        sold_revenue: purchase.sold_revenue,
-        po_id: purchase.po_id,
+        sold_qty: purchase.quantity_sold || undefined,
+        sold_revenue: purchase.sold_revenue || undefined,
+        po_id: purchase.po_id || undefined,
+        po_number: purchase.po_number || undefined,
     }));
-
-    // To get accurate "Total Sold" and "Revenue from this product", we would need to inspect invoice items
-    // Since we only have the invoice list, we can show "Invoices containing this item"
 
     return (
         <div className="-mt-8 pt-2.5 px-6 pb-6 space-y-6 max-w-7xl mx-auto">
@@ -238,197 +227,64 @@ function InventoryDetailsContent() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center rounded-xl">
                     <div className="text-sm text-slate-500 font-medium">Stock Purchased</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">
                         {purchaseSummary?.total_quantity ?? product.initial_stock ?? product.stock_quantity}
                     </div>
                     <div className="text-xs text-slate-400 mt-1">Units (all POs)</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
+
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center rounded-xl">
                     <div className="text-sm text-slate-500 font-medium">Stock Amount</div>
                     <div className="text-2xl font-bold text-indigo-600 mt-1">
-                        ₹{(purchaseSummary?.total_value ??
-                            ((product.initial_stock ?? product.stock_quantity) * product.price)).toFixed(0)}
+                        ₹{(purchaseSummary?.total_value ?? ((product.initial_stock ?? product.stock_quantity) * product.price)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
-                        {product.supplier_id && paymentSummary ? (
+                        {paymentSummary ? (
                             paymentSummary.pending_amount > 0 ? (
-                                <span className="text-red-600 font-semibold">
-                                    Pending: ₹{paymentSummary.pending_amount.toFixed(0)}
-                                </span>
+                                <span className="text-red-500 font-medium">Pending: ₹{paymentSummary.pending_amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                             ) : (
-                                <span className="text-emerald-600 font-semibold">Cleared</span>
+                                <span className="text-emerald-600 font-medium">Cleared</span>
                             )
                         ) : (
                             'Purchase value'
                         )}
                     </div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
+
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center rounded-xl">
                     <div className="text-sm text-slate-500 font-medium">Current Stock</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{product.stock_quantity}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                        {product.stock_quantity}
+                    </div>
                     <div className="text-xs text-slate-400 mt-1">Units</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
+
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center rounded-xl">
                     <div className="text-sm text-slate-500 font-medium">Selling Price</div>
-                    <div className="text-2xl font-bold text-emerald-600 mt-1">₹{product.selling_price ? product.selling_price.toFixed(0) : '-'}</div>
+                    <div className="text-2xl font-bold text-emerald-600 mt-1">
+                        ₹{product.selling_price ? product.selling_price.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '-'}
+                    </div>
                     <div className="text-xs text-slate-400 mt-1">Per unit</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
+
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center rounded-xl">
                     <div className="text-sm text-slate-500 font-medium">Total Sales Count</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{totalInvoices}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                        {totalInvoices}
+                    </div>
                     <div className="text-xs text-slate-400 mt-1">Invoices</div>
                 </Card>
-                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
+
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center rounded-xl">
                     <div className="text-sm text-slate-500 font-medium">Total Amount Sold</div>
                     <div className="text-2xl font-bold text-sky-600 mt-1">
-                        ₹{(salesSummary?.total_amount ?? 0).toFixed(0)}
+                        ₹{(salesSummary?.total_amount ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </div>
                     <div className="text-xs text-slate-400 mt-1">Revenue from this product</div>
                 </Card>
             </div>
-
-            {/* Payment History Section (per product/supplier) */}
-            {
-                product.supplier_id && (
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-semibold text-slate-900">Payment History</h2>
-                            <Button
-                                size="sm"
-                                variant={showPaymentForm ? 'outline' : 'default'}
-                                onClick={async () => {
-                                    if (isCleared && paymentSummary) {
-                                        await ask(
-                                            `All payments are already cleared for this product.\n\nTotal Paid: ₹${paymentSummary.total_paid.toFixed(0)}\nTotal Payable: ₹${paymentSummary.total_payable.toFixed(0)}`,
-                                            {
-                                                title: 'Payments Cleared',
-                                                kind: 'info',
-                                                okLabel: 'OK',
-                                            },
-                                        );
-                                        return;
-                                    }
-                                    setShowPaymentForm(!showPaymentForm);
-                                }}
-                            >
-                                {showPaymentForm ? 'Cancel' : 'Add Payment'}
-                            </Button>
-                        </div>
-
-                        {showPaymentForm && (
-                            <Card className="p-4 bg-white border-slate-200 shadow-sm">
-                                {paymentSummary && (
-                                    <div className="mb-3 text-xs text-slate-500 space-y-1">
-                                        <div>
-                                            Already paid:{' '}
-                                            <span className="font-semibold text-slate-700">
-                                                ₹{paymentSummary.total_paid.toFixed(0)}
-                                            </span>{' '}
-                                            of ₹{paymentSummary.total_payable.toFixed(0)}
-                                        </div>
-                                        {paymentSummary.pending_amount > 0 && (
-                                            <div className="text-red-600 font-semibold">
-                                                Pending: ₹{paymentSummary.pending_amount.toFixed(0)}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <div>
-                                        <label className="form-label">
-                                            Amount
-                                            <span className="ml-2 text-xs text-slate-400">
-                                                Stock Amount (
-                                                ₹{(purchaseSummary?.total_value ?? 0).toFixed(0)})
-                                            </span>
-                                        </label>
-                                        <Input
-                                            type="number"
-                                            value={newPayment.amount}
-                                            onChange={(e) =>
-                                                setNewPayment({ ...newPayment, amount: e.target.value })
-                                            }
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="form-label">Payment Mode</label>
-                                        <Select
-                                            value={newPayment.payment_method}
-                                            onChange={(e) =>
-                                                setNewPayment({
-                                                    ...newPayment,
-                                                    payment_method: e.target.value,
-                                                })
-                                            }
-                                        >
-                                            <option value="">Select mode</option>
-                                            <option value="Cash">Cash</option>
-                                            <option value="UPI">UPI</option>
-                                            <option value="Card">Card</option>
-                                            <option value="Bank Transfer">Bank Transfer</option>
-                                            <option value="Other">Other</option>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <label className="form-label">Note</label>
-                                        <Input
-                                            value={newPayment.note}
-                                            onChange={(e) =>
-                                                setNewPayment({ ...newPayment, note: e.target.value })
-                                            }
-                                        />
-                                    </div>
-                                </div>
-                                <Button
-                                    className="mt-4"
-                                    disabled={savingPayment}
-                                    onClick={handleAddPayment}
-                                >
-                                    {savingPayment ? 'Saving...' : 'Save Payment'}
-                                </Button>
-                            </Card>
-                        )}
-
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="grid grid-cols-[1.7fr,1fr,1fr,2fr,0.9fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
-                                <div>Paid At</div>
-                                <div>Amount</div>
-                                <div>Mode</div>
-                                <div>Note</div>
-                                <div>Actions</div>
-                            </div>
-                            <div className="divide-y divide-slate-100">
-                                {payments.map((payment) => (
-                                    <div
-                                        key={payment.id}
-                                        className="grid grid-cols-[1.7fr,1fr,1fr,2fr,0.9fr] gap-4 p-3 items-center text-sm"
-                                    >
-                                        <div className="text-slate-500 text-center">
-                                            {new Date(payment.paid_at).toLocaleString()}
-                                        </div>
-                                        <div className="font-medium text-slate-900 text-center">
-                                            ₹{payment.amount.toFixed(0)}
-                                        </div>
-                                        <div className="text-slate-500 text-center">
-                                            {payment.payment_method || '-'}
-                                        </div>
-                                        <div className="text-slate-500 text-center">
-                                            {payment.note || '-'}
-                                        </div>
-                                    </div>
-                                ))}
-                                {payments.length === 0 && (
-                                    <div className="p-6 text-center text-slate-500">
-                                        No payments recorded for this product yet.
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
 
             {/* Purchase History Section */}
             <div className="space-y-4">
@@ -450,7 +306,7 @@ function InventoryDetailsContent() {
                         <div>View</div>
                     </div>
 
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 max-h-[200px] overflow-y-auto">
                         {displayPurchaseHistory.map((purchase) => {
                             const expectedProfit = purchase.selling_price
                                 ? (purchase.quantity * purchase.selling_price) - purchase.total_cost
@@ -472,9 +328,9 @@ function InventoryDetailsContent() {
                                         })}
                                     </div>
                                     <div className={`font-medium text-center ${purchase.type === 'po' ? 'text-blue-600' : 'text-slate-600'}`}>
-                                        {purchase.type === 'po' && purchase.po_id
+                                        {purchase.po_number || (purchase.type === 'po' && purchase.po_id
                                             ? `PO-${purchase.po_id.toString().padStart(3, '0')}`
-                                            : 'Initial Stock'}
+                                            : 'Initial Stock')}
                                     </div>
                                     <div className="text-center font-medium text-slate-900">
                                         {purchase.quantity}
@@ -524,8 +380,79 @@ function InventoryDetailsContent() {
                             </div>
                         )}
                     </div>
+                    {/* Purchase History Footer */}
+                    <div className="grid grid-cols-[1fr,1.2fr,0.8fr,1fr,1fr,1fr,1fr,0.8fr,0.8fr,0.6fr] gap-3 p-4 bg-slate-100 border-t border-slate-200 text-sm font-bold text-slate-900 items-center rounded-b-xl">
+                        <div className="col-span-2 text-right pr-4 text-slate-500 text-xs uppercase tracking-wider">Total</div>
+                        <div className="text-center">{displayPurchaseHistory.reduce((s, i) => s + i.quantity, 0)}</div>
+                        <div className="col-span-2"></div>
+                        <div className="text-center">₹{displayPurchaseHistory.reduce((s, i) => s + i.total_cost, 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                        <div className="text-center">₹{displayPurchaseHistory.reduce((s, i) => s + (i.selling_price ? (i.quantity * i.selling_price) - i.total_cost : 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-center">₹{displayPurchaseHistory.reduce((s, i) => s + ((i.sold_revenue || 0) - ((i.sold_qty || 0) * i.unit_cost)), 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-center">₹{displayPurchaseHistory.reduce((s, i) => s + (i.sold_revenue || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div></div>
+                    </div>
                 </div>
             </div>
+
+            {/* Payment History Section (global) */}
+            {
+                paymentSummary && (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-semibold text-slate-900">Payment History</h2>
+                        </div>
+
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="grid grid-cols-[1.2fr,1.5fr,1fr,1fr,2fr,0.9fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
+                                <div>Paid At</div>
+                                <div>Supplier</div>
+                                <div>Amount</div>
+                                <div>Mode</div>
+                                <div>Note</div>
+                                <div>Actions</div>
+                            </div>
+                            <div className="divide-y divide-slate-100 max-h-[200px] overflow-y-auto">
+                                {payments.map((payment) => (
+                                    <div
+                                        key={payment.id}
+                                        className="grid grid-cols-[1.2fr,1.5fr,1fr,1fr,2fr,0.9fr] gap-4 p-3 items-center text-sm"
+                                    >
+                                        <div className="text-slate-500 text-center">
+                                            {new Date(payment.paid_at).toLocaleString()}
+                                        </div>
+                                        <div className="font-medium text-slate-700 text-center truncate" title={payment.supplier_name}>
+                                            {payment.supplier_name}
+                                        </div>
+                                        <div className="font-medium text-slate-900 text-center">
+                                            ₹{payment.amount.toFixed(0)}
+                                        </div>
+                                        <div className="text-slate-500 text-center">
+                                            {payment.payment_method || '-'}
+                                        </div>
+                                        <div className="text-slate-500 text-center">
+                                            {payment.note || '-'}
+                                        </div>
+                                        <div className="text-center">
+                                            <span className="text-xs text-slate-400">-</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {payments.length === 0 && (
+                                    <div className="p-6 text-center text-slate-500">
+                                        No payments recorded for this product yet.
+                                    </div>
+                                )}
+                            </div>
+                            {/* Payment History Footer */}
+                            <div className="grid grid-cols-[1.2fr,1.5fr,1fr,1fr,2fr,0.9fr] gap-4 p-4 bg-slate-100 border-t border-slate-200 text-sm font-bold text-slate-900 items-center rounded-b-xl">
+                                <div className="col-span-2 text-right pr-4 text-slate-500 text-xs uppercase tracking-wider">Total</div>
+                                <div className="text-center">₹{payments.reduce((s, p) => s + p.amount, 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                                <div className="col-span-3"></div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
 
             {/* Sales History Section */}
             <div className="space-y-4">
@@ -539,7 +466,7 @@ function InventoryDetailsContent() {
                         <div>Payment</div>
                     </div>
 
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 max-h-[200px] overflow-y-auto">
                         {invoices.map((invoice) => (
                             <div
                                 key={invoice.id}
@@ -577,6 +504,13 @@ function InventoryDetailsContent() {
                             </div>
                         )}
                     </div>
+                    {/* Sales History Footer */}
+                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 bg-slate-100 border-t border-slate-200 text-sm font-bold text-slate-900 items-center rounded-b-xl">
+                        <div className="col-span-2 text-right pr-4 text-slate-500 text-xs uppercase tracking-wider">Total</div>
+                        <div className="text-center">{invoices.reduce((s, i) => s + (i.quantity || 0), 0)}</div>
+                        <div className="text-center">₹{invoices.reduce((s, i) => s + i.total_amount, 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div></div>
+                    </div>
                 </div>
             </div>
             <PDFPreviewDialog
@@ -585,18 +519,16 @@ function InventoryDetailsContent() {
                 url={pdfUrl}
                 fileName={pdfFileName}
             />
-            {
-                product && (
-                    <EntityImagePreviewModal
-                        open={showImagePreview}
-                        onOpenChange={setShowImagePreview}
-                        entityId={product.id}
-                        entityType="product"
-                        entityName={product.name}
-                        onImageUpdate={(path) => product && setProduct({ ...product, image_path: path })}
-                    />
-                )
-            }
+            {product && (
+                <EntityImagePreviewModal
+                    open={showImagePreview}
+                    onOpenChange={setShowImagePreview}
+                    entityId={product.id}
+                    entityType="product"
+                    entityName={product.name}
+                    onImageUpdate={(path) => product && setProduct({ ...product, image_path: path })}
+                />
+            )}
         </div >
     );
 }

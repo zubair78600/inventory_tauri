@@ -14,6 +14,7 @@ pub struct CreateProductInput {
     pub stock_quantity: i32,
     pub supplier_id: Option<i32>,
     pub amount_paid: Option<f64>,
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,6 +26,7 @@ pub struct UpdateProductInput {
     pub selling_price: Option<f64>,
     pub stock_quantity: i32,
     pub supplier_id: Option<i32>,
+    pub category: Option<String>,
 }
 
 /// Get all products, optionally filtered by search query
@@ -49,7 +51,7 @@ pub fn get_products(
     // Modified query to include total_sold
     let base_query = "
         SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
-               p.supplier_id, p.created_at, p.updated_at, p.image_path,
+               p.supplier_id, p.created_at, p.updated_at, p.image_path, p.category,
                COALESCE(SUM(ii.quantity), 0) as total_sold
         FROM products p
         LEFT JOIN invoice_items ii ON p.id = ii.product_id
@@ -90,8 +92,9 @@ pub fn get_products(
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
                     image_path: row.get(10)?,
+                    category: row.get(11)?,
                     total_sold: {
-                        let sold: i64 = row.get(11)?;
+                        let sold: i64 = row.get(12)?;
                         if sold > 0 { Some(sold) } else { None } 
                     },
                     initial_stock_sold: None,
@@ -128,8 +131,9 @@ pub fn get_products(
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
                     image_path: row.get(10)?,
+                    category: row.get(11)?,
                     total_sold: {
-                        let sold: i64 = row.get(11)?;
+                        let sold: i64 = row.get(12)?;
                         if sold > 0 { Some(sold) } else { None }
                     },
                     initial_stock_sold: None,
@@ -161,7 +165,7 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
     let product = conn
         .query_row(
             "SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
-                    p.supplier_id, p.created_at, p.updated_at, p.image_path,
+                    p.supplier_id, p.created_at, p.updated_at, p.image_path, p.category,
                     COALESCE(SUM(ii.quantity), 0) as total_sold,
                     (SELECT quantity_remaining FROM inventory_batches WHERE product_id = p.id AND po_item_id IS NULL LIMIT 1) as initial_remaining
              FROM products p
@@ -171,7 +175,7 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
             [id],
             |row| {
                 let initial_stock: Option<i32> = row.get(5)?;
-                let initial_remaining: Option<i32> = row.get(12)?;
+                let initial_remaining: Option<i32> = row.get(13)?;
                 
                 let initial_stock_sold = match (initial_stock, initial_remaining) {
                     (Some(stock), Some(remaining)) => Some(stock - remaining),
@@ -198,8 +202,9 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
                     created_at: row.get(8)?,
                     updated_at: row.get(9)?,
                     image_path: row.get(10)?,
+                    category: row.get(11)?,
                     total_sold: {
-                        let sold: i64 = row.get(11)?;
+                        let sold: i64 = row.get(12)?;
                         if sold > 0 { Some(sold) } else { None }
                     },
                     initial_stock_sold,
@@ -224,7 +229,34 @@ pub fn get_products_by_supplier(
     let conn = db.get_conn()?;
 
     let mut stmt = conn
-        .prepare("SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE supplier_id = ?1 ORDER BY name")
+        .prepare(
+            "SELECT 
+                p.id, p.name, p.sku, p.price, p.selling_price, 
+                NULL as initial_stock,
+                (
+                    COALESCE((
+                        SELECT SUM(ib.quantity_remaining)
+                        FROM inventory_batches ib
+                        JOIN purchase_order_items poi ON ib.po_item_id = poi.id
+                        JOIN purchase_orders po ON poi.po_id = po.id
+                        WHERE ib.product_id = p.id AND po.supplier_id = ?1
+                    ), 0)
+                    +
+                    CASE WHEN p.supplier_id = ?1 THEN
+                        COALESCE((SELECT quantity_remaining FROM inventory_batches WHERE product_id = p.id AND po_item_id IS NULL LIMIT 1), 0)
+                    ELSE 0 END
+                ) as stock_quantity,
+                p.supplier_id, p.created_at, p.updated_at, p.image_path, p.category 
+             FROM products p 
+             WHERE p.supplier_id = ?1
+                OR p.id IN (
+                    SELECT DISTINCT poi.product_id 
+                    FROM purchase_order_items poi
+                    JOIN purchase_orders po ON poi.po_id = po.id
+                    WHERE po.supplier_id = ?1
+                )
+             ORDER BY p.name"
+        )
         .map_err(|e| e.to_string())?;
 
     let product_iter = stmt
@@ -241,6 +273,7 @@ pub fn get_products_by_supplier(
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
                 image_path: row.get(10)?,
+                category: row.get(11)?,
                 total_sold: None,
                 initial_stock_sold: None,
                 quantity_sold: None,
@@ -283,7 +316,7 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
     }
 
     conn.execute(
-        "INSERT INTO products (name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), datetime('now'))",
+        "INSERT INTO products (name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, category) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), datetime('now'), ?8)",
         (
             &input.name,
             &input.sku,
@@ -292,6 +325,7 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
             initial_qty, // capture the intended purchased stock
             0,           // start at 0 to avoid double-counting; batch will set real stock
             input.supplier_id,
+            input.category,
         ),
     )
     .map_err(|e| format!("Failed to create product: {}", e))?;
@@ -377,7 +411,7 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 
     let rows_affected = conn
         .execute(
-            "UPDATE products SET name = ?1, sku = ?2, price = ?3, selling_price = ?4, stock_quantity = ?5, supplier_id = ?6, updated_at = datetime('now') WHERE id = ?7",
+            "UPDATE products SET name = ?1, sku = ?2, price = ?3, selling_price = ?4, stock_quantity = ?5, supplier_id = ?6, updated_at = datetime('now'), category = ?7 WHERE id = ?8",
             (
                 &input.name,
                 &input.sku,
@@ -385,6 +419,7 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
                 input.selling_price,
                 input.stock_quantity,
                 input.supplier_id,
+                input.category,
                 input.id,
             ),
         )
@@ -401,8 +436,8 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 
 /// Delete a product by ID
 #[tauri::command]
-pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
-    log::info!("delete_product called with id: {}", id);
+pub fn delete_product(id: i32, deleted_by: Option<String>, db: State<Database>) -> Result<(), String> {
+    log::info!("delete_product called with id: {}, deleted_by: {:?}", id, deleted_by);
 
     let mut conn = db.get_conn()?;
 
@@ -425,7 +460,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
     // Get product data before deletion for audit trail
     // We can use simple query here as we don't strictly need total_sold for audit
     let product = conn.query_row(
-        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path FROM products WHERE id = ?1",
+        "SELECT id, name, sku, price, selling_price, initial_stock, stock_quantity, supplier_id, created_at, updated_at, image_path, category FROM products WHERE id = ?1",
         [id],
         |row| {
             Ok(Product {
@@ -440,6 +475,7 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
                 image_path: row.get(10)?,
+                category: row.get(11)?,
                 total_sold: None,
                 initial_stock_sold: None,
                 quantity_sold: None,
@@ -452,13 +488,14 @@ pub fn delete_product(id: i32, db: State<Database>) -> Result<(), String> {
     let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
 
     // Save to deleted_items
-    let product_json = serde_json::to_string(&product).map_err(|e| format!("Failed to serialize product: {}", e))?;
-    let now = Utc::now().to_rfc3339();
-    tx.execute(
-        "INSERT INTO deleted_items (entity_type, entity_id, entity_data, deleted_at) VALUES (?1, ?2, ?3, ?4)",
-        ("product", id, &product_json, &now),
-    )
-    .map_err(|e| format!("Failed to save to trash: {}", e))?;
+    crate::db::archive::archive_entity(
+        &tx,
+        "product",
+        id,
+        &product,
+        None,
+        deleted_by,
+    )?;
 
     // Delete the product
     let rows_affected = tx.execute("DELETE FROM products WHERE id = ?1", [id])
@@ -517,26 +554,34 @@ pub fn add_mock_products(db: State<Database>) -> Result<String, String> {
     Ok(format!("Successfully added {} mock products", inserted))
 }
 
-/// Get top selling products based on invoice items
+/// Get top selling products based on invoice items, optionally filtered by category
 #[tauri::command]
-pub fn get_top_selling_products(page: i32, limit: i32, db: State<Database>) -> Result<Vec<Product>, String> {
+pub fn get_top_selling_products(page: i32, limit: i32, category: Option<String>, db: State<Database>) -> Result<Vec<Product>, String> {
     log::info!("get_top_selling_products called with page: {}, limit: {}", page, limit);
 
     let conn = db.get_conn()?;
     let offset = (page - 1) * limit;
+    
+    let category_filter = if let Some(cat) = &category {
+        format!("AND p.category = '{}'", cat.replace("'", "''")) 
+    } else {
+        String::new()
+    };
 
-    let query = "
+    let query = format!("
         SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
-               p.supplier_id, p.created_at, p.updated_at, p.image_path,
+               p.supplier_id, p.created_at, p.updated_at, p.image_path, p.category,
                COALESCE(SUM(ii.quantity), 0) as total_sold
         FROM products p
         LEFT JOIN invoice_items ii ON p.id = ii.product_id
+        WHERE p.stock_quantity > 0
+        {}
         GROUP BY p.id
         ORDER BY total_sold DESC, p.name ASC
         LIMIT ?1 OFFSET ?2
-    ";
+    ", category_filter);
 
-    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
     let product_iter = stmt.query_map([limit, offset], |row| {
         Ok(Product {
@@ -551,8 +596,9 @@ pub fn get_top_selling_products(page: i32, limit: i32, db: State<Database>) -> R
             created_at: row.get(8)?,
             updated_at: row.get(9)?,
             image_path: row.get(10)?,
+            category: row.get(11)?,
             total_sold: {
-                let sold: i64 = row.get(11)?;
+                let sold: i64 = row.get(12)?;
                 if sold > 0 { Some(sold) } else { None }
             },
             initial_stock_sold: None,
@@ -584,7 +630,7 @@ pub fn get_products_by_ids(ids: Vec<i32>, db: State<Database>) -> Result<Vec<Pro
     let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let query = format!("
         SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
-               p.supplier_id, p.created_at, p.updated_at, p.image_path,
+               p.supplier_id, p.created_at, p.updated_at, p.image_path, p.category,
                COALESCE(SUM(ii.quantity), 0) as total_sold
         FROM products p
         LEFT JOIN invoice_items ii ON p.id = ii.product_id
@@ -610,8 +656,9 @@ pub fn get_products_by_ids(ids: Vec<i32>, db: State<Database>) -> Result<Vec<Pro
             created_at: row.get(8)?,
             updated_at: row.get(9)?,
             image_path: row.get(10)?,
+            category: row.get(11)?,
             total_sold: {
-                let sold: i64 = row.get(11)?;
+                let sold: i64 = row.get(12)?;
                 if sold > 0 { Some(sold) } else { None }
             },
             initial_stock_sold: None,
@@ -635,4 +682,26 @@ pub fn get_products_by_ids(ids: Vec<i32>, db: State<Database>) -> Result<Vec<Pro
     }
 
     Ok(ordered_products)
+}
+
+/// Get all unique categories
+#[tauri::command]
+pub fn get_unique_categories(db: State<Database>) -> Result<Vec<String>, String> {
+    log::info!("get_unique_categories called");
+    let conn = db.get_conn()?;
+    
+    let mut stmt = conn
+        .prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != '' ORDER BY category")
+        .map_err(|e| e.to_string())?;
+
+    let cat_iter = stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    let mut categories = Vec::new();
+    for cat in cat_iter {
+        categories.push(cat.map_err(|e| e.to_string())?);
+    }
+
+    Ok(categories)
 }

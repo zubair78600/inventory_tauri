@@ -289,7 +289,7 @@ pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Resul
 
 /// Delete a customer by ID
 #[tauri::command]
-pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
+pub fn delete_customer(id: i32, deleted_by: Option<String>, db: State<Database>) -> Result<(), String> {
     log::info!("delete_customer called with id: {}", id);
 
     let mut conn = db.get_conn()?;
@@ -354,19 +354,20 @@ pub fn delete_customer(id: i32, db: State<Database>) -> Result<(), String> {
     let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
 
     // Save to deleted_items
-    let customer_json = serde_json::to_string(&customer).map_err(|e| format!("Failed to serialize customer: {}", e))?;
     let invoices_json = if invoices.is_empty() {
         None
     } else {
         Some(serde_json::to_string(&invoices).map_err(|e| format!("Failed to serialize invoices: {}", e))?)
     };
 
-    let now = Utc::now().to_rfc3339();
-    tx.execute(
-        "INSERT INTO deleted_items (entity_type, entity_id, entity_data, related_data, deleted_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        ("customer", id, &customer_json, invoices_json.as_deref(), &now),
-    )
-    .map_err(|e| format!("Failed to save to trash: {}", e))?;
+    crate::db::archive::archive_entity(
+        &tx,
+        "customer",
+        id,
+        &customer,
+        invoices_json,
+        deleted_by,
+    )?;
 
     // Delete linked invoices first (invoice_items will cascade delete due to FK)
     tx.execute("DELETE FROM invoices WHERE customer_id = ?1", [id])

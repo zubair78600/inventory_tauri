@@ -440,6 +440,20 @@ impl Database {
             conn.execute("ALTER TABLE products ADD COLUMN image_path TEXT", [])?;
         }
 
+        // Migration: Add category to products
+        let category_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('products') WHERE name = 'category'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !category_exists {
+            log::info!("Migrating: Adding category column to products table");
+            conn.execute("ALTER TABLE products ADD COLUMN category TEXT", [])?;
+        }
+
         // Migration: Add image_path to suppliers
         let supplier_image_path_exists: bool = conn
             .query_row(

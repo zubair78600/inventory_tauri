@@ -26,6 +26,7 @@ import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 import { EntityImageUpload } from '@/components/shared/EntityImageUpload';
 import { imageCommands } from '@/lib/tauri';
+import { useAuth } from '@/contexts/AuthContext';
 
 type NewProductFormState = {
   name: string;
@@ -35,10 +36,12 @@ type NewProductFormState = {
   stock_quantity: string;
   supplier_id: string;
   amount_paid: string;
+  category: string;
 };
 
 export default function Inventory() {
   const router = useRouter();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -53,8 +56,11 @@ export default function Inventory() {
     stock_quantity: '',
     supplier_id: '',
     amount_paid: '',
+    category: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [isNewCategory, setIsNewCategory] = useState(false);
+  const [isEditNewCategory, setIsEditNewCategory] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const pageSize = 50;
 
@@ -74,6 +80,21 @@ export default function Inventory() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  // Auto-calculate Amount Paid when Price or Stock changes
+  useEffect(() => {
+    const price = parseFloat(newProduct.price);
+    const stock = parseInt(newProduct.stock_quantity, 10);
+
+    // Only update if we have valid numbers
+    if (!isNaN(price) && !isNaN(stock)) {
+      const calculated = (price * stock).toFixed(2);
+      // Update only if different to avoid loop (though dependencies handle that)
+      if (newProduct.amount_paid !== calculated) {
+        setNewProduct(prev => ({ ...prev, amount_paid: calculated }));
+      }
+    }
+  }, [newProduct.price, newProduct.stock_quantity]);
+
   useEffect(() => {
     router.prefetch('/purchase-orders');
   }, [router]);
@@ -85,6 +106,13 @@ export default function Inventory() {
     staleTime: 60 * 1000, // Cache for 1 minute
   });
   const suppliers = suppliersData?.items ?? [];
+
+  // Fetch categories
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => productCommands.getAllCategories(),
+    staleTime: 60 * 1000,
+  });
 
   // O(1) supplier lookup using Map instead of O(n) find
   const supplierMap = useMemo(() => {
@@ -131,6 +159,7 @@ export default function Inventory() {
   // Invalidate queries after mutations
   const invalidateProducts = () => {
     void queryClient.invalidateQueries({ queryKey: ['products'] });
+    void queryClient.invalidateQueries({ queryKey: ['categories'] });
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -144,6 +173,7 @@ export default function Inventory() {
         stock_quantity: parseInt(newProduct.stock_quantity, 10),
         supplier_id: newProduct.supplier_id ? Number(newProduct.supplier_id) : null,
         amount_paid: newProduct.amount_paid ? parseFloat(newProduct.amount_paid) : null,
+        category: newProduct.category || null,
       });
 
       // Handle deferred image upload
@@ -174,6 +204,7 @@ export default function Inventory() {
         stock_quantity: '',
         supplier_id: '',
         amount_paid: '',
+        category: '',
       });
       // Reset image state
       setPendingImageFile(null);
@@ -201,6 +232,7 @@ export default function Inventory() {
         selling_price: editProduct.selling_price,
         stock_quantity: editProduct.stock_quantity,
         supplier_id: editProduct.supplier_id,
+        category: editProduct.category || null,
       });
       setEditProduct(null);
       invalidateProducts();
@@ -226,7 +258,7 @@ export default function Inventory() {
         return;
       }
 
-      await productCommands.delete(id);
+      await productCommands.delete(id, user?.username);
       invalidateProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
@@ -305,76 +337,77 @@ export default function Inventory() {
           <Card className="space-y-4 p-5 animate-in slide-in-from-top-2 duration-200">
             <h2 className="text-lg font-semibold">Add New Product</h2>
             <form onSubmit={handleSubmit}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div className="md:col-span-2">
                   <label className="form-label">Product Name</label>
                   <Input
+                    placeholder="Enter product name"
                     value={newProduct.name}
                     onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
                     required
                   />
                 </div>
-                <div>
+                <div className="md:col-span-2">
                   <label className="form-label">SKU</label>
                   <Input
+                    placeholder="Enter SKU"
                     value={newProduct.sku}
                     onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
                     required
                   />
                 </div>
+
                 <div>
-                  <label className="form-label">Actual Price (Purchase Price)</label>
+                  <label className="form-label whitespace-nowrap text-xs">Actual Price (Purchase)</label>
                   <Input
                     type="number"
                     step="0.01"
+                    min="0"
+                    placeholder="0.00"
                     value={newProduct.price}
                     onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
                     required
                   />
                 </div>
                 <div>
-                  <label className="form-label">Selling Price</label>
+                  <label className="form-label whitespace-nowrap text-xs">Selling Price</label>
                   <Input
                     type="number"
                     step="0.01"
+                    min="0"
+                    placeholder="0.00"
                     value={newProduct.selling_price}
                     onChange={(e) => setNewProduct({ ...newProduct, selling_price: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="form-label">Stock Quantity</label>
+                  <label className="form-label whitespace-nowrap text-xs">Stock Quantity</label>
                   <Input
                     type="number"
+                    min="0"
+                    placeholder="0"
                     value={newProduct.stock_quantity}
                     onChange={(e) => setNewProduct({ ...newProduct, stock_quantity: e.target.value })}
                     required
                   />
                 </div>
                 <div>
-                  <label className="form-label">
-                    Amount Paid
-                    {newProduct.price && newProduct.stock_quantity && (
-                      <span className="ml-2 text-xs text-slate-400">
-                        Stock Amount (
-                        ₹
-                        {(
-                          parseFloat(newProduct.price || '0') *
-                          parseInt(newProduct.stock_quantity || '0', 10)
-                        ).toFixed(0)}
-                        )
-                      </span>
-                    )}
+                  <label className="form-label whitespace-nowrap text-xs truncate" title="Amount Paid">
+                    Amount Paid {newProduct.amount_paid ? `(${newProduct.amount_paid})` : ''}
                   </label>
                   <Input
                     type="number"
                     step="0.01"
+                    min="0"
+                    placeholder="0.00"
                     value={newProduct.amount_paid}
                     onChange={(e) =>
                       setNewProduct({ ...newProduct, amount_paid: e.target.value })
                     }
                   />
                 </div>
-                <div>
+
+                <div className="md:col-span-2">
                   <label className="form-label">Supplier</label>
                   <Select
                     value={newProduct.supplier_id}
@@ -387,6 +420,69 @@ export default function Inventory() {
                       </option>
                     ))}
                   </Select>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="form-label">Category</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsNewCategory(!isNewCategory);
+                        setNewProduct({ ...newProduct, category: '' });
+                      }}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
+                    >
+                      {isNewCategory ? (
+                        'Select Existing'
+                      ) : (
+                        <>
+                          <span className="text-sm font-bold">+</span>
+                          <span>Add New</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {isNewCategory ? (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter new category name"
+                        value={newProduct.category}
+                        onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault(); // Prevent form submission
+                            setIsNewCategory(false);
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="px-3"
+                        onClick={() => setIsNewCategory(false)}
+                        title="Save Category"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={newProduct.category}
+                      onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                    >
+                      <option value="">Select Category</option>
+                      {/* Show current category even if not in fetched list yet */}
+                      {newProduct.category && !categories.includes(newProduct.category) && (
+                        <option value={newProduct.category}>{newProduct.category}</option>
+                      )}
+                      {categories.map((cat: string) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </div>
               </div>
 
@@ -436,8 +532,8 @@ export default function Inventory() {
               </Button>
             </div>
             <form onSubmit={handleUpdate}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div className="md:col-span-2">
                   <label className="form-label">Product Name</label>
                   <Input
                     value={editProduct.name}
@@ -445,7 +541,7 @@ export default function Inventory() {
                     required
                   />
                 </div>
-                <div>
+                <div className="md:col-span-2">
                   <label className="form-label">SKU</label>
                   <Input
                     value={editProduct.sku}
@@ -453,11 +549,13 @@ export default function Inventory() {
                     required
                   />
                 </div>
+
                 <div>
-                  <label className="form-label">Actual Price (Purchase Price)</label>
+                  <label className="form-label whitespace-nowrap text-xs">Actual Price (Purchase)</label>
                   <Input
                     type="number"
                     step="0.01"
+                    min="0"
                     value={editProduct.price}
                     onChange={(e) =>
                       setEditProduct({ ...editProduct, price: Number(e.target.value) })
@@ -466,10 +564,11 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="form-label">Selling Price</label>
+                  <label className="form-label whitespace-nowrap text-xs">Selling Price</label>
                   <Input
                     type="number"
                     step="0.01"
+                    min="0"
                     value={editProduct.selling_price ?? ''}
                     onChange={(e) =>
                       setEditProduct({ ...editProduct, selling_price: e.target.value ? Number(e.target.value) : null })
@@ -477,9 +576,10 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="form-label">Stock Quantity</label>
+                  <label className="form-label whitespace-nowrap text-xs">Stock Quantity</label>
                   <Input
                     type="number"
+                    min="0"
                     value={editProduct.stock_quantity}
                     onChange={(e) =>
                       setEditProduct({ ...editProduct, stock_quantity: Number(e.target.value) })
@@ -488,7 +588,7 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="form-label">Supplier</label>
+                  <label className="form-label whitespace-nowrap text-xs">Supplier</label>
                   <Select
                     value={editProduct.supplier_id ?? ''}
                     onChange={(e) =>
@@ -505,6 +605,71 @@ export default function Inventory() {
                       </option>
                     ))}
                   </Select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="form-label">Category</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditNewCategory(!isEditNewCategory);
+                        // Don't clear category immediately on edit so they can see what it was, 
+                        // but if they switch to "Add New" maybe they want to keep it or clear it.
+                        // Let's keep it to allow editing the name easily.
+                      }}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
+                    >
+                      {isEditNewCategory ? (
+                        'Select Existing'
+                      ) : (
+                        <>
+                          <span className="text-sm font-bold">+</span>
+                          <span>Add New</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {isEditNewCategory ? (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter new category name"
+                        value={editProduct.category || ''}
+                        onChange={(e) => setEditProduct({ ...editProduct, category: e.target.value })}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            setIsEditNewCategory(false);
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="px-3"
+                        onClick={() => setIsEditNewCategory(false)}
+                        title="Save Category"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={editProduct.category || ''}
+                      onChange={(e) => setEditProduct({ ...editProduct, category: e.target.value })}
+                    >
+                      <option value="">Select Category</option>
+                      {/* Show current category even if not in fetched list yet */}
+                      {editProduct.category && !categories.includes(editProduct.category) && (
+                        <option value={editProduct.category}>{editProduct.category}</option>
+                      )}
+                      {categories.map((cat: string) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </div>
               </div>
 

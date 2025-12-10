@@ -7,9 +7,10 @@ import { generateSupplierDetailPDF } from '@/lib/pdf-generator';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, MapPin, Phone, Mail, Package, Building } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Phone, Mail, Package, Building, ChevronUp, ChevronDown } from 'lucide-react';
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
+import { SupplierProductInlineDetails } from '@/components/suppliers/SupplierProductInlineDetails';
 
 function SupplierDetailsContent() {
     const searchParams = useSearchParams();
@@ -19,6 +20,7 @@ function SupplierDetailsContent() {
     const [supplier, setSupplier] = useState<Supplier | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [paymentSummaries, setPaymentSummaries] = useState<Record<number, SupplierPaymentSummary | null>>({});
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -203,59 +205,84 @@ function SupplierDetailsContent() {
                         <div>SKU</div>
                         <div>Stock</div>
                         <div>Price</div>
-                        <div>Stock Amount</div>
+                        <div>Total Purchased</div>
                     </div>
 
                     <div className="divide-y divide-slate-100">
-                        {products.map((product) => (
-                            <div
-                                key={product.id}
-                                className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr,1.4fr] gap-4 p-4 items-center hover:bg-slate-50 transition-colors cursor-pointer"
-                                onClick={() => router.push(`/inventory/details?id=${product.id}`)}
-                            >
-                                <div className="text-slate-500 text-sm text-center">
-                                    {new Date(product.created_at).toLocaleString()}
-                                </div>
-                                <div className="font-medium text-slate-900 flex items-center justify-center gap-2">
-                                    <Package className="w-4 h-4 text-slate-400" />
-                                    {product.name}
-                                </div>
-                                <div className="text-slate-500 text-sm text-center">
-                                    {product.sku}
-                                </div>
-                                <div className="text-center font-medium text-slate-900">
-                                    {product.initial_stock ?? product.stock_quantity}
-                                </div>
-                                <div className="text-center text-slate-500">
-                                    ₹{product.price.toFixed(0)}
-                                </div>
-                                <div className="text-center">
-                                    <div className="text-sm font-semibold text-slate-900">
-                                        ₹{((product.initial_stock ?? product.stock_quantity) * product.price).toFixed(0)}
+                        {products.map((product) => {
+                            const isExpanded = selectedProduct?.id === product.id;
+                            const summary = paymentSummaries[product.id];
+
+                            return (
+                                <div key={product.id}>
+                                    <div
+                                        className={`grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr,1.4fr] gap-4 p-4 items-center transition-colors cursor-pointer ${isExpanded ? 'bg-sky-50' : 'hover:bg-slate-50'}`}
+                                        onClick={() => setSelectedProduct(isExpanded ? null : product)}
+                                    >
+                                        <div className="text-slate-500 text-sm text-center">
+                                            {new Date(product.created_at).toLocaleString()}
+                                        </div>
+                                        <div className="font-medium text-slate-900 flex items-center justify-center gap-2">
+                                            <Package className={`w-4 h-4 ${isExpanded ? 'text-sky-600' : 'text-slate-400'}`} />
+                                            {product.name}
+                                        </div>
+                                        <div className="text-slate-500 text-sm text-center">
+                                            {product.sku}
+                                        </div>
+                                        <div className="text-center font-medium text-slate-900">
+                                            {product.initial_stock ?? product.stock_quantity}
+                                        </div>
+                                        <div className="text-center text-slate-500">
+                                            ₹{product.price.toFixed(0)}
+                                        </div>
+                                        <div className="text-right pr-4">
+                                            <div className="flex items-center justify-end gap-3">
+                                                <div className="text-center">
+                                                    <div className="text-sm font-semibold text-slate-900">
+                                                        ₹{summary ? summary.total_payable.toFixed(0) : ((product.initial_stock ?? product.stock_quantity) * product.price).toFixed(0)}
+                                                    </div>
+                                                    <div className="text-[11px] mt-0.5">
+                                                        {(() => {
+                                                            if (!summary) {
+                                                                return <span className="text-slate-400">-</span>;
+                                                            }
+                                                            if (summary.pending_amount > 0) {
+                                                                return (
+                                                                    <span className="text-red-600 font-semibold">
+                                                                        Pending: ₹{summary.pending_amount.toFixed(0)}
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <span className="text-emerald-600 font-semibold">
+                                                                    Cleared
+                                                                </span>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                                {isExpanded ? (
+                                                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                                                ) : (
+                                                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="text-[11px] mt-0.5">
-                                        {(() => {
-                                            const summary = paymentSummaries[product.id];
-                                            if (!summary) {
-                                                return <span className="text-slate-400">-</span>;
-                                            }
-                                            if (summary.pending_amount > 0) {
-                                                return (
-                                                    <span className="text-red-600 font-semibold">
-                                                        Pending: ₹{summary.pending_amount.toFixed(0)}
-                                                    </span>
-                                                );
-                                            }
-                                            return (
-                                                <span className="text-emerald-600 font-semibold">
-                                                    Cleared
-                                                </span>
-                                            );
-                                        })()}
-                                    </div>
+
+                                    {/* Expanded Details */}
+                                    {isExpanded && (
+                                        <div className="border-t border-sky-100 animate-in slide-in-from-top-1">
+                                            <SupplierProductInlineDetails
+                                                productId={product.id}
+                                                supplierId={supplier.id}
+                                                onPaymentUpdate={() => loadData()} // Refresh parent summaries
+                                            />
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {products.length === 0 && (
                             <div className="p-8 text-center text-slate-500">
                                 No products found for this supplier.
@@ -270,16 +297,14 @@ function SupplierDetailsContent() {
                 url={pdfUrl}
                 fileName={pdfFileName}
             />
-            {supplier && (
-                <EntityImagePreviewModal
-                    open={showImagePreview}
-                    onOpenChange={setShowImagePreview}
-                    entityId={supplier.id}
-                    entityType="supplier"
-                    entityName={supplier.name}
-                    onImageUpdate={(path) => supplier && setSupplier({ ...supplier, image_path: path })}
-                />
-            )}
+            <EntityImagePreviewModal
+                open={showImagePreview}
+                onOpenChange={setShowImagePreview}
+                entityId={supplier.id}
+                entityType="supplier"
+                entityName={supplier.name}
+                onImageUpdate={(path) => supplier && setSupplier({ ...supplier, image_path: path })}
+            />
         </div>
     );
 }

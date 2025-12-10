@@ -105,6 +105,8 @@ export async function enrollBiometric(userId: number, username: string): Promise
     }
 }
 
+let isAuthenticating = false;
+
 /**
  * Authenticate using biometric and return user.
  * This will:
@@ -116,6 +118,13 @@ export async function enrollBiometric(userId: number, username: string): Promise
  * @returns User object if authentication succeeded, null if failed
  */
 export async function authenticateWithBiometric(username: string): Promise<User | null> {
+    if (isAuthenticating) {
+        console.warn('Biometric authentication already in progress');
+        return null;
+    }
+
+    isAuthenticating = true;
+
     try {
         // Check if we have a stored token for this user
         const stored = localStorage.getItem(getStorageKey(username));
@@ -141,6 +150,8 @@ export async function authenticateWithBiometric(username: string): Promise<User 
     } catch (error) {
         console.error('Biometric authentication failed:', error);
         throw error; // Re-throw to handle specific errors in UI
+    } finally {
+        isAuthenticating = false;
     }
 }
 

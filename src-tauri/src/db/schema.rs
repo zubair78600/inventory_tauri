@@ -11,9 +11,13 @@ CREATE TABLE IF NOT EXISTS products (
     selling_price REAL,
     initial_stock INTEGER,
     stock_quantity INTEGER NOT NULL,
+    quantity_sold INTEGER,
+    sold_revenue REAL,
     supplier_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    image_path TEXT,
+    category TEXT,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
@@ -179,6 +183,9 @@ PRAGMA foreign_keys=off;
 
 -- For products: Add selling_price and initial_stock columns if they don't exist
 -- SQLite will error if column exists, but we handle this in Rust
+
+-- Add category to products
+-- ALTER TABLE products ADD COLUMN category TEXT;
 
 -- Add image_path to suppliers if missing (manual check needed in code usually, but here we rely on Rust logic to run specific ALTERs if needed, or lenient execution)
 -- In `db.rs` migration logic, we should probably handle this.

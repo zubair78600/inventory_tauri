@@ -13,6 +13,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { useAuth } from '@/contexts/AuthContext';
 
 type InvoiceItem = {
   id: number;
@@ -31,6 +32,7 @@ interface ExtendedInvoice extends Invoice {
 }
 
 export default function Sales() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const deferredSearch = useDeferredValue(searchTerm);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -142,7 +144,7 @@ export default function Sales() {
   const handleDeleteInvoice = async () => {
     if (!selected?.id) return;
     try {
-      await invoiceCommands.delete(selected.id);
+      await invoiceCommands.delete(selected.id, user?.username);
       await queryClient.invalidateQueries({ queryKey: ['sales'] });
       setSelectedId(null);
       setIsDeleteOpen(false);

@@ -22,6 +22,7 @@ export interface Product {
   created_at: string;
   updated_at: string;
   image_path: string | null;
+  category: string | null;
   total_sold?: number;
   initial_stock_sold?: number;
 }
@@ -34,6 +35,7 @@ export interface CreateProductInput {
   stock_quantity: number;
   supplier_id: number | null;
   amount_paid?: number | null;
+  category?: string | null;
 }
 
 export interface UpdateProductInput {
@@ -44,6 +46,7 @@ export interface UpdateProductInput {
   selling_price: number | null;
   stock_quantity: number;
   supplier_id: number | null;
+  category?: string | null;
 }
 
 export interface Supplier {
@@ -66,11 +69,17 @@ export interface SupplierPayment {
   id: number;
   supplier_id: number;
   product_id: number | null;
+  po_id: number | null;
+  po_number: string | null;
   amount: number;
   payment_method: string | null;
   note: string | null;
   paid_at: string;
   created_at: string;
+}
+
+export interface SupplierPaymentWithDetails extends SupplierPayment {
+  supplier_name: string;
 }
 
 export interface SupplierPaymentSummary {
@@ -418,8 +427,8 @@ export const productCommands = {
   /**
    * Delete a product by ID
    */
-  delete: async (id: number): Promise<void> => {
-    return await invoke<void>('delete_product', { id });
+  delete: async (id: number, username?: string): Promise<void> => {
+    return await invoke<void>('delete_product', { id, deletedBy: username ?? null });
   },
 
   /**
@@ -428,13 +437,18 @@ export const productCommands = {
   addMockData: async (): Promise<string> => {
     return await invoke<string>('add_mock_products');
   },
-  getTopSelling: async (limit: number, page: number = 1): Promise<Product[]> => {
-    return await invoke<Product[]>('get_top_selling_products', { limit, page });
+  getTopSelling: async (limit: number, page: number = 1, category?: string): Promise<Product[]> => {
+    return await invoke<Product[]>('get_top_selling_products', { limit, page, category: category ?? null });
   },
   getByIds: async (ids: number[]): Promise<Product[]> => {
     return await invoke<Product[]>('get_products_by_ids', { ids });
+  },
+  getAllCategories: async (): Promise<string[]> => {
+    return await invoke<string[]>('get_unique_categories');
   }
 };
+
+
 
 /**
  * Supplier Commands
@@ -474,8 +488,8 @@ export const supplierCommands = {
   /**
    * Delete a supplier by ID
    */
-  delete: async (id: number): Promise<void> => {
-    return await invoke<void>('delete_supplier', { id });
+  delete: async (id: number, username?: string): Promise<void> => {
+    return await invoke<void>('delete_supplier', { id, deletedBy: username ?? null });
   },
 
   /**
@@ -490,6 +504,13 @@ export const supplierCommands = {
    */
   getPayments: async (supplierId: number, productId: number): Promise<SupplierPayment[]> => {
     return await invoke<SupplierPayment[]>('get_supplier_payments', { supplierId, productId });
+  },
+
+  /**
+   * Get ALL payment records for a product (from all suppliers)
+   */
+  getAllProductPayments: async (productId: number): Promise<SupplierPaymentWithDetails[]> => {
+    return await invoke<SupplierPaymentWithDetails[]>('get_all_product_payments', { productId });
   },
 
   /**
@@ -516,8 +537,8 @@ export const supplierCommands = {
   /**
    * Delete a payment entry
    */
-  deletePayment: async (id: number): Promise<void> => {
-    return await invoke<void>('delete_supplier_payment', { id });
+  deletePayment: async (id: number, username?: string): Promise<void> => {
+    return await invoke<void>('delete_supplier_payment', { id, deletedBy: username ?? null });
   },
 
   /**
@@ -529,7 +550,27 @@ export const supplierCommands = {
       productId,
     });
   },
+
+  /**
+   * Get payment summary for a product across ALL suppliers
+   */
+  getAllProductPaymentSummary: async (productId: number): Promise<SupplierPaymentSummary> => {
+    return await invoke<SupplierPaymentSummary>('get_all_product_payment_summary', {
+      productId,
+    });
+  },
+
+  /**
+   * Get purchase history (PO items) for a specific product and supplier
+   */
+  getSupplierProductPurchaseHistory: async (supplierId: number, productId: number): Promise<PurchaseOrderItemWithProduct[]> => {
+    return await invoke<PurchaseOrderItemWithProduct[]>('get_supplier_product_purchase_history', {
+      supplierId,
+      productId,
+    });
+  },
 };
+
 
 export const customerCommands = {
   /**
@@ -576,8 +617,8 @@ export const customerCommands = {
   /**
    * Delete a customer by ID
    */
-  delete: async (id: number): Promise<void> => {
-    return await invoke<void>('delete_customer', { id });
+  delete: async (id: number, username?: string): Promise<void> => {
+    return await invoke<void>('delete_customer', { id, deletedBy: username ?? null });
   },
 
   /**
@@ -819,8 +860,8 @@ export const invoiceCommands = {
   /**
    * Delete an invoice (restores stock)
    */
-  delete: async (id: number): Promise<void> => {
-    return await invoke<void>('delete_invoice', { id });
+  delete: async (id: number, username?: string): Promise<void> => {
+    return await invoke<void>('delete_invoice', { id, deletedBy: username ?? null });
   },
 
   /**
@@ -936,16 +977,17 @@ export interface PurchaseOrderWithDetails {
 
 export interface PurchaseOrderItemWithProduct {
   id: number;
-  po_id: number;
+  po_id: number | null;
+  po_number: string | null;
   product_id: number;
   product_name: string;
   sku: string;
   quantity: number;
   unit_cost: number;
   total_cost: number;
-  selling_price?: number;
-  quantity_sold?: number;
-  sold_revenue?: number;
+  selling_price: number | null;
+  quantity_sold: number | null;
+  sold_revenue: number | null;
   created_at: string;
 }
 
@@ -970,6 +1012,7 @@ export interface CreatePurchaseOrderInput {
   order_date?: string | null;
   expected_delivery_date?: string | null;
   notes?: string | null;
+  initial_payment?: number | null;
 }
 
 // =============================================

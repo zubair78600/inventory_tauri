@@ -156,15 +156,46 @@ pub fn update_user(input: UpdateUserInput, db: State<Database>) -> Result<User, 
 
 /// Delete a user
 #[tauri::command]
-pub fn delete_user(id: i32, db: State<Database>) -> Result<(), String> {
+pub fn delete_user(id: i32, deleted_by: Option<String>, db: State<Database>) -> Result<(), String> {
     log::info!("delete_user called for id: {}", id);
 
-    let conn = db.get_conn()?;
+    let mut conn = db.get_conn()?;
 
+    // Get user data before deletion for audit trail
+    let user = conn.query_row(
+        "SELECT id, username, role, permissions, created_at FROM users WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(User {
+                id: row.get(0)?,
+                username: row.get(1)?,
+                role: row.get(2)?,
+                permissions: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        },
+    )
+    .map_err(|e| format!("User with id {} not found: {}", id, e))?;
+
+    let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    // Archive user
+    crate::db::archive::archive_entity(
+        &tx,
+        "user",
+        id,
+        &user,
+        None,
+        deleted_by,
+    )?;
+
+    // Delete user
     // Prevent deleting the last admin or specific protected users if needed
     // For now, just delete
-    conn.execute("DELETE FROM users WHERE id = ?1", [id])
+    tx.execute("DELETE FROM users WHERE id = ?1", [id])
         .map_err(|e| format!("Failed to delete user: {}", e))?;
+
+    tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
     Ok(())
 }

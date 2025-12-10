@@ -4,3 +4,4 @@ pub mod schema;
 
 pub use connection::Database;
 pub use models::*;
+pub mod archive;
