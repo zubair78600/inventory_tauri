@@ -307,11 +307,19 @@ export default function Inventory() {
           )}
           <Button
             variant="outline"
-            onClick={() => {
-              const url = generateInventoryReportPDF(products);
-              setPdfUrl(url);
-              setPdfFileName(`Inventory_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-              setShowPdfPreview(true);
+            onClick={async () => {
+              try {
+                // Fetch all products for the report
+                // Note: This might be heavy if thousands of products.
+                const allProducts = await productCommands.getAll(1, 10000); // Hacky all
+                const url = await generateInventoryReportPDF(allProducts.items);
+                setPdfUrl(url);
+                setPdfFileName(`Inventory_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+                setShowPdfPreview(true);
+              } catch (error) {
+                console.error('Error generating inventory report:', error);
+                alert('Failed to generate inventory report: ' + String(error));
+              }
             }}
           >
             Export PDF

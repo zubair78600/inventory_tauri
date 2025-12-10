@@ -110,14 +110,14 @@ function SupplierDetailsContent() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
+                            onClick={async () => {
                                 const stats = {
                                     totalProducts: products.length,
                                     totalStock,
                                     totalValue,
                                     totalPending
                                 };
-                                const url = generateSupplierDetailPDF(supplier, products, stats, paymentSummaries);
+                                const url = await generateSupplierDetailPDF(supplier, products, stats, paymentSummaries);
                                 setPdfUrl(url);
                                 setPdfFileName(`${supplier.name.replace(/\s+/g, '_')}_Details.pdf`);
                                 setShowPdfPreview(true);

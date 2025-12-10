@@ -1,6 +1,8 @@
 import jsPDF from 'jspdf';
 import autoTable, { type UserOptions } from 'jspdf-autotable';
 import type { Invoice, InvoiceItem, Customer, Product, Supplier, PurchaseOrderComplete, CustomerInvoice, SupplierPaymentSummary } from './tauri';
+import { settingsCommands, imageCommands } from './tauri'; // Import commands to fetch settings/images
+import { readFile } from '@tauri-apps/plugin-fs';
 
 // Define the autoTable type extension
 declare module 'jspdf' {
@@ -10,13 +12,84 @@ declare module 'jspdf' {
     }
 }
 
-const COMPANY_NAME = "Inventory System";
-const COMPANY_ADDRESS = "123 Business Street, Tech City, 560001";
-const COMPANY_PHONE = "+91 98765 43210";
-const COMPANY_EMAIL = "support@inventorysystem.com";
+// Simple in-memory cache for logo to avoid slow FS/Image ops
+let logoCache: {
+    path: string;
+    dataUrl: string;
+    aspect: number;
+} | null = null;
+
+// Simple in-memory cache for settings to avoid DB calls on every PDF gen
+let settingsCache: any | null = null;
+
+export const clearSettingsCache = () => {
+    settingsCache = null;
+    logoCache = null; // Also clear logo cache as path might have changed
+};
+
+// Default Settings Constants
+export const DEFAULT_COMPANY_NAME = "Inventory System";
+export const DEFAULT_COMPANY_ADDRESS = "123 Business Street, Tech City, 560001";
+export const DEFAULT_COMPANY_PHONE = "+91 98765 43210";
+export const DEFAULT_COMPANY_EMAIL = "support@inventorysystem.com";
+
+// Default Settings Object (exported for use in PDF Config component)
+export const DEFAULT_SETTINGS = {
+    company_name: DEFAULT_COMPANY_NAME,
+    company_address: DEFAULT_COMPANY_ADDRESS,
+    company_phone: DEFAULT_COMPANY_PHONE,
+    company_email: DEFAULT_COMPANY_EMAIL,
+    company_comments: "",
+    logo_path: null as string | null,
+    logo_width: 30,
+    logo_x: 20,
+    logo_y: 20,
+    header_x: 14,
+    header_y: 50,
+    font_size_header: 16,
+    font_size_body: 10,
+    header_align: 'left' as 'left' | 'center' | 'right',
+};
 
 const formatCurrency = (amount: number) => {
     return `Rs. ${amount.toFixed(2)}`;
+};
+
+export const numberToWords = (num: number): string => {
+    if (num === 0) return "Zero";
+
+    const a = [
+        "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven",
+        "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"
+    ];
+    const b = [
+        "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"
+    ];
+
+    const convertGroup = (n: number): string => {
+        if (n < 20) return a[n];
+        const digit = n % 10;
+        return (b[Math.floor(n / 10)] + (digit ? " " + a[digit] : "")).trim();
+    };
+
+    const convert = (n: number): string => {
+        if (n < 100) return convertGroup(n);
+        if (n < 1000) return (a[Math.floor(n / 100)] + " Hundred" + (n % 100 === 0 ? "" : " " + convert(n % 100))).trim();
+        if (n < 100000) return (convert(Math.floor(n / 1000)) + " Thousand" + (n % 1000 === 0 ? "" : " " + convert(n % 1000))).trim();
+        if (n < 10000000) return (convert(Math.floor(n / 100000)) + " Lakh" + (n % 100000 === 0 ? "" : " " + convert(n % 100000))).trim();
+        return (convert(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 === 0 ? "" : " " + convert(n % 10000000))).trim();
+    };
+
+    const wholePart = Math.floor(num);
+    const decimalPart = Math.round((num - wholePart) * 100);
+
+    let result = convert(wholePart);
+
+    if (decimalPart > 0) {
+        result += ` and ${convert(decimalPart)} Paise`;
+    }
+
+    return result + " Rupees Only";
 };
 
 const formatDate = (dateStr: string) => {
@@ -27,28 +100,181 @@ const formatDate = (dateStr: string) => {
     });
 };
 
-const addHeader = (doc: jsPDF, title: string) => {
+const addHeader = async (doc: jsPDF, title: string) => {
     const pageWidth = doc.internal.pageSize.width;
 
-    // Company Info
-    doc.setFontSize(20);
+    // Fetch Settings
+    // Fetch Settings
+    let settings: any = {};
+    try {
+        if (settingsCache) {
+            settings = settingsCache;
+        } else {
+            settings = await settingsCommands.getAll();
+            settingsCache = settings;
+        }
+    } catch (e) {
+        console.warn("Failed to load settings for PDF", e);
+    }
+
+    const companyName = settings['invoice_company_name'] || DEFAULT_COMPANY_NAME;
+    const companyAddress = settings['invoice_company_address'] || DEFAULT_COMPANY_ADDRESS;
+    const companyPhone = settings['invoice_company_phone'] || DEFAULT_COMPANY_PHONE;
+    const companyEmail = settings['invoice_company_email'] || DEFAULT_COMPANY_EMAIL;
+    const companyComments = settings['invoice_company_comments'] || '';
+
+    // Validates number exists and is not NaN, otherwise returns default. Treats 0 as valid.
+    const getNumber = (val: any, def: number) => {
+        const num = Number(val);
+        return !isNaN(num) ? num : def;
+    };
+
+    const logoPath = settings['invoice_logo_path'];
+    const logoX = getNumber(settings['invoice_logo_x'], 20);
+    const logoY = getNumber(settings['invoice_logo_y'], 20);
+    const logoWidth = getNumber(settings['invoice_logo_width'], 30);
+
+    const headerX = getNumber(settings['invoice_header_x'], 14);
+    const headerY = getNumber(settings['invoice_header_y'], 50);
+    const headerFontSize = getNumber(settings['invoice_font_size_header'], 16);
+    const bodyFontSize = Number(settings['invoice_font_size_body']) || 10;
+    const headerAlign = (settings['invoice_header_align'] as 'left' | 'center' | 'right') || 'left';
+
+    let calculatedLogoHeight = 0;
+
+    // Draw Logo if exists
+    // Mobile/Performance Cache
+    // We cache the logo processing because readFile + converting to base64 + creating Image + waiting for onload is slow.
+    if (logoCache?.path === logoPath && logoCache?.dataUrl) {
+        const { dataUrl, aspect } = logoCache;
+        doc.addImage(dataUrl, 'PNG', logoX, logoY, logoWidth, logoWidth * aspect);
+        calculatedLogoHeight = logoWidth * aspect;
+    } else if (logoPath) {
+        try {
+            const picturesDir = await imageCommands.getPicturesDirectory();
+            const fullLogoPath = `${picturesDir}/${logoPath}`;
+
+            // Read file directly from filesystem and convert to base64
+            const fileData = await readFile(fullLogoPath);
+            const base64 = btoa(
+                fileData.reduce((data, byte) => data + String.fromCharCode(byte), '')
+            );
+
+            // Determine image format from extension
+            const ext = logoPath.split('.').pop()?.toLowerCase() || 'png';
+            const format = ext === 'jpg' ? 'JPEG' : ext.toUpperCase();
+            const dataUrl = `data:image/${ext};base64,${base64}`;
+
+            // Create image to get dimensions
+            const img = new Image();
+            img.src = dataUrl;
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+            });
+
+            // Resize image to max 400x400 for performance
+            const MAX_SIZE = 400;
+            let newWidth = img.width;
+            let newHeight = img.height;
+
+            if (img.width > MAX_SIZE || img.height > MAX_SIZE) {
+                if (img.width > img.height) {
+                    newWidth = MAX_SIZE;
+                    newHeight = Math.round(img.height * (MAX_SIZE / img.width));
+                } else {
+                    newHeight = MAX_SIZE;
+                    newWidth = Math.round(img.width * (MAX_SIZE / img.height));
+                }
+            }
+
+            // Create canvas and draw resized image
+            const canvas = document.createElement('canvas');
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(img, 0, 0, newWidth, newHeight);
+            }
+
+            // Get compressed data URL (JPEG at 0.8 quality for smaller size)
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            const aspect = newHeight / newWidth;
+
+            console.log(`Logo resized from ${img.width}x${img.height} to ${newWidth}x${newHeight}`);
+
+            // Update Cache with compressed image
+            logoCache = {
+                path: logoPath,
+                dataUrl: compressedDataUrl,
+                aspect: aspect
+            };
+
+            doc.addImage(compressedDataUrl, 'JPEG', logoX, logoY, logoWidth, logoWidth * aspect);
+            calculatedLogoHeight = logoWidth * aspect;
+        } catch (e) {
+            console.error("Failed to load logo for PDF", e);
+        }
+    }
+
+    // Company Info / Header Text
+    // We position this based on headerX, headerY
+    // We'll align text right or left? visual editor implies we place the block.
+    // Let's assume left aligned to the point, or maybe we should respect alignment?
+    // For now, let's just draw text at X,Y
+
+    doc.setFontSize(headerFontSize);
     doc.setTextColor(40, 40, 40);
-    doc.text(COMPANY_NAME, 14, 20);
+    doc.setFont('helvetica', 'bold');
+    // Ensure minimum Y position to prevent text clipping (font baseline needs room)
+    const safeHeaderY = Math.max(headerY, 10);
+    doc.text(companyName, headerX, safeHeaderY, { align: headerAlign }); // Title (Company Name)
 
-    doc.setFontSize(10);
+    doc.setFontSize(bodyFontSize);
+    doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
-    doc.text(COMPANY_ADDRESS, 14, 26);
-    doc.text(`Phone: ${COMPANY_PHONE}`, 14, 31);
-    doc.text(`Email: ${COMPANY_EMAIL}`, 14, 36);
+    doc.text(companyAddress, headerX, safeHeaderY + 6, { align: headerAlign });
+    doc.text(`Phone: ${companyPhone}`, headerX, safeHeaderY + 11, { align: headerAlign });
+    doc.text(`Email: ${companyEmail}`, headerX, safeHeaderY + 16, { align: headerAlign });
+    if (companyComments) {
+        doc.text(companyComments, headerX, safeHeaderY + 21, { align: headerAlign });
+    }
 
-    // Title
+    // Document Title (INVOICE, PO, etc)
+    // We can keep this fixed or maybe move it? 
+    // For now let's keep the document title fixed to top right or derived from settings?
+    // User request: "header size everything i should able to move"
+    // The "Header" usually refers to Company Info. 
+    // The "Title" like INVOICE is usually standard but let's leave it top right for now,
+    // or maybe below the company info?
+    // Let's stick to standard position for Title (INVOICE) but respect Company Info position.
+
     doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold'); // Match preview bold
     doc.setTextColor(0, 0, 0);
-    doc.text(title, pageWidth - 14, 20, { align: 'right' });
+    // Right align title to page edge - margin
+    // Preview uses top: 20mm. PDF uses baseline. 16pt ~ 6mm height.
+    // So Y should be 20 + 6 = 26mm to match visual top alignment.
+    // doc.text(title, pageWidth - 14, 26, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); // Reset for other text
 
-    // Line separator
+    // Line separator - calculate based on header text position only
+    // Logo is now independent - user can resize/position it without affecting the line
+
+    // Check if comments exist to determine actual text end Y
+    // Default steps: Address(6), Phone(11), Email(16), Comments(21)
+    const lastTextOffset = companyComments ? 21 : 16;
+    const addressEndY = safeHeaderY + lastTextOffset;
+
+    // Line is 6mm below text (logo no longer affects position)
+    const lineY = addressEndY + 6;
+
     doc.setDrawColor(200, 200, 200);
-    doc.line(14, 42, pageWidth - 14, 42);
+    doc.line(5, lineY, pageWidth - 5, lineY);
+
+    // Return the Y position where content should start
+    // 20px (approx 6mm) padding after line
+    return lineY + 6;
 };
 
 const addFooter = (doc: jsPDF) => {
@@ -79,40 +305,48 @@ const createBlobUrl = (doc: jsPDF): string => {
     return URL.createObjectURL(blob);
 };
 
-export const generateInvoicePDF = (invoice: Invoice, items: InvoiceItem[], customer?: Customer | null): string => {
+export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[], customer?: Customer | null): Promise<{ url: string; size: string; duration: string }> => {
+    const startTime = performance.now();
     console.log("Generating Invoice PDF...");
     const doc = new jsPDF();
 
-    addHeader(doc, 'INVOICE');
+    // Add page border with 5mm (≈15px) padding on all sides
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const borderPadding = 5; // 5mm ≈ 15px
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.5);
+    doc.rect(borderPadding, borderPadding, pageWidth - (borderPadding * 2), pageHeight - (borderPadding * 2));
+
+    const startY = await addHeader(doc, 'INVOICE');
 
     // Invoice Details
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
 
-    const pageWidth = doc.internal.pageSize.width;
-    const rightColX = pageWidth - 14;
+    const rightColX = pageWidth - 7;
 
-    doc.text(`Invoice #: ${invoice.invoice_number}`, rightColX, 50, { align: 'right' });
-    doc.text(`Date: ${formatDate(invoice.created_at)}`, rightColX, 55, { align: 'right' });
-    doc.text(`Status: Paid`, rightColX, 60, { align: 'right' });
+    doc.text(`Invoice #: ${invoice.invoice_number}`, rightColX, startY, { align: 'right' });
+    doc.text(`Date: ${formatDate(invoice.created_at)}`, rightColX, startY + 5, { align: 'right' });
+    doc.text(`Status: Paid`, rightColX, startY + 10, { align: 'right' });
 
     // Customer Details
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text('Bill To:', 14, 50);
+    doc.text('Bill To:', 7, startY);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
 
     if (customer) {
-        doc.text(customer.name, 14, 56);
-        if (customer.phone) doc.text(customer.phone, 14, 61);
-        if (customer.email) doc.text(customer.email, 14, 66);
+        doc.text(customer.name, 7, startY + 6);
+        if (customer.phone) doc.text(customer.phone, 7, startY + 11);
+        if (customer.email) doc.text(customer.email, 7, startY + 16);
         if (customer.address) {
             const splitAddress = doc.splitTextToSize(customer.address, 80);
-            doc.text(splitAddress, 14, 71);
+            doc.text(splitAddress, 7, startY + 21);
         }
     } else {
-        doc.text('Walk-in Customer', 14, 56);
+        doc.text('Walk-in Customer', 7, startY + 6);
     }
 
     // Items Table
@@ -125,26 +359,54 @@ export const generateInvoicePDF = (invoice: Invoice, items: InvoiceItem[], custo
         formatCurrency(item.quantity * item.unit_price)
     ]);
 
+    // Calculate Totals for Footer
+    const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+    // Removed totalUnitPrice as per user request
+    const grandTotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+
     autoTable(doc, {
-        startY: 85,
+        startY: startY + 27,
         head: [tableColumn],
         body: tableRows,
+        foot: [[
+            "Total",
+            "",
+            totalQty.toString(),
+            "", // Empty for Price column
+            formatCurrency(grandTotal)
+        ]],
         theme: 'grid',
-        headStyles: { fillColor: [66, 66, 66] },
+        margin: { left: 7, right: 7 }, // 5mm border + 2mm inner padding
+        headStyles: { fillColor: [66, 66, 66], halign: 'center' },
+        footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
         styles: { fontSize: 9, font: 'helvetica' },
         columnStyles: {
-            0: { cellWidth: 'auto' },
-            3: { halign: 'right' },
-            4: { halign: 'right' }
+            0: { cellWidth: 'auto', halign: 'left' }, // Item Name remains left aligned
+            1: { halign: 'center' }, // SKU
+            2: { halign: 'center' }, // Qty
+            3: { halign: 'center' }, // Price
+            4: { halign: 'center' }  // Total
         }
     });
 
-    // Totals
-    const finalY = doc.lastAutoTable.finalY + 10;
-    const summaryX = pageWidth - 70;
-    const valueX = pageWidth - 14;
-
+    // Amount in Words - 10px (≈3.5mm) gap after table
+    const finalY = doc.lastAutoTable.finalY + 3.5;
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+
+    const amountInWords = numberToWords(grandTotal);
+    doc.text(`Amount in Words: ${amountInWords}`, 7, finalY);
+
+    // Totals Section (Right Aligned)
+    // Adjust Y slightly if needed or keep existing alignment logic relative to finalY
+    // Existing logic uses finalY + 10 for Subtotal, let's keep it but ensure no overlap
+    // Actually existing logic used: const finalY = doc.lastAutoTable.finalY + 10;
+    // We reused finalY variable name above, let's correspond.
+
+    const summaryX = pageWidth - 70;
+    const valueX = pageWidth - 7;
+
     doc.text(`Subtotal:`, summaryX, finalY);
     doc.text(formatCurrency(invoice.total_amount - invoice.tax_amount + invoice.discount_amount), valueX, finalY, { align: 'right' });
 
@@ -160,16 +422,26 @@ export const generateInvoicePDF = (invoice: Invoice, items: InvoiceItem[], custo
     doc.text(formatCurrency(invoice.total_amount), valueX, finalY + 20, { align: 'right' });
 
     addFooter(doc);
-    return createBlobUrl(doc);
+
+    const endTime = performance.now();
+    const duration = (endTime - startTime).toFixed(2) + 'ms';
+
+    const blob = doc.output('blob');
+    const size = (blob.size / 1024).toFixed(2) + ' KB';
+    const url = URL.createObjectURL(blob);
+
+    console.log(`PDF Generated in ${duration}, Size: ${size}`);
+
+    return { url, size, duration };
 };
 
-export const generatePurchaseOrderPDF = (poComplete: PurchaseOrderComplete): string => {
+export const generatePurchaseOrderPDF = async (poComplete: PurchaseOrderComplete): Promise<string> => {
     console.log("Generating Purchase Order PDF...");
     const doc = new jsPDF();
     const po = poComplete.purchase_order;
     const supplier = poComplete.supplier;
 
-    addHeader(doc, 'PURCHASE ORDER');
+    await addHeader(doc, 'PURCHASE ORDER');
 
     // PO Details
     doc.setFontSize(10);
@@ -235,11 +507,11 @@ export const generatePurchaseOrderPDF = (poComplete: PurchaseOrderComplete): str
     return createBlobUrl(doc);
 };
 
-export const generateInventoryReportPDF = (products: Product[]): string => {
+export const generateInventoryReportPDF = async (products: Product[]): Promise<string> => {
     console.log("Generating Inventory Report PDF...");
     const doc = new jsPDF();
 
-    addHeader(doc, 'INVENTORY REPORT');
+    await addHeader(doc, 'INVENTORY REPORT');
 
     const tableColumn = ["Name", "SKU", "Stock", "Price", "Value"];
     const tableRows = products.map(product => [
@@ -279,11 +551,11 @@ export const generateInventoryReportPDF = (products: Product[]): string => {
     return createBlobUrl(doc);
 };
 
-export const generateCustomerListPDF = (customers: Customer[]): string => {
+export const generateCustomerListPDF = async (customers: Customer[]): Promise<string> => {
     console.log("Generating Customer List PDF...");
     const doc = new jsPDF();
 
-    addHeader(doc, 'CUSTOMER LIST');
+    await addHeader(doc, 'CUSTOMER LIST');
 
     const tableColumn = ["Name", "Phone", "Email", "Place", "Last Billed"];
     const tableRows = customers.map(customer => [
@@ -307,11 +579,11 @@ export const generateCustomerListPDF = (customers: Customer[]): string => {
     return createBlobUrl(doc);
 };
 
-export const generateSupplierListPDF = (suppliers: Supplier[]): string => {
+export const generateSupplierListPDF = async (suppliers: Supplier[]): Promise<string> => {
     console.log("Generating Supplier List PDF...");
     const doc = new jsPDF();
 
-    addHeader(doc, 'SUPPLIER LIST');
+    await addHeader(doc, 'SUPPLIER LIST');
 
     const tableColumn = ["Name", "Contact", "Email", "Location"];
     const tableRows = suppliers.map(supplier => [
@@ -334,13 +606,13 @@ export const generateSupplierListPDF = (suppliers: Supplier[]): string => {
     return createBlobUrl(doc);
 };
 
-export const generateCustomerDetailPDF = (
+export const generateCustomerDetailPDF = async (
     customer: Customer,
     invoices: CustomerInvoice[] = [],
     stats?: { total_spent: number; invoice_count: number }
-): string => {
+): Promise<string> => {
     const doc = new jsPDF();
-    addHeader(doc, 'CUSTOMER DETAILS');
+    await addHeader(doc, 'CUSTOMER DETAILS');
 
     // Determine Last Billed Date
     let lastBilled = '-';
@@ -449,9 +721,9 @@ export const generateCustomerDetailPDF = (
     return createBlobUrl(doc);
 };
 
-export const generateProductDetailPDF = (product: Product, supplierName?: string): string => {
+export const generateProductDetailPDF = async (product: Product, supplierName?: string): Promise<string> => {
     const doc = new jsPDF();
-    addHeader(doc, 'PRODUCT DETAILS');
+    await addHeader(doc, 'PRODUCT DETAILS');
 
     const tableRows = [
         ['Name', product.name],
@@ -477,14 +749,14 @@ export const generateProductDetailPDF = (product: Product, supplierName?: string
     return createBlobUrl(doc);
 };
 
-export const generateSupplierDetailPDF = (
+export const generateSupplierDetailPDF = async (
     supplier: Supplier,
     products: Product[] = [],
     stats?: { totalProducts: number; totalStock: number; totalValue: number; totalPending: number },
     paymentSummaries: Record<number, SupplierPaymentSummary | null> = {}
-): string => {
+): Promise<string> => {
     const doc = new jsPDF();
-    addHeader(doc, 'SUPPLIER DETAILS');
+    await addHeader(doc, 'SUPPLIER DETAILS');
 
     const tableRows = [
         ['Name', supplier.name],
@@ -513,8 +785,6 @@ export const generateSupplierDetailPDF = (
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.text('Summary', 14, finalY);
-
-
 
         autoTable(doc, {
             startY: finalY + 5,

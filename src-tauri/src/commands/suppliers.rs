@@ -233,10 +233,61 @@ pub fn create_supplier(input: CreateSupplierInput, db: State<Database>) -> Resul
 
 /// Update an existing supplier
 #[tauri::command]
-pub fn update_supplier(input: UpdateSupplierInput, db: State<Database>) -> Result<Supplier, String> {
+pub fn update_supplier(input: UpdateSupplierInput, modified_by: Option<String>, db: State<Database>) -> Result<Supplier, String> {
     log::info!("update_supplier called with: {:?}", input);
 
     let conn = db.get_conn()?;
+
+    // Get old values first
+    let old_supplier: Supplier = conn
+        .query_row(
+            "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers WHERE id = ?1",
+            [input.id],
+            |row| {
+                Ok(Supplier {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    contact_info: row.get(2)?,
+                    address: row.get(3)?,
+                    email: row.get(4)?,
+                    comments: row.get(5)?,
+                    state: row.get(6)?,
+                    district: row.get(7)?,
+                    town: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
+            },
+        )
+        .map_err(|e| format!("Supplier with id {} not found: {}", input.id, e))?;
+
+    // Build field changes array
+    let mut field_changes: Vec<serde_json::Value> = Vec::new();
+    
+    if old_supplier.name != input.name {
+        field_changes.push(serde_json::json!({"field": "name", "old": old_supplier.name, "new": input.name}));
+    }
+    if old_supplier.contact_info != input.contact_info {
+        field_changes.push(serde_json::json!({"field": "contact_info", "old": old_supplier.contact_info, "new": input.contact_info}));
+    }
+    if old_supplier.address != input.address {
+        field_changes.push(serde_json::json!({"field": "address", "old": old_supplier.address, "new": input.address}));
+    }
+    if old_supplier.email != input.email {
+        field_changes.push(serde_json::json!({"field": "email", "old": old_supplier.email, "new": input.email}));
+    }
+    if old_supplier.comments != input.comments {
+        field_changes.push(serde_json::json!({"field": "comments", "old": old_supplier.comments, "new": input.comments}));
+    }
+    if old_supplier.state != input.state {
+        field_changes.push(serde_json::json!({"field": "state", "old": old_supplier.state, "new": input.state}));
+    }
+    if old_supplier.district != input.district {
+        field_changes.push(serde_json::json!({"field": "district", "old": old_supplier.district, "new": input.district}));
+    }
+    if old_supplier.town != input.town {
+        field_changes.push(serde_json::json!({"field": "town", "old": old_supplier.town, "new": input.town}));
+    }
 
     let rows_affected = conn
         .execute(
@@ -247,6 +298,16 @@ pub fn update_supplier(input: UpdateSupplierInput, db: State<Database>) -> Resul
 
     if rows_affected == 0 {
         return Err(format!("Supplier with id {} not found", input.id));
+    }
+
+    // Log modification if there were actual changes
+    if !field_changes.is_empty() {
+        let changes_json = serde_json::to_string(&field_changes).unwrap_or_default();
+        conn.execute(
+            "INSERT INTO entity_modifications (entity_type, entity_id, entity_name, action, field_changes, modified_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            ("supplier", input.id, &input.name, "updated", &changes_json, &modified_by),
+        ).map_err(|e| format!("Failed to log modification: {}", e))?;
+        log::info!("Logged {} field changes for supplier {}", field_changes.len(), input.id);
     }
 
     // Fetch updated supplier to get new timestamp

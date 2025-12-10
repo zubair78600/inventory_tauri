@@ -310,3 +310,155 @@ pub fn clear_trash(db: State<Database>) -> Result<usize, String> {
     log::info!("Cleared {} items from trash", rows_affected);
     Ok(rows_affected)
 }
+
+// ========================================
+// ENTITY MODIFICATIONS COMMANDS
+// ========================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EntityModificationDisplay {
+    pub id: i32,
+    pub entity_type: String,
+    pub entity_id: i32,
+    pub entity_name: Option<String>,
+    pub action: String,
+    pub field_changes: Option<String>, // JSON array of {field, old, new}
+    pub modified_by: Option<String>,
+    pub modified_at: String,
+}
+
+/// Get all entity modifications
+#[tauri::command]
+pub fn get_all_modifications(db: State<Database>) -> Result<Vec<EntityModificationDisplay>, String> {
+    log::info!("get_all_modifications called");
+
+    let conn = db.get_conn()?;
+
+    let mut stmt = conn
+        .prepare("SELECT id, entity_type, entity_id, entity_name, action, field_changes, modified_by, modified_at FROM entity_modifications ORDER BY modified_at DESC LIMIT 200")
+        .map_err(|e| e.to_string())?;
+
+    let items_iter = stmt
+        .query_map([], |row| {
+            Ok(EntityModificationDisplay {
+                id: row.get(0)?,
+                entity_type: row.get(1)?,
+                entity_id: row.get(2)?,
+                entity_name: row.get(3)?,
+                action: row.get(4)?,
+                field_changes: row.get(5)?,
+                modified_by: row.get(6)?,
+                modified_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let items: Vec<EntityModificationDisplay> = items_iter
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Returning {} modifications", items.len());
+    Ok(items)
+}
+
+/// Restore an entity to its previous state from a modification
+#[tauri::command]
+pub fn restore_modification(modification_id: i32, db: State<Database>) -> Result<(), String> {
+    log::info!("restore_modification called with id: {}", modification_id);
+
+    let mut conn = db.get_conn()?;
+
+    // Get the modification
+    let (entity_type, entity_id, field_changes): (String, i32, Option<String>) = conn
+        .query_row(
+            "SELECT entity_type, entity_id, field_changes FROM entity_modifications WHERE id = ?1",
+            [modification_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|e| format!("Modification not found: {}", e))?;
+
+    let changes_json = field_changes.ok_or("No field changes to restore")?;
+
+    // Parse field changes: [{"field": "name", "old": "X", "new": "Y"}]
+    let changes: Vec<serde_json::Value> = serde_json::from_str(&changes_json)
+        .map_err(|e| format!("Failed to parse changes: {}", e))?;
+
+    if changes.is_empty() {
+        return Err("No changes to restore".to_string());
+    }
+
+    let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    // Build update query dynamically
+    let table_name = match entity_type.as_str() {
+        "customer" => "customers",
+        "product" => "products",
+        "supplier" => "suppliers",
+        "invoice" => "invoices",
+        _ => return Err(format!("Unsupported entity type: {}", entity_type)),
+    };
+
+    for change in &changes {
+        let field = change.get("field").and_then(|v| v.as_str()).ok_or("Missing field name")?;
+        let old_value = change.get("old");
+        
+        // Skip if old is null
+        let set_clause = if old_value.is_none() || old_value == Some(&serde_json::Value::Null) {
+            format!("{} = NULL", field)
+        } else if let Some(s) = old_value.and_then(|v| v.as_str()) {
+            format!("{} = '{}'", field, s.replace('\'', "''"))
+        } else if let Some(n) = old_value.and_then(|v| v.as_f64()) {
+            format!("{} = {}", field, n)
+        } else if let Some(b) = old_value.and_then(|v| v.as_bool()) {
+            format!("{} = {}", field, if b { 1 } else { 0 })
+        } else {
+            continue;
+        };
+
+        let query = format!("UPDATE {} SET {} WHERE id = {}", table_name, set_clause, entity_id);
+        tx.execute(&query, []).map_err(|e| format!("Failed to restore field '{}': {}", field, e))?;
+    }
+
+    // Delete this specific modification record
+    tx.execute("DELETE FROM entity_modifications WHERE id = ?1", [modification_id])
+        .map_err(|e| format!("Failed to delete modification record: {}", e))?;
+
+    tx.commit().map_err(|e| format!("Failed to commit: {}", e))?;
+
+    log::info!("Restored modification {} for {} #{}", modification_id, entity_type, entity_id);
+    Ok(())
+}
+
+/// Permanently delete a single modification record (Master Admin only - enforced in frontend)
+#[tauri::command]
+pub fn permanently_delete_modification(modification_id: i32, db: State<Database>) -> Result<(), String> {
+    log::info!("permanently_delete_modification called for id: {}", modification_id);
+
+    let conn = db.get_conn()?;
+
+    let rows_affected = conn
+        .execute("DELETE FROM entity_modifications WHERE id = ?1", [modification_id])
+        .map_err(|e| format!("Failed to delete modification: {}", e))?;
+
+    if rows_affected == 0 {
+        return Err(format!("Modification with id {} not found", modification_id));
+    }
+
+    log::info!("Permanently deleted modification with id: {}", modification_id);
+    Ok(())
+}
+
+/// Clear all modification history (Master Admin only - enforced in frontend)
+#[tauri::command]
+pub fn clear_modifications_history(db: State<Database>) -> Result<usize, String> {
+    log::info!("clear_modifications_history called");
+
+    let conn = db.get_conn()?;
+
+    let rows_affected = conn
+        .execute("DELETE FROM entity_modifications", [])
+        .map_err(|e| format!("Failed to clear modifications: {}", e))?;
+
+    log::info!("Cleared {} modification records", rows_affected);
+    Ok(rows_affected)
+}

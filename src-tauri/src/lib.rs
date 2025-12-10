@@ -126,6 +126,10 @@ pub fn run() {
       commands::get_product_sales_summary,
       commands::create_invoice,
       commands::delete_invoice,
+      commands::update_invoice,
+      commands::update_invoice_items,
+      commands::get_deleted_invoices,
+      commands::get_invoice_modifications,
       commands::omnisearch,
       commands::export_products_csv,
       commands::export_customers_csv,
@@ -137,6 +141,10 @@ pub fn run() {
       commands::restore_supplier,
       commands::permanently_delete_item,
       commands::clear_trash,
+      commands::get_all_modifications,
+      commands::restore_modification,
+      commands::permanently_delete_modification,
+      commands::clear_modifications_history,
       commands::login,
       commands::get_users,
       commands::create_user,
@@ -182,6 +190,13 @@ pub fn run() {
       commands::get_biometric_status,
       commands::get_biometric_status_by_username,
       commands::has_any_biometric_enrollment,
+      // Customer payment/credit commands
+      commands::create_customer_payment,
+      commands::get_customer_payments,
+      commands::get_invoice_payments,
+      commands::get_customer_credit_history,
+      commands::get_customer_credit_summary,
+      commands::delete_customer_payment,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

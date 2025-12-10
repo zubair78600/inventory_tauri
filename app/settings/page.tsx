@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Trash2, RefreshCw, AlertCircle, Loader2, Edit, Eye, EyeOff, Save, ExternalLink, Search, CheckCircle, XCircle, Download, Upload, FileJson } from 'lucide-react';
+import { Trash2, RefreshCw, AlertCircle, Loader2, Edit, Eye, EyeOff, Save, ExternalLink, Search, CheckCircle, XCircle, Download, Upload, FileJson, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { ask, save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
-import { settingsCommands, imageCommands, GoogleImageResult } from '@/lib/tauri';
+import { settingsCommands, imageCommands, GoogleImageResult, EntityModification } from '@/lib/tauri';
+import { PdfConfiguration } from '@/components/settings/PdfConfiguration';
 
 type DeletedItem = {
   id: number;
@@ -52,8 +53,16 @@ import type { LocationValue } from '@/types/location';
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'api' | 'users' | 'security' | 'themes'>('deleted-data');
+  const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'invoice' | 'api' | 'users' | 'security' | 'themes'>('deleted-data');
   const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
+  const [modifications, setModifications] = useState<EntityModification[]>([]);
+  const [dataSubTab, setDataSubTab] = useState<'deleted' | 'modified'>('deleted');
+  const [expandedMods, setExpandedMods] = useState<Set<number>>(new Set());
+
+  // Master Admin check - only username 'admin' (case-insensitive) has permanent delete access
+  const MASTER_ADMIN_USERNAME = 'admin';
+  const isMasterAdmin = user?.username?.toLowerCase() === MASTER_ADMIN_USERNAME.toLowerCase();
+
   const [users, setUsers] = useState<User[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -99,7 +108,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (activeTab === 'deleted-data') {
-      void fetchDeletedItems();
+      if (dataSubTab === 'deleted') {
+        void fetchDeletedItems();
+      } else {
+        void fetchModifications();
+      }
     } else if (activeTab === 'users') {
       void fetchUsers();
     } else if (activeTab === 'general' || activeTab === 'api') {
@@ -313,6 +326,81 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchModifications = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await settingsCommands.getAllModifications();
+      setModifications(data);
+    } catch (err) {
+      console.error('Error fetching modifications:', err);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreModification = async (mod: EntityModification) => {
+    const confirmed = await ask(`Restore ${mod.entity_type} "${mod.entity_name}" to its previous state?`, {
+      title: 'Confirm Restore',
+      kind: 'warning',
+    });
+    if (!confirmed) return;
+
+    try {
+      await settingsCommands.restoreModification(mod.id);
+      await fetchModifications();
+    } catch (err) {
+      console.error('Error restoring modification:', err);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const toggleModExpanded = (modId: number) => {
+    setExpandedMods(prev => {
+      const next = new Set(prev);
+      if (next.has(modId)) {
+        next.delete(modId);
+      } else {
+        next.add(modId);
+      }
+      return next;
+    });
+  };
+
+  const handlePermanentDeleteModification = async (mod: EntityModification) => {
+    const confirmed = await ask(`Permanently delete this modification record for "${mod.entity_name}"?\n\nThis action cannot be undone.`, {
+      title: 'Confirm Permanent Delete',
+      kind: 'warning',
+    });
+    if (!confirmed) return;
+
+    try {
+      await settingsCommands.permanentlyDeleteModification(mod.id);
+      await fetchModifications();
+    } catch (err) {
+      console.error('Error deleting modification:', err);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleClearModificationsHistory = async () => {
+    const confirmed = await ask('Permanently delete ALL modification history?\n\nThis action cannot be undone and will remove all tracked changes.', {
+      title: 'Clear All Modifications',
+      kind: 'warning',
+    });
+    if (!confirmed) return;
+
+    try {
+      const count = await settingsCommands.clearModificationsHistory();
+      await fetchModifications();
+      alert(`Cleared ${count} modification records.`);
+    } catch (err) {
+      console.error('Error clearing modifications:', err);
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -542,6 +630,15 @@ export default function SettingsPage() {
           >
             API
           </button>
+          <button
+            onClick={() => setActiveTab('invoice')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'invoice'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-300'
+              }`}
+          >
+            Invoice Config
+          </button>
           {user?.role === 'admin' && (
             <button
               onClick={() => setActiveTab('users')}
@@ -577,20 +674,63 @@ export default function SettingsPage() {
       {/* Deleted Data Tab */}
       {activeTab === 'deleted-data' && (
         <div className="space-y-4">
+          {/* Header with sub-tabs */}
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-lg font-semibold">Deleted Items</h2>
+              <h2 className="text-lg font-semibold">Deleted & Modified Data</h2>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                View and restore deleted items from the trash
+                View and restore deleted items or track modifications
               </p>
             </div>
+            <div className="flex gap-2">
+              {dataSubTab === 'deleted' && deletedItems.length > 0 && isMasterAdmin && (
+                <button
+                  onClick={() => void handleClearTrash()}
+                  className="btn btn-logout"
+                >
+                  <Trash2 size={16} className="mr-2" />
+                  Clear Trash
+                </button>
+              )}
+              {dataSubTab === 'modified' && modifications.length > 0 && isMasterAdmin && (
+                <button
+                  onClick={() => void handleClearModificationsHistory()}
+                  className="btn btn-logout"
+                >
+                  <Trash2 size={16} className="mr-2" />
+                  Clear History
+                </button>
+              )}
+              <button
+                onClick={() => dataSubTab === 'deleted' ? void fetchDeletedItems() : void fetchModifications()}
+                className="btn btn-secondary"
+                disabled={loading}
+              >
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* Sub-tabs */}
+          <div className="flex border-b border-slate-200 dark:border-slate-700">
             <button
-              onClick={() => void fetchDeletedItems()}
-              className="btn btn-secondary"
-              disabled={loading}
+              onClick={() => setDataSubTab('deleted')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${dataSubTab === 'deleted'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
             >
-              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-              Refresh
+              Deleted
+            </button>
+            <button
+              onClick={() => setDataSubTab('modified')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${dataSubTab === 'modified'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+            >
+              Modified
             </button>
           </div>
 
@@ -608,67 +748,173 @@ export default function SettingsPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="animate-spin text-primary" size={32} />
             </div>
-          ) : deletedItems.length === 0 ? (
-            <div className="card text-center py-12">
-              <Trash2 className="mx-auto text-slate-300 dark:text-slate-600" size={48} />
-              <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-slate-100">
-                No deleted items
-              </h3>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                Deleted items will appear here and can be restored.
-              </p>
-            </div>
-          ) : (
-            <div className="card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                        Deleted At
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-700">
-                    {deletedItems.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getEntityTypeColor(item.entity_type)}`}>
-                            {item.entity_type}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900 dark:text-slate-100">
-                          {item.entity_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
-                          {formatDate(item.deleted_at)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <button
-                            onClick={() => void handleRestore(item)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
-                            disabled={!item.can_restore}
-                            title={item.restore_notes || 'Restore this item'}
-                          >
-                            <RefreshCw size={14} />
-                            Restore
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          ) : dataSubTab === 'deleted' ? (
+            /* Deleted Items Tab */
+            deletedItems.length === 0 ? (
+              <div className="card text-center py-12">
+                <Trash2 className="mx-auto text-slate-300 dark:text-slate-600" size={48} />
+                <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-slate-100">
+                  No deleted items
+                </h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                  Deleted items will appear here and can be restored.
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          Type
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          Deleted At
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-700">
+                      {deletedItems.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getEntityTypeColor(item.entity_type)}`}>
+                              {item.entity_type}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900 dark:text-slate-100">
+                            {item.entity_name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
+                            {formatDate(item.deleted_at)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => void handleRestore(item)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+                                disabled={!item.can_restore}
+                                title={item.restore_notes || 'Restore this item'}
+                              >
+                                <RefreshCw size={14} />
+                                Restore
+                              </button>
+                              {isMasterAdmin && (
+                                <button
+                                  onClick={() => void handlePermanentDelete(item)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                                  title="Permanently Delete"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          ) : (
+            /* Modifications Tab */
+            modifications.length === 0 ? (
+              <div className="card text-center py-12">
+                <Edit className="mx-auto text-slate-300 dark:text-slate-600" size={48} />
+                <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-slate-100">
+                  No modifications
+                </h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                  Changes to customers, products, and suppliers will be tracked here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {modifications.map((mod) => {
+                  const isExpanded = expandedMods.has(mod.id);
+                  const changes: Array<{ field: string; old: unknown; new: unknown }> = mod.field_changes
+                    ? JSON.parse(mod.field_changes)
+                    : [];
+
+                  return (
+                    <div key={mod.id} className="card p-0 overflow-hidden">
+                      {/* Header Row */}
+                      <div
+                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                        onClick={() => toggleModExpanded(mod.id)}
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getEntityTypeColor(mod.entity_type)}`}>
+                            {mod.entity_type}
+                          </span>
+                          <span className="font-medium text-slate-900 dark:text-slate-100">
+                            {mod.entity_name || `#${mod.entity_id}`}
+                          </span>
+                          <span className="text-sm text-slate-500">
+                            {changes.length} field{changes.length !== 1 ? 's' : ''} changed
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-sm text-slate-500">
+                            {formatDate(mod.modified_at)}
+                          </span>
+                          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </div>
+                      </div>
+
+                      {/* Expanded Details */}
+                      {isExpanded && (
+                        <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4">
+                          <div className="space-y-3">
+                            {changes.map((change, idx) => (
+                              <div key={idx} className="flex flex-col gap-1">
+                                <span className="text-xs font-medium text-slate-500 uppercase">
+                                  {change.field}
+                                </span>
+                                <div className="flex items-center gap-3 text-sm">
+                                  <span className="line-through text-red-600 dark:text-red-400">
+                                    {change.old !== null && change.old !== undefined ? String(change.old) : '(empty)'}
+                                  </span>
+                                  <span className="text-slate-400">→</span>
+                                  <span className="text-green-600 dark:text-green-400 font-medium">
+                                    {change.new !== null && change.new !== undefined ? String(change.new) : '(empty)'}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
+                            <button
+                              onClick={() => void handleRestoreModification(mod)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-md transition-colors"
+                            >
+                              <RotateCcw size={14} />
+                              Restore to Previous
+                            </button>
+                            {isMasterAdmin && (
+                              <button
+                                onClick={() => void handlePermanentDeleteModification(mod)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                                title="Permanently delete this record"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       )}
@@ -706,12 +952,36 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Google Image Search API Section */}
+          {/* Backup & Restore Section (Moved here) */}
           <div className="card">
-            <h2 className="text-lg font-semibold mb-4">General Settings</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              General application settings will appear here.
+            <h2 className="text-lg font-semibold mb-4">Backup & Restore</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              Export all application settings to a JSON file or restore from a backup.
             </p>
+
+            <div className="flex flex-wrap gap-4">
+              <button
+                onClick={() => void handleExportSettings()}
+                className="btn btn-secondary inline-flex items-center"
+              >
+                <Download size={16} className="mr-2" />
+                Export Settings (JSON)
+              </button>
+
+              <button
+                onClick={() => void handleImportSettings()}
+                className="btn btn-secondary inline-flex items-center"
+                disabled={loading}
+              >
+                {loading ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Upload size={16} className="mr-2" />}
+                Import Settings (JSON)
+              </button>
+            </div>
+            {importingInfo && (
+              <div className="mt-4 p-4 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg text-sm">
+                {importingInfo}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -757,7 +1027,7 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 pt-2">
                 <button
                   onClick={() => void handleSaveGoogleSettings()}
                   disabled={savingSettings}
@@ -790,323 +1060,97 @@ export default function SettingsPage() {
                 </button>
 
                 {settingsSuccess && (
-                  <span className="text-sm text-green-600 dark:text-green-400">
-                    Settings saved successfully!
+                  <span className="text-sm text-green-600 dark:text-green-400 ml-2 animate-in fade-in slide-in-from-left-2">
+                    Saved!
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Backup & Restore Section */}
+            {/* Test Area */}
             <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-              <h2 className="text-lg font-semibold mb-4">Backup & Restore Settings</h2>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-                Export all application settings to a JSON file or restore from a backup.
-              </p>
-
-              <div className="flex flex-wrap gap-4">
+              <h3 className="text-md font-medium mb-3">Test Configuration</h3>
+              <div className="flex gap-2 max-w-xl">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Search query (e.g. 'iphone 13')"
+                  value={testQuery}
+                  onChange={(e) => setTestQuery(e.target.value)}
+                />
                 <button
-                  onClick={() => void handleExportSettings()}
-                  className="btn btn-secondary inline-flex items-center"
+                  onClick={() => void handleTestApi()}
+                  disabled={testing || !testQuery}
+                  className="btn btn-secondary whitespace-nowrap"
                 >
-                  <Download size={16} className="mr-2" />
-                  Export Settings (JSON)
-                </button>
-
-                <button
-                  onClick={() => void handleImportSettings()}
-                  className="btn btn-secondary inline-flex items-center"
-                  disabled={loading}
-                >
-                  {loading ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Upload size={16} className="mr-2" />}
-                  Import Settings (JSON)
+                  {testing ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                  Test Search
                 </button>
               </div>
-
-              {importingInfo && (
-                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-md text-sm border border-blue-100 dark:border-blue-800 flex items-center gap-2">
-                  <FileJson size={16} />
-                  {importingInfo}
+              {testError && <p className="text-sm text-red-500 mt-2">{testError}</p>}
+              {testResults.length > 0 && (
+                <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+                  {testResults.map((res, i) => (
+                    <div key={i} className="w-24 h-24 flex-shrink-0 border rounded bg-slate-50 relative">
+                      <img src={res.thumbnail_link} alt={res.title} className="w-full h-full object-cover rounded" />
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
-
-            {/* Test API Section */}
-            {googleApiKey && googleCxId && (
-              <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-                <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-4">Test API - Search Images</h3>
-                <p className="text-sm text-slate-500 mb-4">
-                  Enter a product name to test if the API is working correctly.
-                </p>
-
-                <div className="flex gap-2 max-w-xl">
-                  <input
-                    type="text"
-                    className="form-input flex-1"
-                    placeholder="Enter a product name (e.g., Ponds Magic Powder)"
-                    value={testQuery}
-                    onChange={(e) => setTestQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleTestApi()}
-                  />
-                  <button
-                    onClick={() => void handleTestApi()}
-                    disabled={testing || !testQuery.trim()}
-                    className="btn btn-primary"
-                  >
-                    {testing ? (
-                      <Loader2 size={16} className="animate-spin mr-2" />
-                    ) : (
-                      <Search size={16} className="mr-2" />
-                    )}
-                    Search
-                  </button>
-                </div>
-
-                {testError && (
-                  <div className="mt-3 flex items-center gap-2 p-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800 max-w-xl">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    <span>{testError}</span>
-                  </div>
-                )}
-
-                {/* Test Results Grid */}
-                {testResults.length > 0 && (
-                  <div className="mt-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <CheckCircle size={16} className="text-green-600" />
-                      <p className="text-sm text-green-600 dark:text-green-400 font-medium">
-                        API working! Found {testResults.length} images
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 max-w-2xl">
-                      {testResults.map((result, idx) => (
-                        <div
-                          key={idx}
-                          className="aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
-                        >
-                          <img
-                            src={result.thumbnail_link}
-                            alt={result.title}
-                            className="w-full h-full object-cover hover:scale-105 transition-transform"
-                            title={`${result.title}\n${result.display_link}`}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Setup Instructions */}
-            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-              <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">How to get API credentials</h3>
-              <ol className="text-sm text-slate-600 dark:text-slate-400 space-y-2 list-decimal list-inside">
-                <li>
-                  Go to{' '}
-                  <a
-                    href="https://console.cloud.google.com/apis/credentials"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline inline-flex items-center gap-1"
-                  >
-                    Google Cloud Console <ExternalLink size={12} />
-                  </a>{' '}
-                  and create a project
-                </li>
-                <li>Enable the "Custom Search API" for your project</li>
-                <li>Create an API Key under Credentials</li>
-                <li>
-                  Go to{' '}
-                  <a
-                    href="https://programmablesearchengine.google.com/controlpanel/all"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline inline-flex items-center gap-1"
-                  >
-                    Programmable Search Engine <ExternalLink size={12} />
-                  </a>{' '}
-                  and create a search engine
-                </li>
-                <li>Enable "Image Search" and "Search the entire web" in settings</li>
-                <li>Copy the Search Engine ID (cx parameter)</li>
-              </ol>
-              <p className="mt-4 text-xs text-amber-600 dark:text-amber-500">
-                Note: Free tier allows 100 searches per day. For higher usage, billing must be enabled.
-              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Users Tab */}
-      {activeTab === 'users' && (
+      {/* Invoice Tab */}
+      {activeTab === 'invoice' && (
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold mb-4">Invoice PDF Configuration</h2>
+          <PdfConfiguration />
+        </div>
+      )}
+
+      {/* Users Tab - Restored */}
+      {activeTab === 'users' && user?.role === 'admin' && (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-semibold">User Management</h2>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Manage users and their access permissions
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setEditingUser(null);
-                setNewUser({ username: '', password: '', role: 'user', permissions: [] });
-                setShowAddUser(true);
-              }}
-              className="btn btn-primary"
-            >
+            <h2 className="text-lg font-semibold">User Management</h2>
+            <button className="btn btn-primary" onClick={() => {
+              setEditingUser(null);
+              setNewUser({ username: '', password: '', role: 'user', permissions: [] });
+              setShowAddUser(true);
+            }}>
               Add User
             </button>
           </div>
 
-          {showAddUser && (
-            <div className="card p-6 border-2 border-primary/10">
-              <h3 className="text-lg font-medium mb-4">{editingUser ? 'Edit User' : 'Add New User'}</h3>
-              <form onSubmit={handleCreateUser} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="form-label">Username</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={newUser.username}
-                      onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Password {editingUser && <span className="text-xs text-slate-500 font-normal">(Leave blank to keep current)</span>}</label>
-                    <input
-                      type="password"
-                      className="form-input"
-                      value={newUser.password}
-                      onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                      required={!editingUser}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="form-label">Role</label>
-                  <select
-                    className="form-select"
-                    value={newUser.role}
-                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                  >
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-
-                {newUser.role === 'user' && (
-                  <div>
-                    <label className="form-label mb-2">Permissions</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {PERMISSIONS.map((perm) => (
-                        <label key={perm.id} className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="rounded border-slate-300 text-primary focus:ring-primary"
-                            checked={newUser.permissions.includes(perm.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setNewUser({
-                                  ...newUser,
-                                  permissions: [...newUser.permissions, perm.id],
-                                });
-                              } else {
-                                setNewUser({
-                                  ...newUser,
-                                  permissions: newUser.permissions.filter((p) => p !== perm.id),
-                                });
-                              }
-                            }}
-                          />
-                          <span className="text-sm text-slate-700 dark:text-slate-300">
-                            {perm.label}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddUser(false)}
-                    className="btn btn-ghost"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    {editingUser ? 'Update User' : 'Create User'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
           <div className="card overflow-hidden">
             <table className="w-full">
-              <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+              <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Username</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Permissions</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Username</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Role</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Created At</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td className="px-6 py-4 font-medium">{user.username}</td>
-                    <td className="px-6 py-4 capitalize">
-                      <span className={`badge ${user.role === 'admin' ? 'badge-primary bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'}`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {user.role === 'admin' ? (
-                        <span className="text-slate-400 italic">All Access</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {(() => {
-                            try {
-                              const perms = JSON.parse(user.permissions);
-                              return perms.map((p: string) => (
-                                <span key={p} className="text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                  {PERMISSIONS.find(pm => pm.id === p)?.label || p}
-                                </span>
-                              ));
-                            } catch {
-                              return <span className="text-red-500">Error parsing permissions</span>;
-                            }
-                          })()}
-                        </div>
-                      )}
-                    </td>
+                {users.filter(u => u.username.toLowerCase() !== 'admin').map(u => (
+                  <tr key={u.id}>
+                    <td className="px-6 py-4 font-medium">{u.username}</td>
+                    <td className="px-6 py-4 capitalize">{u.role}</td>
+                    <td className="px-6 py-4 text-slate-500">{formatDate(u.created_at)}</td>
                     <td className="px-6 py-4 text-right">
-                      {user.username !== 'Admin' && (
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => startEditUser(user)}
-                            className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded"
-                            title="Edit User"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            onClick={() => void handleDeleteUser(user.id)}
-                            className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded"
-                            title="Delete User"
-                          >
+                      <div className="flex justify-end gap-2">
+                        <button className="p-2 hover:bg-slate-100 rounded text-blue-600" onClick={() => startEditUser(u)}>
+                          <Edit size={16} />
+                        </button>
+                        {u.username.toLowerCase() !== 'admin' && (
+                          <button className="p-2 hover:bg-slate-100 rounded text-red-600" onClick={() => handleDeleteUser(u.id)}>
                             <Trash2 size={16} />
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1116,124 +1160,115 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Security Tab */}
+      {/* Security Tab - Restored */}
       {activeTab === 'security' && (
         <div className="space-y-6">
           <div className="card">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Fingerprint size={20} />
-              Fingerprint Login
-            </h2>
+            <h2 className="text-lg font-semibold mb-4">Security Settings</h2>
 
-            {biometricError && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-600 dark:text-red-400">{biometricError}</p>
-              </div>
-            )}
-
-            {!biometricCapability ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="animate-spin text-primary" size={24} />
-                <span className="ml-2 text-slate-600 dark:text-slate-400">Checking biometric availability...</span>
-              </div>
-            ) : !biometricCapability.isAvailable ? (
-              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                <p className="text-amber-700 dark:text-amber-300 font-medium">
-                  Fingerprint authentication is not available on this device
-                </p>
-                <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-                  {biometricCapability.error || 'Please ensure you have Touch ID or Windows Hello configured in your system settings.'}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                  <div>
-                    <p className="font-medium text-slate-900 dark:text-slate-100">
-                      {getBiometricTypeName(biometricCapability.biometryType)}
-                    </p>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Use fingerprint to sign in quickly without entering your password
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => void handleToggleBiometric()}
-                    disabled={biometricLoading}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${biometricEnabled ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'
-                      } ${biometricLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${biometricEnabled ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                    />
-                  </button>
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-full ${biometricEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
+                  <Fingerprint size={24} />
                 </div>
-
-                {biometricEnabled && (
-                  <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                    <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
-                      <CheckCircle size={16} />
-                      Fingerprint login is enabled. You can now sign in using your fingerprint on the login screen.
-                    </p>
-                  </div>
-                )}
-
-                {/* Security Warning about OS-level biometrics */}
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 flex items-start gap-3">
-                  <AlertTriangle className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" size={16} />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                      Important Security Note
-                    </p>
-                    <p className="text-sm text-blue-700 dark:text-blue-300">
-                      This feature uses the fingerprints registered to this computer&apos;s System Account.
-                      Any fingerprint that can unlock this computer will be able to log in as <strong>{user?.username}</strong>.
-                    </p>
-                  </div>
-                </div>
-
-                {!biometricEnabled && (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Enable fingerprint login to quickly sign in without entering your password each time.
+                <div>
+                  <h3 className="font-medium">Biometric Authentication</h3>
+                  <p className="text-sm text-slate-500">
+                    {biometricCapability
+                      ? `Use ${getBiometricTypeName(biometricCapability.biometryType)} to sign in`
+                      : 'Biometric hardware not available'}
                   </p>
-                )}
+                </div>
+              </div>
+              {biometricCapability ? (
+                <button
+                  onClick={() => void handleToggleBiometric()}
+                  disabled={biometricLoading}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${biometricEnabled ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'
+                    }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition z-10 ${biometricEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                </button>
+              ) : (
+                <span className="text-xs text-slate-400 italic">Not supported</span>
+              )}
+            </div>
+            {biometricError && (
+              <div className="mt-4 p-3 bg-red-50 text-red-600 rounded text-sm flex gap-2 items-center">
+                <AlertTriangle size={16} />
+                {biometricError}
               </div>
             )}
           </div>
-
-          {/* Security Info */}
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Security Information</h2>
-            <div className="space-y-3 text-sm text-slate-600 dark:text-slate-400">
-              <p>
-                <strong className="text-slate-900 dark:text-slate-100">How it works:</strong> When you enable fingerprint login, a secure token is generated and stored in your system&apos;s secure storage. Your actual fingerprint data never leaves your device.
-              </p>
-              <p>
-                <strong className="text-slate-900 dark:text-slate-100">Per-user setting:</strong> Each user account can independently enable or disable fingerprint login.
-              </p>
-              <p>
-                <strong className="text-slate-900 dark:text-slate-100">Password fallback:</strong> You can always use your password to sign in, even if fingerprint is enabled.
-              </p>
-            </div>
-          </div>
         </div>
       )}
 
-      {/* Themes Tab */}
+      {/* Themes Tab - Restored */}
       {activeTab === 'themes' && (
-        <div className="card">
-          <h2 className="text-lg font-semibold mb-4">Appearance</h2>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-slate-900 dark:text-slate-100">Theme Preference</p>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Switch between light and dark mode
-              </p>
+        <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">Appearance</h2>
+            <p className="text-sm text-slate-600 mb-6">Customize the look and feel of the application.</p>
+
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium">Theme Preference:</span>
+              <ModeToggle />
             </div>
-            <ModeToggle />
           </div>
         </div>
       )}
+
+      {/* Add/Edit User Modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-bold mb-4">{editingUser ? 'Edit User' : 'Create New User'}</h2>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="form-label">Username</label>
+                <input
+                  type="text"
+                  required
+                  className="form-input"
+                  value={newUser.username}
+                  onChange={e => setNewUser({ ...newUser, username: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="form-label">{editingUser ? 'New Password (leave blank to keep)' : 'Password'}</label>
+                <input
+                  type="password"
+                  required={!editingUser}
+                  className="form-input"
+                  value={newUser.password}
+                  onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="form-label">Role</label>
+                <select
+                  className="form-input"
+                  value={newUser.role}
+                  onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                >
+                  <option value="user">User (Restricted)</option>
+                  <option value="admin">Admin (Full Access)</option>
+                </select>
+              </div>
+
+              {/* Permissions could go here for granular control */}
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddUser(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save User</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+

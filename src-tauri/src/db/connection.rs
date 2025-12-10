@@ -560,6 +560,34 @@ impl Database {
             conn.execute("ALTER TABLE users ADD COLUMN biometric_token_hash TEXT", [])?;
         }
 
+        // Migration: Add initial_paid column to invoices (for credit/partial payments)
+        let invoice_initial_paid_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('invoices') WHERE name = 'initial_paid'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !invoice_initial_paid_exists {
+            log::info!("Migrating: Adding initial_paid column to invoices table");
+            conn.execute("ALTER TABLE invoices ADD COLUMN initial_paid REAL DEFAULT 0", [])?;
+        }
+
+        // Migration: Add credit_amount column to invoices (for credit/partial payments)
+        let invoice_credit_amount_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('invoices') WHERE name = 'credit_amount'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !invoice_credit_amount_exists {
+            log::info!("Migrating: Adding credit_amount column to invoices table");
+            conn.execute("ALTER TABLE invoices ADD COLUMN credit_amount REAL DEFAULT 0", [])?;
+        }
+
         Ok(())
     }
 }

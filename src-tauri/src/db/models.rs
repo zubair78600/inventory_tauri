@@ -120,6 +120,42 @@ pub struct SupplierPayment {
     pub created_at: String,
 }
 
+/// Customer payment tracking for amounts received from customers (accounts receivable)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomerPayment {
+    pub id: i32,
+    pub customer_id: i32,
+    pub invoice_id: i32,
+    pub invoice_number: Option<String>,
+    pub amount: f64,
+    pub payment_method: Option<String>,
+    pub note: Option<String>,
+    pub paid_at: String,
+    pub created_at: String,
+}
+
+/// Customer invoice credit summary (for credit history display)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomerInvoiceCreditSummary {
+    pub invoice_id: i32,
+    pub invoice_number: String,
+    pub invoice_date: String,
+    pub bill_amount: f64,
+    pub initial_paid: f64,
+    pub credit_amount: f64,
+    pub total_paid: f64,
+    pub balance_remaining: f64,
+    pub status: String, // "Clear" or "Pending"
+}
+
+/// Overall customer credit summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomerCreditSummary {
+    pub total_credit_amount: f64,
+    pub total_paid: f64,
+    pub pending_amount: f64,
+}
+
 /// Deleted Item model for audit trail
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeletedItem {
