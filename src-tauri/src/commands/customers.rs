@@ -239,15 +239,65 @@ pub fn create_customer(input: CreateCustomerInput, db: State<Database>) -> Resul
 
 /// Update an existing customer
 #[tauri::command]
-pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Result<Customer, String> {
+pub fn update_customer(input: UpdateCustomerInput, modified_by: Option<String>, db: State<Database>) -> Result<Customer, String> {
     log::info!("update_customer called with: {:?}", input);
 
     validate_phone(&input.phone)?;
 
-
     let conn = db.get_conn()?;
 
+    // Get old values for modification logging
+    let old_customer: Customer = conn
+        .query_row(
+            "SELECT id, name, email, phone, address, place, state, district, town, created_at, updated_at FROM customers WHERE id = ?1",
+            [input.id],
+            |row| {
+                Ok(Customer {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    email: row.get(2)?,
+                    phone: row.get(3)?,
+                    address: row.get(4)?,
+                    place: row.get(5)?,
+                    state: row.get(6)?,
+                    district: row.get(7)?,
+                    town: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
+            },
+        )
+        .map_err(|e| format!("Customer with id {} not found: {}", input.id, e))?;
+
     let now = Utc::now().to_rfc3339();
+
+    // Build field changes array
+    let mut field_changes: Vec<serde_json::Value> = Vec::new();
+    
+    if old_customer.name != input.name {
+        field_changes.push(serde_json::json!({"field": "name", "old": old_customer.name, "new": input.name}));
+    }
+    if old_customer.email != input.email {
+        field_changes.push(serde_json::json!({"field": "email", "old": old_customer.email, "new": input.email}));
+    }
+    if old_customer.phone != input.phone {
+        field_changes.push(serde_json::json!({"field": "phone", "old": old_customer.phone, "new": input.phone}));
+    }
+    if old_customer.address != input.address {
+        field_changes.push(serde_json::json!({"field": "address", "old": old_customer.address, "new": input.address}));
+    }
+    if old_customer.place != input.place {
+        field_changes.push(serde_json::json!({"field": "place", "old": old_customer.place, "new": input.place}));
+    }
+    if old_customer.state != input.state {
+        field_changes.push(serde_json::json!({"field": "state", "old": old_customer.state, "new": input.state}));
+    }
+    if old_customer.district != input.district {
+        field_changes.push(serde_json::json!({"field": "district", "old": old_customer.district, "new": input.district}));
+    }
+    if old_customer.town != input.town {
+        field_changes.push(serde_json::json!({"field": "town", "old": old_customer.town, "new": input.town}));
+    }
 
     let rows_affected = conn
         .execute(
@@ -260,14 +310,15 @@ pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Resul
         return Err(format!("Customer with id {} not found", input.id));
     }
 
-    // Get created_at from database
-    let created_at: String = conn
-        .query_row(
-            "SELECT created_at FROM customers WHERE id = ?1",
-            [input.id],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+    // Log modification if there were actual changes
+    if !field_changes.is_empty() {
+        let changes_json = serde_json::to_string(&field_changes).unwrap_or_default();
+        conn.execute(
+            "INSERT INTO entity_modifications (entity_type, entity_id, entity_name, action, field_changes, modified_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            ("customer", input.id, &input.name, "updated", &changes_json, &modified_by),
+        ).map_err(|e| format!("Failed to log modification: {}", e))?;
+        log::info!("Logged {} field changes for customer {}", field_changes.len(), input.id);
+    }
 
     let customer = Customer {
         id: input.id,
@@ -279,7 +330,7 @@ pub fn update_customer(input: UpdateCustomerInput, db: State<Database>) -> Resul
         state: input.state,
         district: input.district,
         town: input.town,
-        created_at,
+        created_at: old_customer.created_at,
         updated_at: now,
     };
 

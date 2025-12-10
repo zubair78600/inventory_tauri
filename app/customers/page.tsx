@@ -223,8 +223,8 @@ export default function Customers() {
           <Button variant="ghost" onClick={invalidateCustomers}>
             Refresh
           </Button>
-          <Button variant="outline" onClick={() => {
-            const url = generateCustomerListPDF(customers);
+          <Button variant="outline" onClick={async () => {
+            const url = await generateCustomerListPDF(customers);
             setPdfUrl(url);
             setPdfFileName(`Customer_List_${new Date().toISOString().split('T')[0]}.pdf`);
             setShowPdfPreview(true);

@@ -235,8 +235,8 @@ export default function Suppliers() {
           <Button variant="ghost" onClick={invalidateSuppliers}>
             Refresh
           </Button>
-          <Button variant="outline" onClick={() => {
-            const url = generateSupplierListPDF(suppliers);
+          <Button variant="outline" onClick={async () => {
+            const url = await generateSupplierListPDF(suppliers);
             setPdfUrl(url);
             setPdfFileName(`Supplier_List_${new Date().toISOString().split('T')[0]}.pdf`);
             setShowPdfPreview(true);

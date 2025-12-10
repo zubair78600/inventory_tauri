@@ -2,15 +2,16 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { analyticsCommands, invoiceCommands, type CustomerReport, type Invoice, type InvoiceItem } from '@/lib/tauri';
+import { analyticsCommands, invoiceCommands, customerPaymentCommands, type CustomerReport, type Invoice, type InvoiceItem, type CustomerCreditSummary } from '@/lib/tauri';
 import { generateCustomerDetailPDF } from '@/lib/pdf-generator';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, MapPin, Phone, Mail, FileText, Package, ChevronDown, ChevronUp, Home } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Phone, Mail, FileText, Package, ChevronDown, ChevronUp, Home, CreditCard } from 'lucide-react';
 
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
+import { CustomerCreditHistory } from '@/components/customers/CustomerCreditHistory';
 
 function CustomerDetailsContent() {
     const searchParams = useSearchParams();
@@ -18,6 +19,7 @@ function CustomerDetailsContent() {
     const id = Number(searchParams.get('id'));
 
     const [report, setReport] = useState<CustomerReport | null>(null);
+    const [creditSummary, setCreditSummary] = useState<CustomerCreditSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [expandedInvoiceId, setExpandedInvoiceId] = useState<number | null>(null);
@@ -27,6 +29,7 @@ function CustomerDetailsContent() {
     const [showPdfPreview, setShowPdfPreview] = useState(false);
     const [pdfFileName, setPdfFileName] = useState('');
     const [showImagePreview, setShowImagePreview] = useState(false);
+    const [showCreditDetails, setShowCreditDetails] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -38,6 +41,8 @@ function CustomerDetailsContent() {
             setLoading(true);
             const data = await analyticsCommands.getReport(id);
             setReport(data);
+            const creditData = await customerPaymentCommands.getCreditSummary(id);
+            setCreditSummary(creditData);
         } catch (err) {
             console.error(err);
             setError('Failed to load customer details');
@@ -99,8 +104,8 @@ function CustomerDetailsContent() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                                const url = generateCustomerDetailPDF(customer, invoices, stats);
+                            onClick={async () => {
+                                const url = await generateCustomerDetailPDF(customer, invoices, stats);
                                 setPdfUrl(url);
                                 setPdfFileName(`${customer.name.replace(/\s+/g, '_')}_Details.pdf`);
                                 setShowPdfPreview(true);
@@ -156,7 +161,7 @@ function CustomerDetailsContent() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Spent</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">₹{stats.total_spent.toFixed(0)}</div>
@@ -171,7 +176,42 @@ function CustomerDetailsContent() {
                         {invoices[0] ? new Date(invoices[0].created_at).toLocaleDateString() : 'Never'}
                     </div>
                 </Card>
+                <Card
+                    className="p-4 bg-white border-slate-200 shadow-sm text-center cursor-pointer hover:bg-slate-50 transition-colors relative overflow-hidden"
+                    onClick={() => setShowCreditDetails(!showCreditDetails)}
+                >
+                    <div className="text-sm text-slate-500 font-medium flex items-center justify-center gap-1">
+                        Current Credit
+                        {showCreditDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </div>
+
+                    {showCreditDetails && creditSummary ? (
+                        <div className="mt-2 text-sm text-slate-600 space-y-1 animate-in slide-in-from-top-1 fade-in duration-200">
+                            <div className="flex justify-between items-center px-4">
+                                <span>Given:</span>
+                                <span className="font-semibold text-amber-600">₹{creditSummary.total_credit_amount.toFixed(0)}</span>
+                            </div>
+                            <div className="flex justify-between items-center px-4">
+                                <span>Repaid:</span>
+                                <span className="font-semibold text-emerald-600">
+                                    ₹{(creditSummary.total_credit_amount - creditSummary.pending_amount).toFixed(0)}
+                                </span>
+                            </div>
+                            <div className="border-t border-slate-100 mt-1 pt-1 flex justify-between items-center px-4 font-bold">
+                                <span>Pending:</span>
+                                <span>₹{creditSummary.pending_amount.toFixed(0)}</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-xl font-semibold text-amber-600 mt-1">
+                            ₹{creditSummary?.pending_amount.toFixed(0) || '0'}
+                        </div>
+                    )}
+                </Card>
             </div>
+
+            {/* Credit History Section */}
+            <CustomerCreditHistory customerId={id} onPaymentUpdate={loadReport} />
 
             {/* Invoices Section */}
             <div className="space-y-4">

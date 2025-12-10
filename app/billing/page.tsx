@@ -26,6 +26,7 @@ export default function Billing() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
+  const [generatingPdfId, setGeneratingPdfId] = useState<number | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
 
@@ -46,6 +47,7 @@ export default function Billing() {
   const [taxRate, setTaxRate] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+  const [initialPaid, setInitialPaid] = useState<number>(0); // For credit payments
 
   // Location state management with smart defaults
   const { defaults, recordSelection } = useLocationDefaults('invoices');
@@ -73,6 +75,8 @@ export default function Billing() {
   };
 
   const handleViewPdf = async (invoice: Invoice) => {
+    if (generatingPdfId === invoice.id) return; // Prevent double click
+    setGeneratingPdfId(invoice.id);
     try {
       const fullInvoice = await invoiceCommands.getById(invoice.id);
 
@@ -89,13 +93,15 @@ export default function Billing() {
         customer = { name: invoice.customer_name || 'Customer', phone: invoice.customer_phone } as any;
       }
 
-      const url = generateInvoicePDF(fullInvoice.invoice, fullInvoice.items, customer);
+      const { url } = await generateInvoicePDF(fullInvoice.invoice, fullInvoice.items, customer);
       setPdfUrl(url);
       setPdfFileName(`Invoice_${invoice.invoice_number}.pdf`);
       setShowPdfPreview(true);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF');
+    } finally {
+      setGeneratingPdfId(null);
     }
   };
 
@@ -376,6 +382,8 @@ export default function Billing() {
         state: location.state || undefined,
         district: location.district || undefined,
         town: location.town || undefined,
+        // Include initial_paid for credit payments
+        initial_paid: paymentMethod === 'Credit' ? initialPaid : undefined,
       };
 
       await invoiceCommands.create(invoiceInput);
@@ -399,6 +407,8 @@ export default function Billing() {
       setCustomerName('');
       setCustomerPhone('');
       setSelectedCustomerId(null);
+      setPaymentMethod('Cash');
+      setInitialPaid(0);
       await fetchQuickAddProducts();
       await fetchRecentInvoices();
     } catch (error) {
@@ -562,7 +572,13 @@ export default function Billing() {
               <select
                 className="form-select"
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                onChange={(e) => {
+                  setPaymentMethod(e.target.value);
+                  // Reset initial paid when switching away from Credit
+                  if (e.target.value !== 'Credit') {
+                    setInitialPaid(0);
+                  }
+                }}
               >
                 <option>Cash</option>
                 <option>Credit Card</option>
@@ -570,9 +586,42 @@ export default function Billing() {
                 <option>UPI</option>
                 <option>NetBanking</option>
                 <option>Wallet</option>
+                <option>Credit</option>
               </select>
             </div>
           </div>
+
+          {/* Credit Payment - Partial Payment Input */}
+          {paymentMethod === 'Credit' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 text-amber-800">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <span className="font-medium text-sm">Credit Sale - Customer will pay later</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label text-amber-800">Amount Paid Now</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={initialPaid || ''}
+                    onChange={(e) => setInitialPaid(parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    min={0}
+                    max={calculateTotal()}
+                  />
+                </div>
+                <div>
+                  <label className="form-label text-amber-800">Credit Amount</label>
+                  <div className="form-input bg-amber-100 text-amber-900 font-semibold">
+                    ₹{(calculateTotal() - initialPaid).toFixed(0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <LocationSelector
             value={location}
@@ -618,8 +667,13 @@ export default function Billing() {
                     onClick={() => handleViewPdf(inv)}
                     className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
                     title="View Invoice PDF"
+                    disabled={generatingPdfId === inv.id}
                   >
-                    <FileText className="w-5 h-5" />
+                    {generatingPdfId === inv.id ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                    ) : (
+                      <FileText className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
               ))

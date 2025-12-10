@@ -23,6 +23,15 @@
         }
       ]
     },
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    "dialog:allow-open",
     "biometry:default"
   ]
 }

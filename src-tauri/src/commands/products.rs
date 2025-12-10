@@ -390,10 +390,19 @@ pub fn create_product(input: CreateProductInput, db: State<Database>) -> Result<
 
 /// Update an existing product
 #[tauri::command]
-pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<Product, String> {
+pub fn update_product(input: UpdateProductInput, modified_by: Option<String>, db: State<Database>) -> Result<Product, String> {
     log::info!("update_product called with: {:?}", input);
 
     let conn = db.get_conn()?;
+
+    // Get old values first
+    let old_product: (String, String, f64, Option<f64>, i32, Option<i32>, Option<String>) = conn
+        .query_row(
+            "SELECT name, sku, price, selling_price, stock_quantity, supplier_id, category FROM products WHERE id = ?1",
+            [input.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+        )
+        .map_err(|e| format!("Product with id {} not found: {}", input.id, e))?;
 
     // Check if SKU is already used by another product
     let sku_exists: bool = conn
@@ -407,6 +416,31 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 
     if sku_exists {
         return Err(format!("Product with SKU '{}' already exists", input.sku));
+    }
+
+    // Build field changes array
+    let mut field_changes: Vec<serde_json::Value> = Vec::new();
+    
+    if old_product.0 != input.name {
+        field_changes.push(serde_json::json!({"field": "name", "old": old_product.0, "new": input.name}));
+    }
+    if old_product.1 != input.sku {
+        field_changes.push(serde_json::json!({"field": "sku", "old": old_product.1, "new": input.sku}));
+    }
+    if (old_product.2 - input.price).abs() > 0.001 {
+        field_changes.push(serde_json::json!({"field": "price", "old": old_product.2, "new": input.price}));
+    }
+    if old_product.3 != input.selling_price {
+        field_changes.push(serde_json::json!({"field": "selling_price", "old": old_product.3, "new": input.selling_price}));
+    }
+    if old_product.4 != input.stock_quantity {
+        field_changes.push(serde_json::json!({"field": "stock_quantity", "old": old_product.4, "new": input.stock_quantity}));
+    }
+    if old_product.5 != input.supplier_id {
+        field_changes.push(serde_json::json!({"field": "supplier_id", "old": old_product.5, "new": input.supplier_id}));
+    }
+    if old_product.6 != input.category {
+        field_changes.push(serde_json::json!({"field": "category", "old": old_product.6, "new": input.category}));
     }
 
     let rows_affected = conn
@@ -427,6 +461,16 @@ pub fn update_product(input: UpdateProductInput, db: State<Database>) -> Result<
 
     if rows_affected == 0 {
         return Err(format!("Product with id {} not found", input.id));
+    }
+
+    // Log modification if there were actual changes
+    if !field_changes.is_empty() {
+        let changes_json = serde_json::to_string(&field_changes).unwrap_or_default();
+        conn.execute(
+            "INSERT INTO entity_modifications (entity_type, entity_id, entity_name, action, field_changes, modified_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            ("product", input.id, &input.name, "updated", &changes_json, &modified_by),
+        ).map_err(|e| format!("Failed to log modification: {}", e))?;
+        log::info!("Logged {} field changes for product {}", field_changes.len(), input.id);
     }
 
     // Fetch updated product

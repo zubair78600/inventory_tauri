@@ -11,6 +11,7 @@ pub mod migration;
 pub mod settings;
 pub mod images;
 pub mod biometric;
+pub mod customer_payments;
 
 use serde::{Deserialize, Serialize};
 
@@ -33,3 +34,4 @@ pub use migration::*;
 pub use settings::*;
 pub use images::*;
 pub use biometric::*;
+pub use customer_payments::*;

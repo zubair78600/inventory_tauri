@@ -21,8 +21,9 @@ pub struct CreateInvoiceInput {
     pub payment_method: Option<String>,
     pub state: Option<String>,
     pub district: Option<String>,
-
     pub town: Option<String>,
+    // Credit payment fields
+    pub initial_paid: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -56,6 +57,35 @@ pub struct ProductSalesSummary {
     pub total_quantity: i32,
     pub total_amount: f64,
     pub invoice_count: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateInvoiceItemsInput {
+    pub invoice_id: i32,
+    pub items: Vec<CreateInvoiceItemInput>, // New list of items
+    pub modified_by: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InvoiceModification {
+    pub id: i32,
+    pub invoice_id: i32,
+    pub action: String,
+    pub modified_by: Option<String>,
+    pub modified_at: String,
+    pub original_data: Option<String>,
+    pub new_data: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeletedInvoice {
+    pub id: i32,
+    pub entity_type: String,
+    pub entity_id: i32,
+    pub entity_data: String,
+    pub related_data: Option<String>,
+    pub deleted_at: String,
+    pub deleted_by: Option<String>,
 }
 
 /// Get all invoices with pagination, search, and optional customer filter
@@ -416,15 +446,39 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
     // Start transaction
     let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
 
+    // Handle credit payment calculations
+    let is_credit = input.payment_method.as_deref() == Some("Credit");
+    let initial_paid = if is_credit {
+        input.initial_paid.unwrap_or(0.0)
+    } else {
+        total_amount // Non-credit payments are fully paid
+    };
+    let credit_amount = if is_credit {
+        (total_amount - initial_paid).max(0.0)
+    } else {
+        0.0
+    };
+
     // Create invoice
     let now = Utc::now().to_rfc3339();
     tx.execute(
-        "INSERT INTO invoices (invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, state, district, town) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        (&invoice_number, input.customer_id, total_amount, tax_amount, discount_amount, &input.payment_method, &now, &input.state, &input.district, &input.town),
+        "INSERT INTO invoices (invoice_number, customer_id, total_amount, tax_amount, discount_amount, payment_method, created_at, state, district, town, initial_paid, credit_amount) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        (&invoice_number, input.customer_id, total_amount, tax_amount, discount_amount, &input.payment_method, &now, &input.state, &input.district, &input.town, initial_paid, credit_amount),
     )
     .map_err(|e| format!("Failed to create invoice: {}", e))?;
 
     let invoice_id = tx.last_insert_rowid() as i32;
+
+    // If credit payment with initial amount, create initial payment record
+    if is_credit && initial_paid > 0.0 {
+        if let Some(customer_id) = input.customer_id {
+            tx.execute(
+                "INSERT INTO customer_payments (customer_id, invoice_id, amount, payment_method, note, paid_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))",
+                (customer_id, invoice_id, initial_paid, "Cash", "Initial payment at invoice creation", &now),
+            )
+            .map_err(|e| format!("Failed to create initial payment record: {}", e))?;
+        }
+    }
 
     // Create invoice items, update stock, and record FIFO sales
     let sale_date = Utc::now().format("%Y-%m-%d").to_string();
@@ -644,4 +698,264 @@ pub fn delete_invoice(id: i32, deleted_by: Option<String>, db: State<Database>) 
     tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
     log::info!("Deleted invoice {} and restored inventory", id);
     Ok(())
+}
+
+/// Update invoice items (add/remove items with stock adjustments)
+#[tauri::command]
+pub fn update_invoice_items(input: UpdateInvoiceItemsInput, db: State<Database>) -> Result<Invoice, String> {
+    log::info!("update_invoice_items called for invoice_id: {}", input.invoice_id);
+
+    let mut conn = db.get_conn()?;
+
+    // Get current invoice and items for history
+    let current_invoice = conn.query_row(
+        "SELECT id, invoice_number, total_amount FROM invoices WHERE id = ?1",
+        [input.invoice_id],
+        |row| Ok((row.get::<_, i32>(0)?, row.get::<_, String>(1)?, row.get::<_, f64>(2)?)),
+    ).map_err(|e| format!("Invoice not found: {}", e))?;
+
+    // Get current items
+    let current_items: Vec<InvoiceItemWithProduct> = {
+        let mut stmt = conn.prepare(
+            "SELECT ii.id, ii.invoice_id, ii.product_id, p.name, p.sku, ii.quantity, ii.unit_price
+             FROM invoice_items ii
+             JOIN products p ON ii.product_id = p.id
+             WHERE ii.invoice_id = ?1"
+        ).map_err(|e| e.to_string())?;
+
+        let rows = stmt.query_map([input.invoice_id], |row| {
+            Ok(InvoiceItemWithProduct {
+                id: row.get(0)?,
+                invoice_id: row.get(1)?,
+                product_id: row.get(2)?,
+                product_name: row.get(3)?,
+                product_sku: row.get(4)?,
+                quantity: row.get(5)?,
+                unit_price: row.get(6)?,
+            })
+        }).map_err(|e| e.to_string())?;
+        
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+
+    // Serialize for history
+    let original_data = serde_json::to_string(&current_items).unwrap_or_default();
+
+    let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    // 1. Restore stock for all existing items
+    for item in &current_items {
+        tx.execute(
+            "UPDATE products SET stock_quantity = stock_quantity + ?1 WHERE id = ?2",
+            (item.quantity, item.product_id),
+        ).map_err(|e| format!("Failed to restore stock: {}", e))?;
+    }
+
+    // 2. Delete all existing invoice items
+    tx.execute("DELETE FROM invoice_items WHERE invoice_id = ?1", [input.invoice_id])
+        .map_err(|e| format!("Failed to delete items: {}", e))?;
+
+    // 3. Add new items and deduct stock
+    let mut new_total: f64 = 0.0;
+    let sale_date = Utc::now().format("%Y-%m-%d").to_string();
+
+    for item in &input.items {
+        // Get product name
+        let product_name: String = tx.query_row(
+            "SELECT name FROM products WHERE id = ?1",
+            [item.product_id],
+            |row| row.get(0),
+        ).map_err(|e| format!("Product not found: {}", e))?;
+
+        // Check stock
+        let stock: i32 = tx.query_row(
+            "SELECT stock_quantity FROM products WHERE id = ?1",
+            [item.product_id],
+            |row| row.get(0),
+        ).map_err(|e| format!("Failed to get stock: {}", e))?;
+
+        if stock < item.quantity {
+            return Err(format!("Insufficient stock for product '{}'. Available: {}, Requested: {}", product_name, stock, item.quantity));
+        }
+
+        // Insert new item
+        tx.execute(
+            "INSERT INTO invoice_items (invoice_id, product_id, quantity, unit_price, product_name) VALUES (?1, ?2, ?3, ?4, ?5)",
+            (input.invoice_id, item.product_id, item.quantity, item.unit_price, &product_name),
+        ).map_err(|e| format!("Failed to insert item: {}", e))?;
+
+        // Deduct stock
+        tx.execute(
+            "UPDATE products SET stock_quantity = stock_quantity - ?1 WHERE id = ?2",
+            (item.quantity, item.product_id),
+        ).map_err(|e| format!("Failed to deduct stock: {}", e))?;
+
+        // Record FIFO sale
+        inventory_service::record_sale_fifo(&tx, item.product_id, item.quantity, &sale_date, input.invoice_id)
+            .map_err(|e| format!("Failed to record FIFO: {}", e))?;
+
+        new_total += item.unit_price * item.quantity as f64;
+    }
+
+    // 4. Update invoice total
+    tx.execute(
+        "UPDATE invoices SET total_amount = ?1 WHERE id = ?2",
+        (new_total, input.invoice_id),
+    ).map_err(|e| format!("Failed to update invoice total: {}", e))?;
+
+    // 5. Record modification history (legacy table)
+    let new_data = serde_json::to_string(&input.items).unwrap_or_default();
+    tx.execute(
+        "INSERT INTO invoice_modifications (invoice_id, action, modified_by, original_data, new_data) VALUES (?1, ?2, ?3, ?4, ?5)",
+        (input.invoice_id, "items_modified", &input.modified_by, &original_data, &new_data),
+    ).map_err(|e| format!("Failed to record modification: {}", e))?;
+
+    // 6. Also record in unified entity_modifications table for Settings UI
+    // Build field changes showing item count diff
+    let old_items_count = current_items.len();
+    let new_items_count = input.items.len();
+    let mut field_changes: Vec<serde_json::Value> = Vec::new();
+    
+    // Detect removed items
+    for old_item in &current_items {
+        let still_exists = input.items.iter().any(|new_item| new_item.product_id == old_item.product_id);
+        if !still_exists {
+            field_changes.push(serde_json::json!({
+                "field": format!("Item: {}", old_item.product_name),
+                "old": format!("{} x Rs.{}", old_item.quantity, old_item.unit_price),
+                "new": "(removed)"
+            }));
+        }
+    }
+    
+    // Detect added/changed items
+    for new_item in &input.items {
+        if let Some(old_item) = current_items.iter().find(|o| o.product_id == new_item.product_id) {
+            // Item exists - check if qty/price changed
+            if old_item.quantity != new_item.quantity || (old_item.unit_price - new_item.unit_price).abs() > 0.01 {
+                field_changes.push(serde_json::json!({
+                    "field": format!("Item: {}", old_item.product_name),
+                    "old": format!("{} x Rs.{}", old_item.quantity, old_item.unit_price),
+                    "new": format!("{} x Rs.{}", new_item.quantity, new_item.unit_price)
+                }));
+            }
+        } else {
+            // New item added
+            let product_name: String = tx.query_row("SELECT name FROM products WHERE id = ?1", [new_item.product_id], |row| row.get(0)).unwrap_or_else(|_| format!("Product #{}", new_item.product_id));
+            field_changes.push(serde_json::json!({
+                "field": format!("Item: {}", product_name),
+                "old": "(none)",
+                "new": format!("{} x Rs.{}", new_item.quantity, new_item.unit_price)
+            }));
+        }
+    }
+
+    // Also log total change
+    if (current_invoice.2 - new_total).abs() > 0.01 {
+        field_changes.push(serde_json::json!({
+            "field": "Total Amount",
+            "old": format!("Rs.{:.2}", current_invoice.2),
+            "new": format!("Rs.{:.2}", new_total)
+        }));
+    }
+
+    if !field_changes.is_empty() {
+        let changes_json = serde_json::to_string(&field_changes).unwrap_or_default();
+        tx.execute(
+            "INSERT INTO entity_modifications (entity_type, entity_id, entity_name, action, field_changes, modified_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            ("invoice", input.invoice_id, &current_invoice.1, "items_modified", &changes_json, &input.modified_by),
+        ).map_err(|e| format!("Failed to log entity modification: {}", e))?;
+    }
+
+    tx.commit().map_err(|e| format!("Failed to commit: {}", e))?;
+
+    // Return updated invoice
+    let invoice = get_invoice(input.invoice_id, db)?.invoice;
+    log::info!("Updated invoice {} items", input.invoice_id);
+    Ok(invoice)
+}
+
+/// Get deleted invoices from audit trail
+#[tauri::command]
+pub fn get_deleted_invoices(db: State<Database>) -> Result<Vec<DeletedInvoice>, String> {
+    log::info!("get_deleted_invoices called");
+
+    let conn = db.get_conn()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, entity_type, entity_id, entity_data, related_data, deleted_at, deleted_by 
+         FROM deleted_items 
+         WHERE entity_type = 'invoice' 
+         ORDER BY deleted_at DESC 
+         LIMIT 100"
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(DeletedInvoice {
+            id: row.get(0)?,
+            entity_type: row.get(1)?,
+            entity_id: row.get(2)?,
+            entity_data: row.get(3)?,
+            related_data: row.get(4)?,
+            deleted_at: row.get(5)?,
+            deleted_by: row.get(6)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let deleted: Vec<DeletedInvoice> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    log::info!("Returning {} deleted invoices", deleted.len());
+    Ok(deleted)
+}
+
+/// Get invoice modification history
+#[tauri::command]
+pub fn get_invoice_modifications(invoice_id: Option<i32>, db: State<Database>) -> Result<Vec<InvoiceModification>, String> {
+    log::info!("get_invoice_modifications called for invoice_id: {:?}", invoice_id);
+
+    let conn = db.get_conn()?;
+
+    let query = if invoice_id.is_some() {
+        "SELECT id, invoice_id, action, modified_by, modified_at, original_data, new_data 
+         FROM invoice_modifications 
+         WHERE invoice_id = ?1 
+         ORDER BY modified_at DESC"
+    } else {
+        "SELECT id, invoice_id, action, modified_by, modified_at, original_data, new_data 
+         FROM invoice_modifications 
+         ORDER BY modified_at DESC 
+         LIMIT 100"
+    };
+
+    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+
+    let modifications: Vec<InvoiceModification> = if let Some(id) = invoice_id {
+        let rows = stmt.query_map([id], |row| {
+            Ok(InvoiceModification {
+                id: row.get(0)?,
+                invoice_id: row.get(1)?,
+                action: row.get(2)?,
+                modified_by: row.get(3)?,
+                modified_at: row.get(4)?,
+                original_data: row.get(5)?,
+                new_data: row.get(6)?,
+            })
+        }).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    } else {
+        let rows = stmt.query_map([], |row| {
+            Ok(InvoiceModification {
+                id: row.get(0)?,
+                invoice_id: row.get(1)?,
+                action: row.get(2)?,
+                modified_by: row.get(3)?,
+                modified_at: row.get(4)?,
+                original_data: row.get(5)?,
+                new_data: row.get(6)?,
+            })
+        }).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+
+    log::info!("Returning {} modifications", modifications.len());
+    Ok(modifications)
 }

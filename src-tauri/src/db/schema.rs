@@ -97,6 +97,30 @@ CREATE TABLE IF NOT EXISTS deleted_items (
     deleted_by TEXT
 );
 
+-- Invoice Modifications table (audit trail for invoice edits)
+CREATE TABLE IF NOT EXISTS invoice_modifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    modified_by TEXT,
+    modified_at TEXT NOT NULL DEFAULT (datetime('now')),
+    original_data TEXT,
+    new_data TEXT,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+);
+
+-- Entity Modifications table (universal audit trail for all entity updates)
+CREATE TABLE IF NOT EXISTS entity_modifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL,
+    entity_id INTEGER NOT NULL,
+    entity_name TEXT,
+    action TEXT NOT NULL DEFAULT 'updated',
+    field_changes TEXT,
+    modified_by TEXT,
+    modified_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Supplier Payments table
 CREATE TABLE IF NOT EXISTS supplier_payments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +133,20 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- Customer Payments table (for credit/accounts receivable tracking)
+CREATE TABLE IF NOT EXISTS customer_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    invoice_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    payment_method TEXT,
+    note TEXT,
+    paid_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
 );
 
 -- Create indexes for better query performance
@@ -124,6 +162,11 @@ CREATE INDEX IF NOT EXISTS idx_deleted_items_type ON deleted_items(entity_type);
 CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_paid_at ON supplier_payments(paid_at);
+
+-- Customer Payments indexes
+CREATE INDEX IF NOT EXISTS idx_customer_payments_customer ON customer_payments(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_payments_invoice ON customer_payments(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_customer_payments_paid_at ON customer_payments(paid_at);
 
 -- Performance Indices for Sorting and Searching
 CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);

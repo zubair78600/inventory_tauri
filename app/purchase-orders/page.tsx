@@ -440,7 +440,7 @@ export default function PurchaseOrders() {
 
                           try {
                             const fullPO = await purchaseOrderCommands.getById(po.id);
-                            const url = generatePurchaseOrderPDF(fullPO);
+                            const url = await generatePurchaseOrderPDF(fullPO);
                             setPdfUrl(url);
                             setPdfFileName(`PO_${po.po_number}.pdf`);
                             setShowPdfPreview(true);

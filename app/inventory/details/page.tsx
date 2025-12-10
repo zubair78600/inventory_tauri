@@ -181,8 +181,8 @@ function InventoryDetailsContent() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                                const url = generateProductDetailPDF(product);
+                            onClick={async () => {
+                                const url = await generateProductDetailPDF(product);
                                 setPdfUrl(url);
                                 setPdfFileName(`${product.name.replace(/\s+/g, '_')}_Details.pdf`);
                                 setShowPdfPreview(true);

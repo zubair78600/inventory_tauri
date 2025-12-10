@@ -88,6 +88,37 @@ export interface SupplierPaymentSummary {
   pending_amount: number;
 }
 
+// Customer Payment (Accounts Receivable) Types
+export interface CustomerPayment {
+  id: number;
+  customer_id: number;
+  invoice_id: number;
+  invoice_number: string | null;
+  amount: number;
+  payment_method: string | null;
+  note: string | null;
+  paid_at: string;
+  created_at: string;
+}
+
+export interface CustomerInvoiceCreditSummary {
+  invoice_id: number;
+  invoice_number: string;
+  invoice_date: string;
+  bill_amount: number;
+  initial_paid: number;
+  credit_amount: number;
+  total_paid: number;
+  balance_remaining: number;
+  status: 'Clear' | 'Pending';
+}
+
+export interface CustomerCreditSummary {
+  total_credit_amount: number;
+  total_paid: number;
+  pending_amount: number;
+}
+
 export interface CreateSupplierInput {
   name: string;
   contact_info: string | null;
@@ -357,6 +388,38 @@ export interface InvoiceWithItems {
   items: InvoiceItemWithProduct[];
 }
 
+export interface DeletedInvoice {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  entity_data: string;
+  related_data: string | null;
+  deleted_at: string;
+  deleted_by: string | null;
+}
+
+export interface InvoiceModification {
+  id: number;
+  invoice_id: number;
+  action: string;
+  modified_by: string | null;
+  modified_at: string;
+  original_data: string | null;
+  new_data: string | null;
+}
+
+// Universal entity modification tracking
+export interface EntityModification {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  entity_name: string | null;
+  action: string;
+  field_changes: string | null; // JSON: [{field, old, new}]
+  modified_by: string | null;
+  modified_at: string;
+}
+
 export interface CreateInvoiceItemInput {
   product_id: number;
   quantity: number;
@@ -372,6 +435,7 @@ export interface CreateInvoiceInput {
   state?: string;
   district?: string;
   town?: string;
+  initial_paid?: number; // For credit payments - amount paid at checkout
 }
 
 export interface UpdateInvoiceInput {
@@ -629,6 +693,60 @@ export const customerCommands = {
   },
 };
 
+/**
+ * Customer Payment Commands (Accounts Receivable / Credit Tracking)
+ */
+export const customerPaymentCommands = {
+  /**
+   * Create a payment record for a customer invoice
+   */
+  create: async (input: {
+    customer_id: number;
+    invoice_id: number;
+    amount: number;
+    payment_method?: string | null;
+    note?: string | null;
+    paid_at?: string | null;
+  }): Promise<CustomerPayment> => {
+    return await invoke<CustomerPayment>('create_customer_payment', { input });
+  },
+
+  /**
+   * Get all payments for a customer
+   */
+  getByCustomer: async (customerId: number): Promise<CustomerPayment[]> => {
+    return await invoke<CustomerPayment[]>('get_customer_payments', { customerId });
+  },
+
+  /**
+   * Get payments for a specific invoice
+   */
+  getByInvoice: async (invoiceId: number): Promise<CustomerPayment[]> => {
+    return await invoke<CustomerPayment[]>('get_invoice_payments', { invoiceId });
+  },
+
+  /**
+   * Get credit history for a customer (all invoices with credit)
+   */
+  getCreditHistory: async (customerId: number): Promise<CustomerInvoiceCreditSummary[]> => {
+    return await invoke<CustomerInvoiceCreditSummary[]>('get_customer_credit_history', { customerId });
+  },
+
+  /**
+   * Get overall credit summary for a customer
+   */
+  getCreditSummary: async (customerId: number): Promise<CustomerCreditSummary> => {
+    return await invoke<CustomerCreditSummary>('get_customer_credit_summary', { customerId });
+  },
+
+  /**
+   * Delete a customer payment
+   */
+  delete: async (id: number, username?: string): Promise<void> => {
+    return await invoke<void>('delete_customer_payment', { id, deletedBy: username ?? null });
+  },
+};
+
 export interface CustomerInvoice {
   id: number;
   invoice_number: string;
@@ -869,6 +987,35 @@ export const invoiceCommands = {
    */
   update: async (input: UpdateInvoiceInput): Promise<Invoice> => {
     return await invoke<Invoice>('update_invoice', { input });
+  },
+
+  /**
+   * Update invoice items (add/remove products with stock adjustment)
+   */
+  updateItems: async (invoiceId: number, items: CreateInvoiceItemInput[], modifiedBy?: string): Promise<Invoice> => {
+    return await invoke<Invoice>('update_invoice_items', {
+      input: {
+        invoice_id: invoiceId,
+        items,
+        modified_by: modifiedBy ?? null,
+      },
+    });
+  },
+
+  /**
+   * Get deleted invoices from audit trail
+   */
+  getDeletedInvoices: async (): Promise<DeletedInvoice[]> => {
+    return await invoke<DeletedInvoice[]>('get_deleted_invoices');
+  },
+
+  /**
+   * Get modification history for an invoice (or all if no ID)
+   */
+  getModifications: async (invoiceId?: number): Promise<InvoiceModification[]> => {
+    return await invoke<InvoiceModification[]>('get_invoice_modifications', {
+      invoiceId: invoiceId ?? null,
+    });
   },
 };
 
@@ -1402,5 +1549,37 @@ export const settingsCommands = {
    */
   importJson: async (jsonContent: string): Promise<number> => {
     return await invoke<number>('import_settings_json', { jsonContent });
+  },
+
+  /**
+   * Get all entity modifications (audit trail)
+   * @returns List of all modifications across all entity types
+   */
+  getAllModifications: async (): Promise<EntityModification[]> => {
+    return await invoke<EntityModification[]>('get_all_modifications');
+  },
+
+  /**
+   * Restore an entity to its previous state from a modification
+   * @param modificationId - ID of the modification to restore
+   */
+  restoreModification: async (modificationId: number): Promise<void> => {
+    return await invoke<void>('restore_modification', { modificationId });
+  },
+
+  /**
+   * Permanently delete a single modification record (Master Admin only)
+   * @param modificationId - ID of the modification to delete
+   */
+  permanentlyDeleteModification: async (modificationId: number): Promise<void> => {
+    return await invoke<void>('permanently_delete_modification', { modificationId });
+  },
+
+  /**
+   * Clear all modification history (Master Admin only)
+   * @returns Number of records deleted
+   */
+  clearModificationsHistory: async (): Promise<number> => {
+    return await invoke<number>('clear_modifications_history');
   },
 };
