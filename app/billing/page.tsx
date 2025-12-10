@@ -1,12 +1,15 @@
 'use client';
 
-import type { Product } from '@/types';
+import type { Product, Invoice } from '@/types';
 import { useEffect, useState } from 'react';
 import { productCommands, customerCommands, invoiceCommands } from '@/lib/tauri';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { LocationSelector } from '@/components/shared/LocationSelector';
 import { useLocationDefaults } from '@/hooks/useLocationDefaults';
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
+import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
+import { generateInvoicePDF } from '@/lib/pdf-generator';
+import { FileText, Download, Clock, Loader2 } from 'lucide-react';
 
 type CartItem = {
   product_id: number;
@@ -19,7 +22,12 @@ type CartItem = {
 export default function Billing() {
   const queryClient = useQueryClient();
   const [topProducts, setTopProducts] = useState<Product[]>([]);
+  const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
 
   const [customerName, setCustomerName] = useState<string>('');
   const [customerPhone, setCustomerPhone] = useState<string>('');
@@ -55,10 +63,54 @@ export default function Billing() {
   const importQuickAddSettingsModal = () => import('@/components/billing/QuickAddSettingsModal');
   const [QuickAddModal, setQuickAddModal] = useState<any>(null);
 
+  const fetchRecentInvoices = async () => {
+    try {
+      const result = await invoiceCommands.getAll(1, 5); // Fetch last 5
+      setRecentInvoices(result.items);
+    } catch (error) {
+      console.error('Failed to fetch recent invoices:', error);
+    }
+  };
+
+  const handleViewPdf = async (invoice: Invoice) => {
+    try {
+      const fullInvoice = await invoiceCommands.getById(invoice.id);
+
+      let customer = null;
+      if (invoice.customer_id) {
+        try {
+          customer = await customerCommands.getById(invoice.customer_id);
+        } catch (e) {
+          console.error('Failed to fetch customer for PDF:', e);
+          // Fallback
+          customer = { name: invoice.customer_name || 'Customer', phone: invoice.customer_phone } as any;
+        }
+      } else {
+        customer = { name: invoice.customer_name || 'Customer', phone: invoice.customer_phone } as any;
+      }
+
+      const url = generateInvoicePDF(fullInvoice.invoice, fullInvoice.items, customer);
+      setPdfUrl(url);
+      setPdfFileName(`Invoice_${invoice.invoice_number}.pdf`);
+      setShowPdfPreview(true);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF');
+    }
+  };
+
   useEffect(() => {
     // Load the modal component dynamically to avoid circular dependencies if any, or just performance
     importQuickAddSettingsModal().then(mod => setQuickAddModal(() => mod.QuickAddSettingsModal));
+    void fetchRecentInvoices();
   }, []);
+
+  // Fetch categories
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => productCommands.getAllCategories(),
+    staleTime: 60 * 1000,
+  });
 
   const fetchQuickAddProducts = async () => {
     try {
@@ -75,17 +127,27 @@ export default function Billing() {
         }
       }
 
-      if (ids.length > 0) {
-        setQuickAddIds(ids);
-        const products = await productCommands.getByIds(ids);
+      if (selectedCategory) {
+        // If category selected, ignore manual IDs and fetch top selling in that category
+        const products = await productCommands.getTopSelling(20, 1, selectedCategory);
         setTopProducts(products);
-        setTotalProductCount(products.length); // Just display count of Quick Add
-      } else {
-        // Fallback to top 20 sellers
-        const products = await productCommands.getTopSelling(20);
-        setTopProducts(products);
-        setQuickAddIds(products.map(p => p.id));
         setTotalProductCount(products.length);
+        // We clear quickAddIds for UI consistency (or keep them but they aren't used)
+        setQuickAddIds([]);
+      } else {
+        // Default behavior (All)
+        if (ids.length > 0) {
+          setQuickAddIds(ids);
+          const products = await productCommands.getByIds(ids);
+          setTopProducts(products);
+          setTotalProductCount(products.length);
+        } else {
+          // Fallback to top 20 sellers
+          const products = await productCommands.getTopSelling(20);
+          setTopProducts(products);
+          setQuickAddIds(products.map(p => p.id));
+          setTotalProductCount(products.length);
+        }
       }
     } catch (error) {
       console.error("Error fetching quick add products", error);
@@ -131,6 +193,10 @@ export default function Billing() {
 
   useEffect(() => {
     void fetchQuickAddProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]);
+
+  useEffect(() => {
     void fetchDefaultLocation();
   }, []);
 
@@ -334,6 +400,7 @@ export default function Billing() {
       setCustomerPhone('');
       setSelectedCustomerId(null);
       await fetchQuickAddProducts();
+      await fetchRecentInvoices();
     } catch (error) {
       console.error(error);
       alert('Checkout failed: ' + error);
@@ -428,7 +495,7 @@ export default function Billing() {
                 <span className="text-center">Action</span>
               </div>
               <div
-                className={`divide-y divide-slate-200 dark:divide-slate-700/70 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800/70 overflow-hidden ${cart.length > 3 ? 'max-h-60 overflow-y-auto' : ''
+                className={`divide-y divide-slate-200 dark:divide-slate-700/70 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800/70 overflow-hidden ${cart.length > 3 ? 'max-h-48 overflow-y-auto' : ''
                   }`}
               >
                 {cart.map((item) => (
@@ -521,6 +588,44 @@ export default function Billing() {
             Generate Invoice
           </button>
         </div>
+
+        {/* Recent Invoices Section */}
+        <div className="card space-y-4">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-slate-500" />
+            <h2 className="section-title mb-0">Recent Invoices</h2>
+          </div>
+
+          <div className="space-y-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
+            {recentInvoices.length === 0 ? (
+              <div className="text-center py-6 text-sm text-muted-foreground">
+                No invoices yet.
+              </div>
+            ) : (
+              recentInvoices.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <div className="space-y-1">
+                    <div className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+                      {inv.invoice_number}
+                    </div>
+                    <div className="text-xs text-slate-500 flex items-center gap-2">
+                      <span>{new Date(inv.created_at).toLocaleString()}</span>
+                      <span className="text-slate-300">•</span>
+                      <span className="font-medium">₹{inv.total_amount.toFixed(0)}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleViewPdf(inv)}
+                    className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
+                    title="View Invoice PDF"
+                  >
+                    <FileText className="w-5 h-5" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -594,15 +699,31 @@ export default function Billing() {
         ) : (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold">Quick Add</h3>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setShowQuickAddSettings(true)}
-                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
-                  title="Customize Quick Add List"
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold">Quick Add</h3>
+                <select
+                  className="form-select py-1 px-2 text-sm w-40"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
-                </button>
+                  <option value="">All Categories</option>
+                  {categories.map((cat: string) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center space-x-2">
+                {!selectedCategory && (
+                  <button
+                    onClick={() => setShowQuickAddSettings(true)}
+                    className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
+                    title="Customize Quick Add List"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -676,6 +797,12 @@ export default function Billing() {
           </div>
         </div>
       )}
+      <PDFPreviewDialog
+        open={showPdfPreview}
+        onOpenChange={setShowPdfPreview}
+        url={pdfUrl}
+        fileName={pdfFileName}
+      />
     </div>
   );
 }

@@ -22,6 +22,7 @@ import { generateSupplierListPDF } from '@/lib/pdf-generator';
 import { ask } from '@tauri-apps/plugin-dialog';
 
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
+import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 
 type NewSupplierForm = {
   name: string;
@@ -35,9 +36,11 @@ type NewSupplierForm = {
 };
 
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Suppliers() {
   const router = useRouter();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
@@ -183,7 +186,7 @@ export default function Suppliers() {
         return;
       }
 
-      await supplierCommands.delete(id);
+      await supplierCommands.delete(id, user?.username);
       await invalidateSuppliers();
     } catch (error) {
       console.error('Error deleting supplier:', error);
@@ -412,6 +415,7 @@ export default function Suppliers() {
               <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
                 <TableRow>
                   <TableHead className="w-[50px] text-center font-bold text-black">S.No</TableHead>
+                  <TableHead className="w-[60px] text-center font-bold text-black">Photo</TableHead>
                   <TableHead className="text-center font-bold text-black">Name</TableHead>
                   <TableHead className="text-center font-bold text-black">Contact Info</TableHead>
                   <TableHead className="text-center font-bold text-black">Email</TableHead>
@@ -429,6 +433,17 @@ export default function Suppliers() {
                   >
                     <TableCell className="text-center font-medium text-slate-500">
                       {displayed.indexOf(supplier) + 1}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <EntityThumbnail
+                          entityId={supplier.id}
+                          entityType="supplier"
+                          imagePath={supplier.image_path}
+                          size="sm"
+                          className="w-8 h-8 rounded-full border border-slate-200"
+                        />
+                      </div>
                     </TableCell>
                     <TableCell className="font-semibold text-center">{supplier.name}</TableCell>
                     <TableCell className="text-center">{supplier.contact_info}</TableCell>

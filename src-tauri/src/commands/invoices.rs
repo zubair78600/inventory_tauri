@@ -548,8 +548,8 @@ pub fn update_invoice(input: UpdateInvoiceInput, db: State<Database>) -> Result<
 
 /// Delete an invoice and restore inventory
 #[tauri::command]
-pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
-    log::info!("delete_invoice called with id: {}", id);
+pub fn delete_invoice(id: i32, deleted_by: Option<String>, db: State<Database>) -> Result<(), String> {
+    log::info!("delete_invoice called with id: {}, deleted_by: {:?}", id, deleted_by);
 
     let mut conn = db.get_conn()?;
 
@@ -587,32 +587,46 @@ pub fn delete_invoice(id: i32, db: State<Database>) -> Result<(), String> {
 
     let tx = conn.transaction().map_err(|e| format!("Failed to start transaction: {}", e))?;
 
-    // 1. Get invoice items to identify what products need restocking
-    let items: Vec<(i32, i32)> = {
-        let mut stmt = tx.prepare("SELECT product_id, quantity FROM invoice_items WHERE invoice_id = ?")
-            .map_err(|e| e.to_string())?;
-        
-        let rows = stmt.query_map([id], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })
-        .map_err(|e| e.to_string())?;
+    // 1. Get invoice items (full details for archive + restocking)
+    let items_details: Vec<InvoiceItemWithProduct> = {
+        let mut stmt = tx.prepare(
+            "SELECT ii.id, ii.invoice_id, ii.product_id, p.name, p.sku, ii.quantity, ii.unit_price
+             FROM invoice_items ii
+             JOIN products p ON ii.product_id = p.id
+             WHERE ii.invoice_id = ?1"
+        ).map_err(|e| e.to_string())?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?
+        let rows = stmt.query_map([id], |row| {
+             Ok(InvoiceItemWithProduct {
+                id: row.get(0)?,
+                invoice_id: row.get(1)?,
+                product_id: row.get(2)?,
+                product_name: row.get(3)?,
+                product_sku: row.get(4)?,
+                quantity: row.get(5)?,
+                unit_price: row.get(6)?,
+            })
+        }).map_err(|e| e.to_string())?;
+        
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
     };
 
     // 2. Save to deleted_items (Audit Trail)
-    let invoice_json = serde_json::to_string(&invoice).map_err(|e| format!("Failed to serialize invoice: {}", e))?;
-    let now = Utc::now().to_rfc3339();
-    tx.execute(
-        "INSERT INTO deleted_items (entity_type, entity_id, entity_data, deleted_at) VALUES (?1, ?2, ?3, ?4)",
-        ("invoice", id, &invoice_json, &now),
-    )
-    .map_err(|e| format!("Failed to save to trash: {}", e))?;
+    let items_json = serde_json::to_string(&items_details)
+        .map_err(|e| format!("Failed to serialize invoice items: {}", e))?;
+
+    crate::db::archive::archive_entity(
+        &tx,
+        "invoice",
+        id,
+        &invoice,
+        Some(items_json),
+        deleted_by,
+    )?;
 
     // 3. Restore stock for each item using FIFO reversal
-    for (product_id, quantity) in items {
-        inventory_service::restore_stock_from_invoice(&tx, product_id, quantity, id)?;
+    for item in &items_details {
+        inventory_service::restore_stock_from_invoice(&tx, item.product_id, item.quantity, id)?;
     }
 
     // 4. Delete invoice items

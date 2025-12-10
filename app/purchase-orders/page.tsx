@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -28,6 +29,7 @@ type NewPurchaseOrderForm = {
   }>;
   order_date: string;
   notes: string;
+  paid_amount: string;
 };
 
 export default function PurchaseOrders() {
@@ -49,6 +51,7 @@ export default function PurchaseOrders() {
     items: [{ product_id: null, quantity: 0, unit_cost: 0 }],
     order_date: new Date().toISOString().split('T')[0],
     notes: '',
+    paid_amount: '',
   });
 
   useEffect(() => {
@@ -119,6 +122,7 @@ export default function PurchaseOrders() {
         })),
         order_date: newPO.order_date || undefined,
         notes: newPO.notes || undefined,
+        initial_payment: parseFloat(newPO.paid_amount) || 0,
       });
 
       setShowAddForm(false);
@@ -127,6 +131,7 @@ export default function PurchaseOrders() {
         items: [{ product_id: null, quantity: 0, unit_cost: 0 }],
         order_date: new Date().toISOString().split('T')[0],
         notes: '',
+        paid_amount: '',
       });
       void fetchData();
       alert('Purchase Order created successfully!');
@@ -250,10 +255,9 @@ export default function PurchaseOrders() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="form-label">Supplier *</label>
-                  <select
+                  <Select
                     value={newPO.supplier_id || ''}
                     onChange={(e) => setNewPO({ ...newPO, supplier_id: parseInt(e.target.value) || null })}
-                    className="w-full px-3 py-2 border rounded-md"
                     required
                   >
                     <option value="">Select Supplier</option>
@@ -262,7 +266,7 @@ export default function PurchaseOrders() {
                         {supplier.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="form-label">Order Date</label>
@@ -286,12 +290,12 @@ export default function PurchaseOrders() {
                 <div className="space-y-2">
                   {newPO.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                      <div className="col-span-5">
+                      <div className="col-span-6">
                         <label className="form-label text-xs">Product</label>
-                        <select
+                        <Select
                           value={item.product_id || ''}
                           onChange={(e) => updateItem(index, 'product_id', parseInt(e.target.value) || null)}
-                          className="w-full px-3 py-2 border rounded-md text-sm"
+                          className="text-sm"
                           required
                         >
                           <option value="">Select Product</option>
@@ -300,7 +304,7 @@ export default function PurchaseOrders() {
                               {product.name} ({product.sku})
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </div>
                       <div className="col-span-2">
                         <label className="form-label text-xs">Quantity</label>
@@ -313,7 +317,7 @@ export default function PurchaseOrders() {
                           className="text-sm"
                         />
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-2">
                         <label className="form-label text-xs">Unit Cost (₹)</label>
                         <Input
                           type="number"
@@ -357,6 +361,19 @@ export default function PurchaseOrders() {
                   value={newPO.notes}
                   onChange={(e) => setNewPO({ ...newPO, notes: e.target.value })}
                   placeholder="Optional notes..."
+                />
+              </div>
+
+              {/* Amount Paid */}
+              <div>
+                <label className="form-label">Amount Paid (Initial)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newPO.paid_amount}
+                  onChange={(e) => setNewPO({ ...newPO, paid_amount: e.target.value })}
+                  placeholder="Enter amount paid now (optional)"
                 />
               </div>
             </div>

@@ -10,6 +10,7 @@ pub struct DeletedItemDisplay {
     pub entity_id: i32,
     pub entity_name: String,
     pub deleted_at: String,
+    pub deleted_by: Option<String>,
     pub can_restore: bool,
     pub restore_notes: Option<String>,
 }
@@ -22,7 +23,7 @@ pub fn get_deleted_items(db: State<Database>) -> Result<Vec<DeletedItemDisplay>,
     let conn = db.get_conn()?;
 
     let mut stmt = conn
-        .prepare("SELECT id, entity_type, entity_id, entity_data, deleted_at FROM deleted_items ORDER BY deleted_at DESC")
+        .prepare("SELECT id, entity_type, entity_id, entity_data, deleted_at, deleted_by FROM deleted_items ORDER BY deleted_at DESC")
         .map_err(|e| e.to_string())?;
 
     let items_iter = stmt
@@ -33,13 +34,14 @@ pub fn get_deleted_items(db: State<Database>) -> Result<Vec<DeletedItemDisplay>,
                 row.get::<_, i32>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
             ))
         })
         .map_err(|e| e.to_string())?;
 
     let mut items = Vec::new();
     for item in items_iter {
-        let (id, entity_type, entity_id, entity_data, deleted_at) = item.map_err(|e| e.to_string())?;
+        let (id, entity_type, entity_id, entity_data, deleted_at, deleted_by) = item.map_err(|e| e.to_string())?;
 
         // Extract name from entity_data JSON
         let entity_name = match entity_type.as_str() {
@@ -63,6 +65,12 @@ pub fn get_deleted_items(db: State<Database>) -> Result<Vec<DeletedItemDisplay>,
                     .map(|i| i.invoice_number)
                     .unwrap_or_else(|_| format!("Invoice #{}", entity_id))
             },
+            "supplier_payment" => {
+                 format!("Payment #{}", entity_id)
+            },
+            "user" => {
+                 format!("User #{}", entity_id)
+            },
             _ => format!("Unknown #{}", entity_id),
         };
 
@@ -72,6 +80,7 @@ pub fn get_deleted_items(db: State<Database>) -> Result<Vec<DeletedItemDisplay>,
             entity_id,
             entity_name,
             deleted_at,
+            deleted_by,
             can_restore: true,
             restore_notes: None,
         });

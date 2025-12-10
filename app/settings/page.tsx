@@ -388,7 +388,7 @@ export default function SettingsPage() {
       if (!confirmed) return;
 
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('delete_user', { id });
+      await invoke('delete_user', { id, deletedBy: user?.username ?? null });
       void fetchUsers();
     } catch (err) {
       console.error('Error deleting user:', err);

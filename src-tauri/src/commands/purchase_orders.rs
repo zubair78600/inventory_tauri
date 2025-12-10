@@ -177,6 +177,34 @@ fn create_purchase_order_internal(
         )?;
     }
 
+    // Handle initial payment if provided
+    if let Some(payment_amount) = input.initial_payment {
+        if payment_amount > 0.0 {
+            // Ensure po_id column exists
+            let _ = conn.execute(
+                "ALTER TABLE supplier_payments ADD COLUMN po_id INTEGER REFERENCES purchase_orders(id)",
+                [],
+            );
+
+            conn.execute(
+                "INSERT INTO supplier_payments
+                    (supplier_id, po_id, product_id, amount, payment_method, note, paid_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    input.supplier_id,
+                    po_id,
+                    Option::<i32>::None, // No specific product, applies to entire PO
+                    payment_amount,
+                    "Initial Payment",
+                    "Paid upon PO creation",
+                    order_date,
+                    now,
+                ],
+            )
+            .map_err(|e| format!("Failed to create initial payment: {}", e))?;
+        }
+    }
+
     // Retrieve and return the created PO
     let po = conn
         .query_row(
@@ -407,6 +435,9 @@ pub fn get_purchase_order_by_id(
         )
         .map_err(|e| format!("Failed to prepare items statement: {}", e))?;
 
+    let po_number_clone = po.po_number.clone();
+    let po_number_clone_payments = po.po_number.clone();
+
     let items = stmt
         .query_map(params![po_id], |row| {
             Ok(PurchaseOrderItemWithProduct {
@@ -422,6 +453,7 @@ pub fn get_purchase_order_by_id(
                 quantity_sold: None,
                 sold_revenue: None,
                 created_at: row.get(8)?,
+                po_number: Some(po_number_clone.clone()),
             })
         })
         .map_err(|e| format!("Failed to query items: {}", e))?
@@ -449,6 +481,8 @@ pub fn get_purchase_order_by_id(
                 note: row.get(5)?,
                 paid_at: row.get(6)?,
                 created_at: row.get(7)?,
+                po_id: Some(po_id),
+                po_number: Some(po_number_clone_payments.clone()),
             })
         })
         .map_err(|e| format!("Failed to query payments: {}", e))?
@@ -542,7 +576,7 @@ pub fn add_payment_to_purchase_order(
     paid_at: Option<String>,
     db: State<Database>,
 ) -> Result<i32, String> {
-    let conn = db.get_conn()?;
+    let mut conn = db.get_conn()?;
 
     if amount <= 0.0 {
         return Err("Payment amount must be greater than 0".to_string());
@@ -566,7 +600,8 @@ pub fn add_payment_to_purchase_order(
         )
         .unwrap_or(0.0);
 
-    if total_paid + amount > total_amount {
+    // Allow small float tolerance
+    if total_paid + amount > total_amount + 0.01 {
         return Err(format!(
             "Payment amount exceeds remaining balance. Total: ₹{:.2}, Paid: ₹{:.2}, Remaining: ₹{:.2}",
             total_amount,
@@ -579,24 +614,74 @@ pub fn add_payment_to_purchase_order(
     let payment_date = paid_at.unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
 
     // Add po_id column to supplier_payments if it doesn't exist
-    // This is a migration step - will fail silently if column exists
     let _ = conn.execute(
         "ALTER TABLE supplier_payments ADD COLUMN po_id INTEGER REFERENCES purchase_orders(id)",
         [],
     );
 
-    // Create payment record
-    conn.execute(
-        "INSERT INTO supplier_payments
-         (supplier_id, po_id, amount, payment_method, note, paid_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
-        params![supplier_id, po_id, amount, payment_method, note, payment_date, now],
-    )
-    .map_err(|e| format!("Failed to create payment: {}", e))?;
+    // Fetch PO items to split payment proportionally
+    let items: Vec<(i32, f64)> = {
+        let mut stmt = conn.prepare("SELECT product_id, total_cost FROM purchase_order_items WHERE po_id = ?")
+            .map_err(|e| format!("Failed to prepare items query: {}", e))?;
+        
+        let rows = stmt.query_map([po_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| format!("Failed to query items: {}", e))?;
 
-    let payment_id = conn.last_insert_rowid() as i32;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to collect items: {}", e))?
+    };
 
-    Ok(payment_id)
+    let tx = conn.transaction().map_err(|e| format!("Failed to begin transaction: {}", e))?;
+
+    let mut remaining_payment = amount;
+    let mut last_id = 0;
+    
+    // If no items (shouldn't happen for valid PO), assign to NULL product
+    if items.is_empty() {
+        tx.execute(
+            "INSERT INTO supplier_payments
+             (supplier_id, po_id, product_id, amount, payment_method, note, paid_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            params![supplier_id, po_id, Option::<i32>::None, amount, payment_method, note, payment_date, now],
+        ).map_err(|e| format!("Failed to create payment: {}", e))?;
+        last_id = tx.last_insert_rowid() as i32;
+    } else {
+        // Distribute payment
+        for (i, (product_id, item_cost)) in items.iter().enumerate() {
+            let is_last = i == items.len() - 1;
+            
+            let share = if is_last {
+                remaining_payment
+            } else {
+                if total_amount > 0.0 {
+                    let calc = (item_cost / total_amount) * amount;
+                    // Round to 2 decimals to avoid weird splits, but ensure total matches
+                    (calc * 100.0).round() / 100.0
+                } else {
+                    0.0
+                }
+            };
+            
+            // Safety check for last item to absorb rounding errors negatively if needed, usually positive
+            // Just use remaining_payment for last item.
+            
+            remaining_payment -= share;
+
+            if share > 0.0 {
+                tx.execute(
+                    "INSERT INTO supplier_payments
+                     (supplier_id, po_id, product_id, amount, payment_method, note, paid_at, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    params![supplier_id, po_id, product_id, share, payment_method, note, payment_date, now],
+                ).map_err(|e| format!("Failed to create payment share: {}", e))?;
+                last_id = tx.last_insert_rowid() as i32;
+            }
+        }
+    }
+
+    tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
+
+    Ok(last_id)
 }
 
 // =============================================
@@ -624,9 +709,10 @@ pub fn get_product_purchase_history(
 
     // 2. Get Purchase Order Items (Batches)
     let mut po_items_stmt = conn.prepare(
-        "SELECT poi.id, poi.po_id, poi.quantity, poi.unit_cost, poi.total_cost, poi.created_at, p.name, p.sku, p.selling_price
+        "SELECT poi.id, poi.po_id, poi.quantity, poi.unit_cost, poi.total_cost, poi.created_at, p.name, p.sku, p.selling_price, po.po_number
          FROM purchase_order_items poi
          JOIN products p ON poi.product_id = p.id
+         LEFT JOIN purchase_orders po ON poi.po_id = po.id
          WHERE poi.product_id = ?
          ORDER BY poi.created_at ASC"
     ).map_err(|e| format!("Failed to prepare PO items stmt: {}", e))?;
@@ -645,6 +731,7 @@ pub fn get_product_purchase_history(
             quantity_sold: Some(0), // Will calculate
             sold_revenue: Some(0.0), // Will calculate
             created_at: row.get(5)?,
+            po_number: row.get(9)?,
         })
     }).map_err(|e| format!("Failed to query PO items: {}", e))?
     .collect::<Result<Vec<_>, _>>()
@@ -740,6 +827,7 @@ pub fn get_product_purchase_history(
                     quantity_sold: Some(0),
                     sold_revenue: Some(0.0),
                     created_at: date,
+                    po_number: None,
                 },
                 is_initial: true,
                 remaining_qty: qty,

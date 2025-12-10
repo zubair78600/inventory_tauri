@@ -24,6 +24,7 @@ import { customerCommands, analyticsCommands } from '@/lib/tauri';
 import { generateCustomerListPDF } from '@/lib/pdf-generator';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
+import { useAuth } from '@/contexts/AuthContext';
 
 type NewCustomerFormState = {
   name: string;
@@ -38,6 +39,7 @@ type NewCustomerFormState = {
 
 export default function Customers() {
   const router = useRouter();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
@@ -190,7 +192,7 @@ export default function Customers() {
         return;
       }
 
-      await customerCommands.delete(id);
+      await customerCommands.delete(id, user?.username);
       await invalidateCustomers();
       setSelectedReport(null);
     } catch (error) {

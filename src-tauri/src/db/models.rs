@@ -16,6 +16,7 @@ pub struct Product {
     pub created_at: String,
     pub updated_at: String,
     pub image_path: Option<String>,
+    pub category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_sold: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -110,6 +111,8 @@ pub struct SupplierPayment {
     pub id: i32,
     pub supplier_id: i32,
     pub product_id: Option<i32>,
+    pub po_id: Option<i32>,
+    pub po_number: Option<String>,
     pub amount: f64,
     pub payment_method: Option<String>,
     pub note: Option<String>,
@@ -196,6 +199,7 @@ pub struct PurchaseOrderItem {
 pub struct PurchaseOrderItemWithProduct {
     pub id: i32,
     pub po_id: Option<i32>,
+    pub po_number: Option<String>,
     pub product_id: i32,
     pub product_name: String,
     pub sku: String,
@@ -216,6 +220,7 @@ pub struct CreatePurchaseOrderInput {
     pub order_date: Option<String>,
     pub expected_delivery_date: Option<String>,
     pub notes: Option<String>,
+    pub initial_payment: Option<f64>,
 }
 
 /// Input model for purchase order items
