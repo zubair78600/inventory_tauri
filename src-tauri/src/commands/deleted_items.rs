@@ -9,6 +9,7 @@ pub struct DeletedItemDisplay {
     pub entity_type: String,
     pub entity_id: i32,
     pub entity_name: String,
+    pub entity_data: String, // Added field for detailed view
     pub deleted_at: String,
     pub deleted_by: Option<String>,
     pub can_restore: bool,
@@ -32,7 +33,7 @@ pub fn get_deleted_items(db: State<Database>) -> Result<Vec<DeletedItemDisplay>,
                 row.get::<_, i32>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, i32>(2)?,
-                row.get::<_, String>(3)?,
+                row.get::<_, String>(3)?, // entity_data
                 row.get::<_, String>(4)?,
                 row.get::<_, Option<String>>(5)?,
             ))
@@ -66,23 +67,28 @@ pub fn get_deleted_items(db: State<Database>) -> Result<Vec<DeletedItemDisplay>,
                     .unwrap_or_else(|_| format!("Invoice #{}", entity_id))
             },
             "supplier_payment" => {
+                // Parse rudimentary JSON or just use ID
                  format!("Payment #{}", entity_id)
             },
             "user" => {
                  format!("User #{}", entity_id)
             },
-            _ => format!("Unknown #{}", entity_id),
+            _ => format!("{} #{}", entity_type, entity_id),
         };
+
+        let can_restore = true; // Simplified for now, or check dependencies logic if needed
+        let restore_notes = None;
 
         items.push(DeletedItemDisplay {
             id,
             entity_type,
             entity_id,
             entity_name,
+            entity_data, // Pass the raw JSON string
             deleted_at,
             deleted_by,
-            can_restore: true,
-            restore_notes: None,
+            can_restore,
+            restore_notes,
         });
     }
 

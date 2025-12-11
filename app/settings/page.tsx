@@ -12,7 +12,9 @@ type DeletedItem = {
   entity_type: string;
   entity_id: number;
   entity_name: string;
+  entity_data: string;
   deleted_at: string;
+  deleted_by: string | null;
   can_restore: boolean;
   restore_notes: string | null;
 };
@@ -38,6 +40,7 @@ const PERMISSIONS = [
 
 import { ModeToggle } from '@/components/shared/ModeToggle';
 import { useAuth } from '@/contexts/AuthContext';
+import { PasswordPromptModal } from '@/components/shared/PasswordPromptModal';
 import {
   checkBiometricCapability,
   enrollBiometric,
@@ -46,18 +49,59 @@ import {
   getBiometricTypeName,
   getBiometricErrorMessage,
   type BiometricCapability,
+  hasLocalBiometricEnrollment,
+  authenticateWithBiometric,
 } from '@/lib/biometric';
-import { Fingerprint, AlertTriangle } from 'lucide-react';
+import { Fingerprint, AlertTriangle, Lock } from 'lucide-react';
 import { LocationSelector } from '@/components/shared/LocationSelector';
 import type { LocationValue } from '@/types/location';
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'invoice' | 'api' | 'users' | 'security' | 'themes'>('deleted-data');
+
+  // Security State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkSecurity = async () => {
+      if (!user?.username) return;
+
+      // check if user has enrolled in biometrics on this device
+      const hasBiometric = hasLocalBiometricEnrollment(user.username);
+
+      if (hasBiometric) {
+        try {
+          // Attempt biometric auth immediately
+          const result = await authenticateWithBiometric(user.username);
+          if (result) {
+            setIsAuthenticated(true);
+            setIsCheckingAuth(false);
+            return;
+          }
+        } catch (error) {
+          console.error("Biometric auth failed:", error);
+          // Fall through to password prompt
+          setAuthError(getBiometricErrorMessage(error));
+        }
+      }
+
+      // If no biometric or failed, show password prompt
+      setIsCheckingAuth(false);
+      setShowPasswordPrompt(true);
+    };
+
+    checkSecurity();
+  }, [user?.username]);
+
   const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
   const [modifications, setModifications] = useState<EntityModification[]>([]);
   const [dataSubTab, setDataSubTab] = useState<'deleted' | 'modified'>('deleted');
   const [expandedMods, setExpandedMods] = useState<Set<number>>(new Set());
+  const [expandedDeleted, setExpandedDeleted] = useState<Set<number>>(new Set());
 
   // Master Admin check - only username 'admin' (case-insensitive) has permanent delete access
   const MASTER_ADMIN_USERNAME = 'admin';
@@ -74,6 +118,57 @@ export default function SettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // ... (existing state refs)
+
+  if (isCheckingAuth) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
+          <p className="text-sm text-slate-500">Verifying security...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+        <div className="max-w-md w-full text-center space-y-4">
+          {/* The modal handles the UI, but we need a fallback background if modal is closed? 
+                 Actually PasswordPromptModal is a modal. We should render it and maybe a 'Access Denied' background 
+                 if they cancel it. */}
+
+          {!showPasswordPrompt && (
+            <div className="flex flex-col items-center gap-4 p-8 bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
+              <Lock className="h-12 w-12 text-slate-300" />
+              <h2 className="text-xl font-semibold">Settings Locked</h2>
+              <p className="text-slate-500">Authentication is required to access settings.</p>
+              <button
+                onClick={() => setShowPasswordPrompt(true)}
+                className="px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 transition-colors"
+              >
+                Authenticate
+              </button>
+              {authError && <p className="text-xs text-red-500">{authError}</p>}
+            </div>
+          )}
+
+          <PasswordPromptModal
+            open={showPasswordPrompt}
+            onOpenChange={(open) => {
+              setShowPasswordPrompt(open);
+              // If they close it without success, they stay locked out
+            }}
+            onSuccess={() => setIsAuthenticated(true)}
+            title="Settings Access"
+            description={authError ? `${authError} Please enter your password.` : "For security, please enter your password to access settings."}
+          />
+        </div>
+      </div>
+    );
+  }
 
   // Google API Settings
   const [googleApiKey, setGoogleApiKey] = useState('');
@@ -366,6 +461,18 @@ export default function SettingsPage() {
         next.delete(modId);
       } else {
         next.add(modId);
+      }
+      return next;
+    });
+  };
+
+  const toggleDeletedExpanded = (id: number) => {
+    setExpandedDeleted(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
       }
       return next;
     });
@@ -694,7 +801,7 @@ export default function SettingsPage() {
               )}
               {dataSubTab === 'modified' && modifications.length > 0 && isMasterAdmin && (
                 <button
-                  onClick={() => void handleClearModificationsHistory()}
+                  onClick={handleClearModificationsHistory}
                   className="btn btn-logout"
                 >
                   <Trash2 size={16} className="mr-2" />
@@ -749,7 +856,7 @@ export default function SettingsPage() {
               <Loader2 className="animate-spin text-primary" size={32} />
             </div>
           ) : dataSubTab === 'deleted' ? (
-            /* Deleted Items Tab */
+            /* Deleted Items List (Accordion Style) */
             deletedItems.length === 0 ? (
               <div className="card text-center py-12">
                 <Trash2 className="mx-auto text-slate-300 dark:text-slate-600" size={48} />
@@ -761,66 +868,88 @@ export default function SettingsPage() {
                 </p>
               </div>
             ) : (
-              <div className="card overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Type
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Name
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Deleted At
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-700">
-                      {deletedItems.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getEntityTypeColor(item.entity_type)}`}>
-                              {item.entity_type}
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+                {deletedItems.map((item) => {
+                  const isExpanded = expandedDeleted.has(item.id);
+                  let parsedData: Record<string, unknown> = {};
+                  try {
+                    parsedData = JSON.parse(item.entity_data);
+                  } catch (e) {
+                    parsedData = { error: 'Failed to parse data', raw: item.entity_data };
+                  }
+
+                  return (
+                    <div key={item.id} className="card p-0 overflow-hidden">
+                      {/* Header Row */}
+                      <div
+                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                        onClick={() => toggleDeletedExpanded(item.id)}
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getEntityTypeColor(item.entity_type)}`}>
+                            {item.entity_type}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-900 dark:text-slate-100">
+                              {item.entity_name}
                             </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900 dark:text-slate-100">
-                            {item.entity_name}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
+                            <span className="text-xs text-slate-500">
+                              Deleted by: <span className="font-medium text-slate-700 dark:text-slate-300">{item.deleted_by || 'Unknown'}</span>
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-sm text-slate-500">
                             {formatDate(item.deleted_at)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <div className="flex justify-end gap-2">
+                          </span>
+                          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </div>
+                      </div>
+
+                      {/* Expanded Details */}
+                      {isExpanded && (
+                        <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                            {Object.entries(parsedData).map(([key, value]) => {
+                              if (typeof value === 'object' && value !== null) return null; // Skip nested objects for simplicity or handle recursively
+                              return (
+                                <div key={key} className="flex flex-col">
+                                  <span className="text-xs font-medium text-slate-500 uppercase truncate" title={key}>
+                                    {key.replace(/_/g, ' ')}
+                                  </span>
+                                  <span className="text-slate-900 dark:text-slate-100 truncate" title={String(value)}>
+                                    {value !== null && value !== undefined ? String(value) : '-'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); void handleRestore(item); }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+                              disabled={!item.can_restore}
+                              title={item.restore_notes || 'Restore this item'}
+                            >
+                              <RefreshCw size={14} />
+                              Restore
+                            </button>
+                            {isMasterAdmin && (
                               <button
-                                onClick={() => void handleRestore(item)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
-                                disabled={!item.can_restore}
-                                title={item.restore_notes || 'Restore this item'}
+                                onClick={(e) => { e.stopPropagation(); void handlePermanentDelete(item); }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                                title="Permanently Delete"
                               >
-                                <RefreshCw size={14} />
-                                Restore
+                                <Trash2 size={14} />
                               </button>
-                              {isMasterAdmin && (
-                                <button
-                                  onClick={() => void handlePermanentDelete(item)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                                  title="Permanently Delete"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )
           ) : (
@@ -836,7 +965,7 @@ export default function SettingsPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
                 {modifications.map((mod) => {
                   const isExpanded = expandedMods.has(mod.id);
                   const changes: Array<{ field: string; old: unknown; new: unknown }> = mod.field_changes
@@ -854,12 +983,14 @@ export default function SettingsPage() {
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getEntityTypeColor(mod.entity_type)}`}>
                             {mod.entity_type}
                           </span>
-                          <span className="font-medium text-slate-900 dark:text-slate-100">
-                            {mod.entity_name || `#${mod.entity_id}`}
-                          </span>
-                          <span className="text-sm text-slate-500">
-                            {changes.length} field{changes.length !== 1 ? 's' : ''} changed
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-900 dark:text-slate-100">
+                              {mod.entity_name || `#${mod.entity_id}`}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              Modified by: <span className="font-medium text-slate-700 dark:text-slate-300">{mod.modified_by || 'Unknown'}</span> · {changes.length} field{changes.length !== 1 ? 's' : ''} changed
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="text-sm text-slate-500">
@@ -892,7 +1023,7 @@ export default function SettingsPage() {
                           </div>
                           <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
                             <button
-                              onClick={() => void handleRestoreModification(mod)}
+                              onClick={(e) => { e.stopPropagation(); void handleRestoreModification(mod); }}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-md transition-colors"
                             >
                               <RotateCcw size={14} />
@@ -900,9 +1031,9 @@ export default function SettingsPage() {
                             </button>
                             {isMasterAdmin && (
                               <button
-                                onClick={() => void handlePermanentDeleteModification(mod)}
+                                onClick={(e) => { e.stopPropagation(); void handlePermanentDeleteModification(mod); }}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                                title="Permanently delete this record"
+                                title="Permanently Delete"
                               >
                                 <Trash2 size={14} />
                               </button>

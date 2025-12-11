@@ -40,6 +40,7 @@ function InventoryDetailsContent() {
     const [showPdfPreview, setShowPdfPreview] = useState(false);
     const [pdfFileName, setPdfFileName] = useState('');
     const [showImagePreview, setShowImagePreview] = useState(false);
+    const [supplierName, setSupplierName] = useState<string | null>(null);
 
     useEffect(() => {
         if (!id) return;
@@ -61,6 +62,18 @@ function InventoryDetailsContent() {
             setSalesSummary(salesData);
             setPurchaseHistory(purchasesData);
             setPurchaseSummary(purchaseSummaryData);
+
+            // Fetch supplier name if exists
+            if (productData.supplier_id) {
+                try {
+                    const supplier = await supplierCommands.getById(productData.supplier_id);
+                    setSupplierName(supplier.name);
+                } catch (err) {
+                    console.error('Failed to load supplier', err);
+                }
+            } else {
+                setSupplierName(null);
+            }
 
             // Fetch payments and summary globally (all suppliers)
             try {
@@ -209,7 +222,7 @@ function InventoryDetailsContent() {
                             </div>
                             {product.supplier_id && (
                                 <div className="flex items-center gap-1 cursor-pointer hover:text-sky-600" onClick={() => router.push(`/suppliers/details?id=${product.supplier_id}`)}>
-                                    <Package className="w-4 h-4" /> Supplier #{product.supplier_id}
+                                    <Package className="w-4 h-4" /> {supplierName || `Supplier #${product.supplier_id}`}
                                 </div>
                             )}
                         </div>
@@ -279,10 +292,12 @@ function InventoryDetailsContent() {
 
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center rounded-xl">
                     <div className="text-sm text-slate-500 font-medium">Total Amount Sold</div>
-                    <div className="text-2xl font-bold text-sky-600 mt-1">
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
                         ₹{(salesSummary?.total_amount ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">Revenue from this product</div>
+                    <div className="text-xs font-medium text-emerald-600 mt-1">
+                        ACT. PROFIT - ₹{purchaseHistory.reduce((sum, item) => sum + ((item.sold_revenue || 0) - ((item.quantity_sold || 0) * item.unit_cost)), 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
                 </Card>
             </div>
 

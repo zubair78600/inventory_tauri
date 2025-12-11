@@ -277,7 +277,7 @@ export default function Sales() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.2fr,1fr] h-full overflow-hidden">
+      <div className="grid gap-4 lg:grid-cols-[1fr,1.4fr] h-full overflow-hidden">
         <Card className="p-0 overflow-hidden flex flex-col h-full relative">
           <CardHeader className="pb-2">
             <CardTitle>Sales History</CardTitle>
@@ -406,45 +406,41 @@ export default function Sales() {
             {selected ? (
               <div className="origin-top transform scale-[0.65] w-full max-w-[210mm] bg-white shadow-lg mx-auto mt-2 p-6 text-slate-900">
                 {/* Document Header: Company Info & Title */}
-                <div className={`flex flex-col border-b border-slate-300 pb-4 mb-4 ${companySettings.headerAlign === 'center' ? 'items-center text-center' :
+                <div className={`flex flex-col border-b border-slate-300 pb-4 mb-4 relative min-h-[120px] ${companySettings.headerAlign === 'center' ? 'items-center text-center' :
                   companySettings.headerAlign === 'right' ? 'items-end text-right' : 'items-start text-left'
                   }`}>
-                  <div className="w-full space-y-1">
-                    {/* Dynamic Logo if available, else Name */}
+
+                  {/* INVOICE Title - Absolute positioned to top-right to avoid cramping, or flexed */}
+                  <div className="absolute top-0 right-0">
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-widest uppercase">
+                      INVOICE
+                    </h2>
+                  </div>
+
+                  <div className="w-full space-y-2 mt-2 max-w-[70%]">
+                    {/* Dynamic Logo if available */}
                     {companySettings.logoUrl && (
-                      <div className={`mb-4 h-16 relative ${companySettings.headerAlign === 'center' ? 'mx-auto' :
+                      <div className={`mb-3 h-16 relative ${companySettings.headerAlign === 'center' ? 'mx-auto' :
                         companySettings.headerAlign === 'right' ? 'ml-auto' : 'mr-auto'
                         }`}>
                         <img src={companySettings.logoUrl} alt="Logo" className="h-full object-contain" />
                       </div>
                     )}
 
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                      {companySettings.name}
-                    </h1>
-                    <div className="text-sm text-slate-600 space-y-0.5">
-                      <p>{companySettings.address}</p>
-                      <p>Phone: {companySettings.phone}</p>
-                      <p>Email: {companySettings.email}</p>
+                    <div>
+                      <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-tight">
+                        {companySettings.name}
+                      </h1>
+                      <div className="text-xs text-slate-600 space-y-1 mt-1 leading-relaxed">
+                        <p className="whitespace-pre-line">{companySettings.address}</p>
+                        {companySettings.phone && <p>Phone: {companySettings.phone}</p>}
+                        {companySettings.email && <p>Email: {companySettings.email}</p>}
+                      </div>
                     </div>
                   </div>
-                  {/* Invoice Title - Keeping it standard top-right or below? 
-                        PDF puts it at strict coordinates. HTML standard flow usually puts it separate. 
-                        Let's keep the existing absolute-ish layout or flex? 
-                        The previous code had it in a flex 'justify-between'. 
-                        If we want to strictly follow `header_align` for Company, we might need to separate the "INVOICE" title 
-                        or let it float. Let's keep "INVOICE" title separate to ensure it's always visible 
-                        but maybe visually distinct. 
-                        Actually the user wants "same format". 
-                        The PDF generator puts "INVOICE" at right. Company info at `header_align`.
-                    */}
                 </div>
 
-                <div className="flex justify-end mb-2">
-                  <h2 className="text-2xl font-bold text-slate-900 tracking-widest uppercase">
-                    INVOICE
-                  </h2>
-                </div>
+                {/* Removed separate INVOICE title div since it's now absolute positioned above */}
 
                 {/* Bill To & Invoice Meta */}
                 <div className="flex justify-between items-start mb-6">
