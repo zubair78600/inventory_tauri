@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { useAuth } from '@/contexts/AuthContext';
 import {
     supplierCommands,
     type SupplierPayment,
@@ -25,6 +26,7 @@ export function SupplierProductInlineDetails({
     supplierId,
     onPaymentUpdate
 }: SupplierProductInlineDetailsProps) {
+    const { user } = useAuth();
     const [payments, setPayments] = useState<SupplierPayment[]>([]);
     const [purchaseHistory, setPurchaseHistory] = useState<PurchaseOrderItemWithProduct[]>([]);
     const [summary, setSummary] = useState<SupplierPaymentSummary | null>(null);
@@ -98,7 +100,7 @@ export function SupplierProductInlineDetails({
 
         if (confirm) {
             try {
-                await supplierCommands.deletePayment(id);
+                await supplierCommands.deletePayment(id, user?.username);
                 await loadData();
                 if (onPaymentUpdate) onPaymentUpdate();
             } catch (error) {

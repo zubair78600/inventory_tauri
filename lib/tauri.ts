@@ -492,7 +492,7 @@ export const productCommands = {
    * Delete a product by ID
    */
   delete: async (id: number, username?: string): Promise<void> => {
-    return await invoke<void>('delete_product', { id, deletedBy: username ?? null });
+    return await invoke<void>('delete_product', { id, deleted_by: username ?? null });
   },
 
   /**
@@ -553,7 +553,7 @@ export const supplierCommands = {
    * Delete a supplier by ID
    */
   delete: async (id: number, username?: string): Promise<void> => {
-    return await invoke<void>('delete_supplier', { id, deletedBy: username ?? null });
+    return await invoke<void>('delete_supplier', { id, deleted_by: username ?? null });
   },
 
   /**
@@ -602,7 +602,7 @@ export const supplierCommands = {
    * Delete a payment entry
    */
   deletePayment: async (id: number, username?: string): Promise<void> => {
-    return await invoke<void>('delete_supplier_payment', { id, deletedBy: username ?? null });
+    return await invoke<void>('delete_supplier_payment', { id, deleted_by: username ?? null });
   },
 
   /**
@@ -682,7 +682,7 @@ export const customerCommands = {
    * Delete a customer by ID
    */
   delete: async (id: number, username?: string): Promise<void> => {
-    return await invoke<void>('delete_customer', { id, deletedBy: username ?? null });
+    return await invoke<void>('delete_customer', { id, deleted_by: username ?? null });
   },
 
   /**
@@ -743,7 +743,7 @@ export const customerPaymentCommands = {
    * Delete a customer payment
    */
   delete: async (id: number, username?: string): Promise<void> => {
-    return await invoke<void>('delete_customer_payment', { id, deletedBy: username ?? null });
+    return await invoke<void>('delete_customer_payment', { id, deleted_by: username ?? null });
   },
 };
 
@@ -979,7 +979,7 @@ export const invoiceCommands = {
    * Delete an invoice (restores stock)
    */
   delete: async (id: number, username?: string): Promise<void> => {
-    return await invoke<void>('delete_invoice', { id, deletedBy: username ?? null });
+    return await invoke<void>('delete_invoice', { id, deleted_by: username ?? null });
   },
 
   /**
@@ -1487,8 +1487,60 @@ export const imageCommands = {
   getCustomerImagePath: async (customerId: number, thumbnail: boolean = false): Promise<string | null> => {
     return await invoke<string | null>('get_customer_image_path', { customerId, thumbnail });
   },
+  /**
+   * Delete a customer image
+   */
   deleteCustomerImage: async (customerId: number): Promise<void> => {
     return await invoke<void>('delete_customer_image', { customerId });
+  },
+};
+
+/**
+ * Biometric Authentication Commands
+ */
+export const biometricCommands = {
+  /**
+   * Generate a token for enrollment (requires user to store it)
+   */
+  generateToken: async (userId: number): Promise<string> => {
+    return await invoke<string>('generate_biometric_token', { userId });
+  },
+
+  /**
+   * Verify a token (used for login)
+   */
+  verifyToken: async (token: string): Promise<User | null> => {
+    // Note: Rust returns User or Error. We might want to catch error here?
+    // Let's assume the caller handles try-catch.
+    return await invoke<User>('verify_biometric_token', { token });
+  },
+
+  /**
+   * Disable biometric for a user
+   */
+  disable: async (userId: number): Promise<void> => {
+    return await invoke<void>('disable_biometric', { userId });
+  },
+
+  /**
+   * Check if biometric is enabled for a user ID
+   */
+  getStatus: async (userId: number): Promise<boolean> => {
+    return await invoke<boolean>('get_biometric_status', { userId });
+  },
+
+  /**
+   * Check if biometric is enabled for a username (for login screen)
+   */
+  getStatusByUsername: async (username: string): Promise<boolean> => {
+    return await invoke<boolean>('get_biometric_status_by_username', { username });
+  },
+
+  /**
+   * Check if ANY user has enrolled (to show/hide UI elements)
+   */
+  hasAnyEnrollment: async (): Promise<boolean> => {
+    return await invoke<boolean>('has_any_biometric_enrollment');
   },
 };
 
