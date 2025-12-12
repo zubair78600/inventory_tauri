@@ -39,3 +39,18 @@ yarn-error.log*
 # Tauri specific
 src-tauri/target
 src-tauri/WixTools
+
+# AI Model files (downloaded on-demand)
+DB_AI/models/
+*.gguf
+
+# Python cache
+__pycache__/
+*.pyc
+
+# PyInstaller build
+DB_AI/build/
+DB_AI/dist/
+
+# Sidecar binaries (downloaded/built separately)
+src-tauri/binaries/

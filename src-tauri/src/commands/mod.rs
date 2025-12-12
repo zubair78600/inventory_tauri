@@ -12,6 +12,7 @@ pub mod settings;
 pub mod images;
 pub mod biometric;
 pub mod customer_payments;
+pub mod ai_chat;
 
 use serde::{Deserialize, Serialize};
 
@@ -35,3 +36,4 @@ pub use settings::*;
 pub use images::*;
 pub use biometric::*;
 pub use customer_payments::*;
+pub use ai_chat::*;

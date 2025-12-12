@@ -27,6 +27,14 @@ export interface Product {
   initial_stock_sold?: number;
 }
 
+export interface User {
+  id: number;
+  username: string;
+  role: string;
+  permissions: string;
+  created_at: string;
+}
+
 export interface CreateProductInput {
   name: string;
   sku: string;

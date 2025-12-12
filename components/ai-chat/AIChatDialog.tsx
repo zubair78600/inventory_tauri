@@ -1,0 +1,579 @@
+'use client';
+
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Dialog,
+    DialogContent,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Send,
+    Loader2,
+    Sparkles,
+    RefreshCw,
+    X,
+    Bot,
+    User,
+    ArrowRight,
+    Search,
+    ChevronRight
+} from 'lucide-react';
+import {
+    aiChatApi,
+    type ChatMessage,
+    type SetupStatus,
+    generateMessageId,
+    formatTime,
+} from '@/lib/ai-chat';
+import { DownloadProgress } from './DownloadProgress';
+import { TrainingFeedbackModal } from './TrainingFeedbackModal';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+interface AIChatDialogProps {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}
+
+const SUGGESTED_QUESTIONS = [
+    "Show today's sales",
+    "What products have low stock?",
+    "List top 5 customers",
+    "Total revenue this month",
+];
+
+export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [input, setInput] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [status, setStatus] = useState<SetupStatus | null>(null);
+    const [isServerReady, setIsServerReady] = useState(false);
+    const [isStartingServer, setIsStartingServer] = useState(false);
+    const [showTrainingModal, setShowTrainingModal] = useState(false);
+    const [failedQuery, setFailedQuery] = useState<{ question: string; sql: string } | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Sidecar download state
+    const [sidecarDownloaded, setSidecarDownloaded] = useState<boolean | null>(null);
+    const [isDownloadingSidecar, setIsDownloadingSidecar] = useState(false);
+    const [sidecarProgress, setSidecarProgress] = useState<{ percentage: number; speed_mbps: number } | null>(null);
+
+    // Check sidecar status on open
+    useEffect(() => {
+        if (open) {
+            checkSidecarStatus();
+        }
+    }, [open]);
+
+    const checkSidecarStatus = async () => {
+        try {
+            const downloaded = await aiChatApi.checkSidecarDownloaded();
+            setSidecarDownloaded(downloaded);
+            if (downloaded) {
+                checkServerStatus();
+            }
+        } catch {
+            setSidecarDownloaded(false);
+        }
+    };
+
+    const handleDownloadSidecar = async () => {
+        setIsDownloadingSidecar(true);
+        try {
+            // Listen for progress events
+            const { listen } = await import('@tauri-apps/api/event');
+            const unlisten = await listen<{ percentage: number; speed_mbps: number }>('sidecar-download-progress', (event) => {
+                setSidecarProgress(event.payload);
+            });
+
+            await aiChatApi.downloadSidecar();
+            unlisten();
+
+            setSidecarDownloaded(true);
+            setSidecarProgress(null);
+            checkServerStatus();
+        } catch (error) {
+            console.error('Failed to download sidecar:', error);
+        } finally {
+            setIsDownloadingSidecar(false);
+        }
+    };
+
+    // Check server status
+    useEffect(() => {
+        if (open && sidecarDownloaded) {
+            setTimeout(() => inputRef.current?.focus(), 500);
+        }
+    }, [open, sidecarDownloaded]);
+
+    // Auto-scroll
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages, isLoading]);
+
+    const checkServerStatus = useCallback(async () => {
+        try {
+            const isHealthy = await aiChatApi.healthCheck();
+            setIsServerReady(isHealthy);
+            if (isHealthy) {
+                const setupStatus = await aiChatApi.getStatus();
+                setStatus(setupStatus);
+            }
+        } catch {
+            setIsServerReady(false);
+        }
+    }, []);
+
+    const startServer = async () => {
+        setIsStartingServer(true);
+        try {
+            await aiChatApi.startSidecar();
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await checkServerStatus();
+        } catch (error) {
+            // Dev mode fallback
+            console.log('Dev mode: checking manual server...');
+            const isHealthy = await aiChatApi.healthCheck();
+            if (isHealthy) {
+                setIsServerReady(true);
+                const setupStatus = await aiChatApi.getStatus();
+                setStatus(setupStatus);
+            } else {
+                alert('AI Server not running.\nRun manually: cd DB_AI && python main.py');
+            }
+        } finally {
+            setIsStartingServer(false);
+        }
+    };
+
+    const handleSend = async (text: string) => {
+        if (!text.trim() || isLoading) return;
+
+        const userMessage: ChatMessage = {
+            id: generateMessageId(),
+            role: 'user',
+            content: text.trim(),
+            timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, userMessage]);
+        setInput('');
+        setIsLoading(true);
+
+        try {
+            const response = await aiChatApi.query(userMessage.content);
+            const assistantMessage: ChatMessage = {
+                id: generateMessageId(),
+                role: 'assistant',
+                content: response.success
+                    ? `Found ${response.results.length} result(s)`
+                    : response.error || 'An error occurred',
+                timestamp: new Date(),
+                sql: response.sql,
+                results: response.results,
+                timing: {
+                    sqlGen: response.sql_extraction_time_ms,
+                    sqlRun: response.execution_time_ms,
+                    total: response.total_time_ms,
+                },
+                error: response.error || undefined,
+            };
+            setMessages((prev) => [...prev, assistantMessage]);
+        } catch (error) {
+            const errorMessage: ChatMessage = {
+                id: generateMessageId(),
+                role: 'assistant',
+                content: 'Failed to process query. Please try again.',
+                timestamp: new Date(),
+                error: error instanceof Error ? error.message : 'Unknown error',
+            };
+            setMessages((prev) => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
+            // Keep focus on input after sending
+            setTimeout(() => inputRef.current?.focus(), 100);
+        }
+    };
+
+    const handleImproveQuery = (question: string, sql: string) => {
+        setFailedQuery({ question, sql });
+        setShowTrainingModal(true);
+    };
+
+    // Render Sidecar Download UI if needed
+    if (open && sidecarDownloaded === false) {
+        return (
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-[500px] border-none bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl rounded-2xl">
+                    <DialogTitle className="flex items-center gap-2 text-xl font-light">
+                        <Sparkles className="h-6 w-6 text-sky-500" />
+                        Setting up AI Backend
+                    </DialogTitle>
+                    <div className="space-y-4 p-6 text-center">
+                        {!isDownloadingSidecar && !sidecarProgress && (
+                            <>
+                                <div className="h-12 w-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                    <Bot className="h-6 w-6 text-muted-foreground" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold">AI Backend Required</h3>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Download the AI backend (~84 MB) to enable chat features.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleDownloadSidecar}
+                                    className="w-full px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                                >
+                                    Download AI Backend
+                                </button>
+                            </>
+                        )}
+                        {isDownloadingSidecar && sidecarProgress && (
+                            <>
+                                <div className="flex items-center gap-3">
+                                    <Loader2 className="h-5 w-5 animate-spin text-sky-500" />
+                                    <span className="font-medium">Downloading AI Backend...</span>
+                                </div>
+                                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3">
+                                    <div
+                                        className="bg-sky-500 h-3 rounded-full transition-all"
+                                        style={{ width: `${sidecarProgress.percentage}%` }}
+                                    />
+                                </div>
+                                <div className="flex justify-between text-sm text-muted-foreground">
+                                    <span>{sidecarProgress.percentage.toFixed(1)}%</span>
+                                    <span>{sidecarProgress.speed_mbps.toFixed(1)} MB/s</span>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    // Render Model Download if sidecar ready but model not downloaded
+    if (open && status && !status.model_downloaded) {
+        return (
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-[500px] border-none bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl rounded-2xl">
+                    <DialogTitle className="flex items-center gap-2 text-xl font-light">
+                        <Sparkles className="h-6 w-6 text-sky-500" />
+                        Setting up AI Model
+                    </DialogTitle>
+                    <DownloadProgress onComplete={() => checkServerStatus()} onCancel={() => onOpenChange(false)} />
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    return (
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent
+                    className="sm:max-w-[800px] h-[650px] flex flex-col p-0 gap-0 border-white/20 bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl shadow-2xl rounded-[40px] overflow-hidden ring-1 ring-black/5 dark:ring-white/10"
+                    onInteractOutside={(e) => e.preventDefault()}
+                >
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="px-6 py-4 flex items-center justify-between border-b border-black/5 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-md z-10"
+                    >
+                        <DialogTitle className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                                <Bot className="h-5 w-5 text-white" />
+                            </div>
+                            <div>
+                                <span className="font-semibold text-lg bg-gradient-to-r from-sky-600 to-indigo-600 dark:from-sky-400 dark:to-indigo-400 bg-clip-text text-transparent">
+                                    Inventory Intelligence
+                                </span>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <div className={`h-1.5 w-1.5 rounded-full ${isServerReady ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`} />
+                                    <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+                                        {isServerReady ? 'Online' : 'Connecting...'}
+                                    </span>
+                                </div>
+                            </div>
+                        </DialogTitle>
+
+                        <div className="flex items-center gap-2">
+                            {!isServerReady && (
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={startServer}
+                                    disabled={isStartingServer}
+                                    className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 flex items-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                >
+                                    {isStartingServer ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                    {isStartingServer ? 'Starting...' : 'Reconnect'}
+                                </motion.button>
+                            )}
+                            <button
+                                onClick={() => onOpenChange(false)}
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                    </motion.div>
+
+                    {/* Chat Area */}
+                    <div className="flex-1 overflow-hidden relative bg-slate-50/50 dark:bg-slate-900/50">
+                        <ScrollArea className="h-full px-6 py-4">
+                            {!isServerReady && !isStartingServer ? (
+                                <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
+                                    <Bot className="h-16 w-16 text-muted-foreground mb-4" />
+                                    <h3 className="text-lg font-medium">Server Disconnected</h3>
+                                    <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                                        The AI sidecar is not responding. Click "Reconnect" in the top right or check your backend logs.
+                                    </p>
+                                </div>
+                            ) : messages.length === 0 ? (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="h-full flex flex-col items-center justify-center max-w-2xl mx-auto"
+                                >
+                                    <div className="mb-8 text-center space-y-2">
+                                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-sky-500/10 to-indigo-600/10 flex items-center justify-center mx-auto mb-6 ring-1 ring-black/5">
+                                            <Sparkles className="h-8 w-8 text-indigo-500" />
+                                        </div>
+                                        <h2 className="text-2xl font-light text-foreground">
+                                            How can I help you today?
+                                        </h2>
+                                        <p className="text-muted-foreground">
+                                            I can analyze your inventory, track sales, and generate reports instantly.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
+                                        {SUGGESTED_QUESTIONS.map((q, i) => (
+                                            <motion.button
+                                                key={i}
+                                                whileHover={{ scale: 1.02, backgroundColor: "rgba(var(--primary), 0.05)" }}
+                                                whileTap={{ scale: 0.98 }}
+                                                onClick={() => handleSend(q)}
+                                                className="p-4 rounded-xl text-left bg-white dark:bg-slate-800 border border-black/5 dark:border-white/5 shadow-sm hover:shadow-md hover:border-indigo-500/30 transition-all group"
+                                            >
+                                                <span className="text-sm font-medium text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                                    {q}
+                                                </span>
+                                            </motion.button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            ) : (
+                                <div className="space-y-6 pb-4">
+                                    <AnimatePresence initial={false}>
+                                        {messages.map((msg) => (
+                                            <MessageBubble
+                                                key={msg.id}
+                                                message={msg}
+                                                onImprove={handleImproveQuery}
+                                            />
+                                        ))}
+                                    </AnimatePresence>
+
+                                    {isLoading && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="flex justify-start"
+                                        >
+                                            <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm border border-black/5 flex items-center gap-2">
+                                                <div className="flex gap-1">
+                                                    {[0, 1, 2].map(i => (
+                                                        <motion.div
+                                                            key={i}
+                                                            className="h-1.5 w-1.5 rounded-full bg-indigo-500"
+                                                            animate={{ y: [0, -5, 0] }}
+                                                            transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <span className="text-xs text-muted-foreground font-medium">Thinking...</span>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                    <div ref={scrollRef} />
+                                </div>
+                            )}
+                        </ScrollArea>
+                    </div>
+
+                    {/* Input Area */}
+                    <div className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-black/5 dark:border-white/5 z-20">
+                        <div className="relative max-w-3xl mx-auto flex items-center gap-2">
+                            <div className="relative flex-1">
+                                <input
+                                    ref={inputRef}
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSend(input)}
+                                    placeholder="Type a message..."
+                                    disabled={isLoading || !isServerReady}
+                                    className="w-full h-12 pl-12 pr-4 rounded-full bg-slate-100 dark:bg-slate-800 border-none focus:ring-2 focus:ring-indigo-500/20 text-foreground placeholder:text-muted-foreground/60 shadow-inner transition-all"
+                                />
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                    <Search className="h-5 w-5 opacity-50" />
+                                </div>
+                            </div>
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleSend(input)}
+                                disabled={!input.trim() || isLoading}
+                                className={cn(
+                                    "h-12 w-12 rounded-full flex items-center justify-center shadow-md transition-all",
+                                    input.trim()
+                                        ? "bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-indigo-500/25"
+                                        : "bg-slate-200 dark:bg-slate-700 text-slate-400"
+                                )}
+                            >
+                                <ArrowRight className="h-5 w-5" />
+                            </motion.button>
+                        </div>
+                        <div className="text-center mt-2">
+                            <p className="text-[10px] text-muted-foreground/60">
+                                AI can make mistakes. Check important info.
+                            </p>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {failedQuery && (
+                <TrainingFeedbackModal
+                    open={showTrainingModal}
+                    onOpenChange={setShowTrainingModal}
+                    question={failedQuery.question}
+                    failedSql={failedQuery.sql}
+                    onComplete={() => setShowTrainingModal(false)}
+                />
+            )}
+        </>
+    );
+}
+
+function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove: (q: string, s: string) => void }) {
+    const isUser = message.role === 'user';
+    const [showSql, setShowSql] = useState(false);
+
+    return (
+        <motion.div
+            layout
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+        >
+            <div className={`max-w-[90%] flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+                {/* Avatar */}
+                <div className={cn(
+                    "h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm mt-1",
+                    isUser ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300" : "bg-white dark:bg-slate-800 text-sky-600 border border-black/5"
+                )}>
+                    {isUser ? <User className="h-4 w-4" /> : <Bot className="h-5 w-5" />}
+                </div>
+
+                <div className={cn(
+                    "relative px-5 py-3.5 shadow-md text-sm min-w-[60px] overflow-hidden",
+                    isUser
+                        ? "bg-indigo-600 text-white rounded-3xl"
+                        : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-3xl"
+                )}>
+                    <p className="leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
+
+                    {/* SQL Code Block - Collapsible */}
+                    {message.sql && (
+                        <div className="mt-3 rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
+                            <button
+                                onClick={() => setShowSql(!showSql)}
+                                className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] font-mono text-muted-foreground flex justify-between items-center transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
+                            >
+                                <div className="flex items-center gap-1.5">
+                                    <ChevronRight className={cn("h-3 w-3 transition-transform", showSql && "rotate-90")} />
+                                    <span>SQL Query</span>
+                                </div>
+                                {message.timing && <span>{formatTime(message.timing.sqlGen)}</span>}
+                            </button>
+
+                            <AnimatePresence>
+                                {showSql && (
+                                    <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="bg-slate-50 dark:bg-slate-950 p-3 overflow-x-auto border-t border-black/5">
+                                            <code className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 whitespace-pre">
+                                                {message.sql}
+                                            </code>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    )}
+
+                    {/* Results Table */}
+                    {message.results && message.results.length > 0 && (
+                        <div className="mt-4 rounded-xl border border-black/5 dark:border-white/5 overflow-hidden bg-white/50 dark:bg-black/20">
+                            <div className="overflow-x-auto w-full">
+                                <table className="w-full text-xs min-w-max">
+                                    <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5">
+                                        <tr>
+                                            {Object.keys(message.results[0]).map((key) => (
+                                                <th key={key} className="px-4 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">
+                                                    {key}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-black/5 dark:divide-white/5">
+                                        {message.results.slice(0, 10).map((row, i) => (
+                                            <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                                {Object.values(row).map((value, j) => (
+                                                    <td key={j} className="px-4 py-2.5 whitespace-nowrap max-w-[200px] truncate" title={String(value)}>
+                                                        {String(value ?? '-')}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-900 px-3 py-2 text-[10px] text-muted-foreground flex justify-between border-t border-black/5">
+                                <span>Showing {Math.min(message.results.length, 10)} of {message.results.length} results</span>
+                                {message.timing && <span>Exec: {formatTime(message.timing.sqlRun)}</span>}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Error State */}
+                    {message.error && (
+                        <div className="mt-3 pt-3 border-t border-red-100 dark:border-red-900/30 flex flex-col gap-2">
+                            <span className="text-xs text-red-500 font-medium">{message.error}</span>
+                            {message.sql && (
+                                <button
+                                    onClick={() => onImprove(message.content, message.sql!)}
+                                    className="text-[10px] bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-2 py-1 rounded inline-flex self-start items-center gap-1 hover:bg-red-100 transition-colors"
+                                >
+                                    <RefreshCw className="h-3 w-3" />
+                                    Fix this query
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </motion.div>
+    );
+}

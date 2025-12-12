@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Fingerprint } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface PasswordPromptModalProps {
@@ -11,6 +11,7 @@ interface PasswordPromptModalProps {
     onSuccess: () => void;
     title?: string;
     description?: string;
+    onBiometric?: () => void;
 }
 
 export function PasswordPromptModal({
@@ -19,6 +20,7 @@ export function PasswordPromptModal({
     onSuccess,
     title = 'Security Check',
     description = 'Please enter your password to continue.',
+    onBiometric,
 }: PasswordPromptModalProps) {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -95,6 +97,17 @@ export function PasswordPromptModal({
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                             Cancel
                         </Button>
+                        {onBiometric && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={onBiometric}
+                                className="gap-2"
+                            >
+                                <Fingerprint className="h-4 w-4" />
+                                Use Touch ID
+                            </Button>
+                        )}
                         <Button type="submit" disabled={loading || !password}>
                             {loading ? (
                                 <>

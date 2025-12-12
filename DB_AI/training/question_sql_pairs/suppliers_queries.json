@@ -1,0 +1,46 @@
+[
+    {
+        "question": "List all suppliers",
+        "sql": "SELECT * FROM suppliers ORDER BY name"
+    },
+    {
+        "question": "How many suppliers do we have?",
+        "sql": "SELECT COUNT(*) as total_suppliers FROM suppliers"
+    },
+    {
+        "question": "Show suppliers with pending balance",
+        "sql": "SELECT s.id, s.name, s.contact_info, COALESCE(SUM(po.total_amount), 0) - COALESCE(SUM(sp.amount), 0) as pending_balance FROM suppliers s LEFT JOIN purchase_orders po ON s.id = po.supplier_id AND po.status = 'received' LEFT JOIN supplier_payments sp ON s.id = sp.supplier_id GROUP BY s.id HAVING pending_balance > 0 ORDER BY pending_balance DESC"
+    },
+    {
+        "question": "What is the total amount we owe to suppliers?",
+        "sql": "SELECT SUM(pending) as total_pending FROM (SELECT COALESCE(SUM(po.total_amount), 0) - COALESCE(SUM(sp.amount), 0) as pending FROM suppliers s LEFT JOIN purchase_orders po ON s.id = po.supplier_id AND po.status = 'received' LEFT JOIN supplier_payments sp ON s.id = sp.supplier_id GROUP BY s.id HAVING pending > 0)"
+    },
+    {
+        "question": "Show top suppliers by purchase volume",
+        "sql": "SELECT s.name, SUM(po.total_amount) as total_purchases FROM suppliers s JOIN purchase_orders po ON s.id = po.supplier_id WHERE po.status = 'received' GROUP BY s.id ORDER BY total_purchases DESC LIMIT 10"
+    },
+    {
+        "question": "How many products does each supplier provide?",
+        "sql": "SELECT s.name, COUNT(p.id) as product_count FROM suppliers s LEFT JOIN products p ON s.id = p.supplier_id GROUP BY s.id ORDER BY product_count DESC"
+    },
+    {
+        "question": "Show payments made to suppliers this month",
+        "sql": "SELECT s.name, sp.amount, sp.payment_method, sp.paid_at FROM supplier_payments sp JOIN suppliers s ON sp.supplier_id = s.id WHERE strftime('%Y-%m', sp.paid_at) = strftime('%Y-%m', 'now') ORDER BY sp.paid_at DESC"
+    },
+    {
+        "question": "Find suppliers from a specific state",
+        "sql": "SELECT name, contact_info, state, district FROM suppliers WHERE state = 'Maharashtra' ORDER BY name"
+    },
+    {
+        "question": "Show recent purchase orders by supplier",
+        "sql": "SELECT s.name, po.po_number, po.total_amount, po.order_date, po.status FROM suppliers s JOIN purchase_orders po ON s.id = po.supplier_id ORDER BY po.order_date DESC LIMIT 20"
+    },
+    {
+        "question": "What products do we buy from supplier X?",
+        "sql": "SELECT DISTINCT p.name, p.sku FROM products p JOIN purchase_order_items poi ON p.id = poi.product_id JOIN purchase_orders po ON poi.po_id = po.id JOIN suppliers s ON po.supplier_id = s.id WHERE s.name LIKE '%X%'"
+    },
+    {
+        "question": "Show supplier payment summary",
+        "sql": "SELECT s.name, COALESCE(SUM(po.total_amount), 0) as total_purchases, COALESCE(SUM(sp.amount), 0) as total_paid FROM suppliers s LEFT JOIN purchase_orders po ON s.id = po.supplier_id AND po.status = 'received' LEFT JOIN supplier_payments sp ON s.id = sp.supplier_id GROUP BY s.id ORDER BY s.name"
+    }
+]

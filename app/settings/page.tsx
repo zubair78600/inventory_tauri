@@ -58,6 +58,13 @@ import type { LocationValue } from '@/types/location';
 
 export default function SettingsPage() {
   const { user } = useAuth();
+
+  // Hydration fix: Ensure component only renders on client
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'invoice' | 'api' | 'users' | 'security' | 'themes'>('deleted-data');
 
   // Security State
@@ -65,29 +72,29 @@ export default function SettingsPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [canUseBiometric, setCanUseBiometric] = useState(false);
 
   useEffect(() => {
     const checkSecurity = async () => {
       if (!user?.username) return;
 
+      // Check if AppShell already authenticated recently (within 5 seconds)
+      const authTs = sessionStorage.getItem('settings_auth_ts');
+      if (authTs) {
+        const elapsed = Date.now() - parseInt(authTs, 10);
+        if (elapsed < 5000) {
+          // Already authenticated via AppShell, skip
+          sessionStorage.removeItem('settings_auth_ts');
+          setIsAuthenticated(true);
+          setIsCheckingAuth(false);
+          return;
+        }
+        sessionStorage.removeItem('settings_auth_ts');
+      }
+
       // check if user has enrolled in biometrics on this device
       const hasBiometric = hasLocalBiometricEnrollment(user.username);
-
-      if (hasBiometric) {
-        try {
-          // Attempt biometric auth immediately
-          const result = await authenticateWithBiometric(user.username);
-          if (result) {
-            setIsAuthenticated(true);
-            setIsCheckingAuth(false);
-            return;
-          }
-        } catch (error) {
-          console.error("Biometric auth failed:", error);
-          // Fall through to password prompt
-          setAuthError(getBiometricErrorMessage(error));
-        }
-      }
+      setCanUseBiometric(hasBiometric);
 
       // If no biometric or failed, show password prompt
       setIsCheckingAuth(false);
@@ -118,57 +125,6 @@ export default function SettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // ... (existing state refs)
-
-  if (isCheckingAuth) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
-          <p className="text-sm text-slate-500">Verifying security...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
-        <div className="max-w-md w-full text-center space-y-4">
-          {/* The modal handles the UI, but we need a fallback background if modal is closed? 
-                 Actually PasswordPromptModal is a modal. We should render it and maybe a 'Access Denied' background 
-                 if they cancel it. */}
-
-          {!showPasswordPrompt && (
-            <div className="flex flex-col items-center gap-4 p-8 bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
-              <Lock className="h-12 w-12 text-slate-300" />
-              <h2 className="text-xl font-semibold">Settings Locked</h2>
-              <p className="text-slate-500">Authentication is required to access settings.</p>
-              <button
-                onClick={() => setShowPasswordPrompt(true)}
-                className="px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 transition-colors"
-              >
-                Authenticate
-              </button>
-              {authError && <p className="text-xs text-red-500">{authError}</p>}
-            </div>
-          )}
-
-          <PasswordPromptModal
-            open={showPasswordPrompt}
-            onOpenChange={(open) => {
-              setShowPasswordPrompt(open);
-              // If they close it without success, they stay locked out
-            }}
-            onSuccess={() => setIsAuthenticated(true)}
-            title="Settings Access"
-            description={authError ? `${authError} Please enter your password.` : "For security, please enter your password to access settings."}
-          />
-        </div>
-      </div>
-    );
-  }
 
   // Google API Settings
   const [googleApiKey, setGoogleApiKey] = useState('');
@@ -220,7 +176,76 @@ export default function SettingsPage() {
     }
   }, [activeTab]);
 
-  const fetchBiometricStatus = async () => {
+  // ... (existing state refs)
+
+  // ... (existing state refs)
+
+  if (!mounted) return null;
+
+  if (isCheckingAuth) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
+          <p className="text-sm text-slate-500">Verifying security...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+        <div className="max-w-md w-full text-center space-y-4">
+          {/* The modal handles the UI, but we need a fallback background if modal is closed? 
+                 Actually PasswordPromptModal is a modal. We should render it and maybe a 'Access Denied' background 
+                 if they cancel it. */}
+
+          {!showPasswordPrompt && (
+            <div className="flex flex-col items-center gap-4 p-8 bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
+              <Lock className="h-12 w-12 text-slate-300" />
+              <h2 className="text-xl font-semibold">Settings Locked</h2>
+              <p className="text-slate-500">Authentication is required to access settings.</p>
+              <button
+                onClick={() => setShowPasswordPrompt(true)}
+                className="px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 transition-colors"
+              >
+                Authenticate
+              </button>
+              {authError && <p className="text-xs text-red-500">{authError}</p>}
+            </div>
+          )}
+
+          <PasswordPromptModal
+            open={showPasswordPrompt}
+            onOpenChange={(open) => {
+              setShowPasswordPrompt(open);
+              // If they close it without success, they stay locked out
+            }}
+            onSuccess={() => setIsAuthenticated(true)}
+            title="Settings Access"
+            description={authError ? `${authError} Please enter your password.` : "For security, please enter your password to access settings."}
+            onBiometric={canUseBiometric ? async () => {
+              if (!user?.username) return;
+              try {
+                const result = await authenticateWithBiometric(user.username);
+                if (result) {
+                  setIsAuthenticated(true);
+                  setShowPasswordPrompt(false);
+                }
+              } catch (err) {
+                setAuthError(getBiometricErrorMessage(err));
+              }
+            } : undefined}
+          />
+        </div>
+      </div>
+    );
+  }
+
+
+
+  async function fetchBiometricStatus() {
     if (!user) return;
     setBiometricError(null);
     try {
@@ -257,7 +282,7 @@ export default function SettingsPage() {
     }
   };
 
-  const fetchGoogleSettings = async () => {
+  async function fetchGoogleSettings() {
     try {
       const settings = await settingsCommands.getAll();
       setGoogleApiKey(settings['google_api_key'] || '');
@@ -267,7 +292,7 @@ export default function SettingsPage() {
     }
   };
 
-  const fetchDefaultLocation = async () => {
+  async function fetchDefaultLocation() {
     try {
       const settings = await settingsCommands.getAll();
       setDefaultLocation({
@@ -409,7 +434,7 @@ export default function SettingsPage() {
     }
   };
 
-  const fetchDeletedItems = async () => {
+  async function fetchDeletedItems() {
     try {
       setLoading(true);
       setError(null);
@@ -424,7 +449,7 @@ export default function SettingsPage() {
     }
   };
 
-  const fetchModifications = async () => {
+  async function fetchModifications() {
     try {
       setLoading(true);
       setError(null);
@@ -511,7 +536,7 @@ export default function SettingsPage() {
     }
   };
 
-  const fetchUsers = async () => {
+  async function fetchUsers() {
     try {
       setLoading(true);
       setError(null);

@@ -24,24 +24,28 @@ const getDateRanges = (): Record<string, () => DateRange> => {
   today.setHours(0, 0, 0, 0);
 
   return {
+    '1d': () => {
+      return { startDate: formatDate(today), endDate: formatDate(today), label: 'D' };
+    },
     '7d': () => {
       const start = new Date(today);
       start.setDate(start.getDate() - 6);
-      return { startDate: formatDate(start), endDate: formatDate(today), label: '7D' };
+      return { startDate: formatDate(start), endDate: formatDate(today), label: 'W' };
     },
     '30d': () => {
       const start = new Date(today);
       start.setDate(start.getDate() - 29);
-      return { startDate: formatDate(start), endDate: formatDate(today), label: '30D' };
+      return { startDate: formatDate(start), endDate: formatDate(today), label: 'M' };
     },
     '90d': () => {
       const start = new Date(today);
       start.setDate(start.getDate() - 89);
-      return { startDate: formatDate(start), endDate: formatDate(today), label: '90D' };
+      return { startDate: formatDate(start), endDate: formatDate(today), label: 'Q' };
     },
-    'ytd': () => {
-      const start = new Date(today.getFullYear(), 0, 1);
-      return { startDate: formatDate(start), endDate: formatDate(today), label: 'YTD' };
+    '1y': () => {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 364);
+      return { startDate: formatDate(start), endDate: formatDate(today), label: 'Y' };
     },
     'all': () => ({
       startDate: '2000-01-01',
@@ -61,10 +65,11 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   const ranges = useMemo(() => getDateRanges(), []);
 
   const quickOptions = [
-    { key: '7d', label: '7D' },
-    { key: '30d', label: '30D' },
-    { key: '90d', label: '90D' },
-    { key: 'ytd', label: 'YTD' },
+    { key: '1d', label: 'D' },
+    { key: '7d', label: 'W' },
+    { key: '30d', label: 'M' },
+    { key: '90d', label: 'Q' },
+    { key: '1y', label: 'Y' },
     { key: 'all', label: 'All' },
   ];
 
@@ -91,11 +96,10 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
           <button
             key={opt.key}
             onClick={() => handleSelect(opt.key)}
-            className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-all ${
-              isActive(opt.key)
+            className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-all ${isActive(opt.key)
                 ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-            }`}
+              }`}
           >
             {opt.label}
           </button>

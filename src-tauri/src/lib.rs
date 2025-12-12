@@ -12,6 +12,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_biometry::init())
+    // .plugin(tauri_plugin_shell::init()) // Uncomment when AI feature is ready
     .setup(|app| {
       // Initialize database
       let app_handle = app.handle();
@@ -29,6 +30,9 @@ pub fn run() {
 
       // Store database in app state
       app.manage(db);
+
+      // Initialize AI sidecar state (uncomment when AI feature is ready)
+      // app.manage(commands::AiSidecarState::default());
 
       // Create Settings menu item
       let settings_item = MenuItemBuilder::with_id("settings", "Settings...").build(app)?;
@@ -197,6 +201,12 @@ pub fn run() {
       commands::get_customer_credit_history,
       commands::get_customer_credit_summary,
       commands::delete_customer_payment,
+      // AI Chat commands
+      commands::start_ai_sidecar,
+      commands::stop_ai_sidecar,
+      commands::check_ai_sidecar_status,
+      commands::check_sidecar_downloaded,
+      commands::download_ai_sidecar,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

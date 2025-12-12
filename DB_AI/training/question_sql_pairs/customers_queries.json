@@ -1,0 +1,50 @@
+[
+    {
+        "question": "List all customers",
+        "sql": "SELECT * FROM customers ORDER BY name"
+    },
+    {
+        "question": "How many customers do we have?",
+        "sql": "SELECT COUNT(*) as total_customers FROM customers"
+    },
+    {
+        "question": "Show customers with credit balance",
+        "sql": "SELECT c.id, c.name, c.phone, COALESCE(SUM(i.total_amount), 0) - COALESCE(SUM(cp.amount), 0) as credit_balance FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id LEFT JOIN customer_payments cp ON c.id = cp.customer_id GROUP BY c.id HAVING credit_balance > 0 ORDER BY credit_balance DESC"
+    },
+    {
+        "question": "Who are the top 10 customers by spending?",
+        "sql": "SELECT c.name, c.phone, SUM(i.total_amount) as total_spent FROM customers c JOIN invoices i ON c.id = i.customer_id GROUP BY c.id ORDER BY total_spent DESC LIMIT 10"
+    },
+    {
+        "question": "Show customer purchase history",
+        "sql": "SELECT c.name, i.invoice_number, i.total_amount, i.created_at FROM customers c JOIN invoices i ON c.id = i.customer_id ORDER BY c.name, i.created_at DESC"
+    },
+    {
+        "question": "Find customers from a specific state",
+        "sql": "SELECT name, phone, state, district, town FROM customers WHERE state = 'Maharashtra' ORDER BY name"
+    },
+    {
+        "question": "Show recently added customers",
+        "sql": "SELECT name, phone, email, created_at FROM customers ORDER BY created_at DESC LIMIT 10"
+    },
+    {
+        "question": "What is the total credit owed by customers?",
+        "sql": "SELECT SUM(credit) as total_credit_owed FROM (SELECT COALESCE(SUM(i.total_amount), 0) - COALESCE(SUM(cp.amount), 0) as credit FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id LEFT JOIN customer_payments cp ON c.id = cp.customer_id GROUP BY c.id HAVING credit > 0)"
+    },
+    {
+        "question": "Show customers who haven't purchased recently",
+        "sql": "SELECT c.name, c.phone, MAX(i.created_at) as last_purchase FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id GROUP BY c.id HAVING last_purchase < DATE('now', '-30 days') OR last_purchase IS NULL ORDER BY last_purchase"
+    },
+    {
+        "question": "Search for customer by phone number",
+        "sql": "SELECT * FROM customers WHERE phone LIKE '%9876543210%'"
+    },
+    {
+        "question": "Show customer payment history",
+        "sql": "SELECT c.name, cp.amount, cp.payment_method, cp.paid_at, i.invoice_number FROM customer_payments cp JOIN customers c ON cp.customer_id = c.id JOIN invoices i ON cp.invoice_id = i.id ORDER BY cp.paid_at DESC"
+    },
+    {
+        "question": "How many repeat customers do we have?",
+        "sql": "SELECT COUNT(*) as repeat_customers FROM (SELECT customer_id, COUNT(*) as purchase_count FROM invoices WHERE customer_id IS NOT NULL GROUP BY customer_id HAVING purchase_count > 1)"
+    }
+]

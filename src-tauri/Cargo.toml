@@ -43,8 +43,14 @@ tauri-plugin-fs = "2"
 # Image processing for thumbnails
 image = "0.24"
 
-# HTTP client for downloading images and Google API
-reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+# HTTP client for downloading images, Google API, and sidecar
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "stream"] }
+
+# Async stream utilities
+futures-util = "0.3"
+
+# Platform directories
+dirs = "5.0"
 
 # URL encoding for API requests
 urlencoding = "2.1"
@@ -54,3 +60,6 @@ uuid = { version = "1.0", features = ["v4"] }
 sha2 = "0.10"
 hex = "0.4"
 tauri-plugin-biometry = "0.2.5"
+
+# Shell plugin for sidecar management (uncomment when AI feature is ready)
+# tauri-plugin-shell = "2.2.0"

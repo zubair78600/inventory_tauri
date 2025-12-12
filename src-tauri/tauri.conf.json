@@ -30,7 +30,7 @@
           "**"
         ]
       },
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost blob: asset: http://asset.localhost; frame-src 'self' blob: tauri:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https: asset: http://asset.localhost blob:;"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost blob: asset: http://asset.localhost http://127.0.0.1:8765; frame-src 'self' blob: tauri:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https: asset: http://asset.localhost blob:;"
     }
   },
   "bundle": {
@@ -38,6 +38,10 @@
     "targets": [
       "dmg",
       "app"
+    ],
+    "resources": [
+      "../DB_AI/vectordb/**/*",
+      "../DB_AI/training/**/*"
     ],
     "icon": [
       "icons/32x32.png",
