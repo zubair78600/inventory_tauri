@@ -30,6 +30,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake
+      
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake
+      
+      - name: Install build tools (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -38,7 +54,8 @@ jobs:
       - name: Install dependencies
         run: |
           cd DB_AI
-          pip install --upgrade pip
+          pip install --upgrade pip wheel setuptools
+          pip install cmake
           pip install -r requirements.txt
           pip install pyinstaller
       
