@@ -1,0 +1,62 @@
+[
+    {
+        "question": "Show daily sales trend for the last 7 days",
+        "sql": "SELECT DATE(created_at) as date, COUNT(*) as invoice_count, SUM(total_amount) as revenue FROM invoices WHERE created_at >= DATE('now', '-7 days') GROUP BY DATE(created_at) ORDER BY date"
+    },
+    {
+        "question": "What is the gross profit?",
+        "sql": "SELECT SUM(ii.quantity * (ii.unit_price - p.price)) as gross_profit FROM invoice_items ii JOIN products p ON ii.product_id = p.id"
+    },
+    {
+        "question": "Show sales vs purchases this month",
+        "sql": "SELECT 'Sales' as type, SUM(total_amount) as amount FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') UNION ALL SELECT 'Purchases' as type, SUM(total_amount) as amount FROM purchase_orders WHERE strftime('%Y-%m', order_date) = strftime('%Y-%m', 'now') AND status = 'received'"
+    },
+    {
+        "question": "What are the top selling products this month?",
+        "sql": "SELECT p.name, SUM(ii.quantity) as units_sold, SUM(ii.quantity * ii.unit_price) as revenue FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id WHERE strftime('%Y-%m', i.created_at) = strftime('%Y-%m', 'now') GROUP BY p.id ORDER BY units_sold DESC LIMIT 10"
+    },
+    {
+        "question": "Show revenue by region",
+        "sql": "SELECT state, district, COUNT(*) as orders, SUM(total_amount) as revenue FROM invoices WHERE state IS NOT NULL GROUP BY state, district ORDER BY revenue DESC"
+    },
+    {
+        "question": "What is the customer retention rate?",
+        "sql": "SELECT ROUND(100.0 * COUNT(DISTINCT CASE WHEN purchase_count > 1 THEN customer_id END) / COUNT(DISTINCT customer_id), 2) as retention_rate FROM (SELECT customer_id, COUNT(*) as purchase_count FROM invoices WHERE customer_id IS NOT NULL GROUP BY customer_id)"
+    },
+    {
+        "question": "Show cash flow summary",
+        "sql": "SELECT 'Inflow' as type, SUM(amount) as total FROM customer_payments WHERE strftime('%Y-%m', paid_at) = strftime('%Y-%m', 'now') UNION ALL SELECT 'Outflow' as type, SUM(amount) as total FROM supplier_payments WHERE strftime('%Y-%m', paid_at) = strftime('%Y-%m', 'now')"
+    },
+    {
+        "question": "What is the average items per order?",
+        "sql": "SELECT AVG(item_count) as avg_items_per_order FROM (SELECT invoice_id, SUM(quantity) as item_count FROM invoice_items GROUP BY invoice_id)"
+    },
+    {
+        "question": "Show hourly sales distribution",
+        "sql": "SELECT strftime('%H', created_at) as hour, COUNT(*) as orders, SUM(total_amount) as revenue FROM invoices GROUP BY hour ORDER BY hour"
+    },
+    {
+        "question": "What percentage of sales are cash vs credit?",
+        "sql": "SELECT payment_method, COUNT(*) as count, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM invoices), 2) as percentage, SUM(total_amount) as total FROM invoices GROUP BY payment_method"
+    },
+    {
+        "question": "Show year over year comparison",
+        "sql": "SELECT strftime('%Y', created_at) as year, COUNT(*) as invoices, SUM(total_amount) as revenue, AVG(total_amount) as avg_order FROM invoices GROUP BY year ORDER BY year DESC"
+    },
+    {
+        "question": "What is the inventory turnover ratio?",
+        "sql": "SELECT p.name, COALESCE(p.quantity_sold, 0) as sold, p.stock_quantity, CASE WHEN p.stock_quantity > 0 THEN ROUND(1.0 * COALESCE(p.quantity_sold, 0) / p.stock_quantity, 2) ELSE 0 END as turnover_ratio FROM products p WHERE p.quantity_sold > 0 OR p.stock_quantity > 0 ORDER BY turnover_ratio DESC"
+    },
+    {
+        "question": "Show profit by product category",
+        "sql": "SELECT p.category, SUM(ii.quantity * (ii.unit_price - p.price)) as profit FROM invoice_items ii JOIN products p ON ii.product_id = p.id WHERE p.category IS NOT NULL GROUP BY p.category ORDER BY profit DESC"
+    },
+    {
+        "question": "What is the accounts receivable aging?",
+        "sql": "SELECT CASE WHEN julianday('now') - julianday(i.created_at) <= 30 THEN '0-30 days' WHEN julianday('now') - julianday(i.created_at) <= 60 THEN '31-60 days' WHEN julianday('now') - julianday(i.created_at) <= 90 THEN '61-90 days' ELSE '90+ days' END as aging_bucket, SUM(i.total_amount - COALESCE(paid.total_paid, 0)) as outstanding FROM invoices i LEFT JOIN (SELECT invoice_id, SUM(amount) as total_paid FROM customer_payments GROUP BY invoice_id) paid ON i.id = paid.invoice_id WHERE i.payment_method = 'Credit' GROUP BY aging_bucket"
+    },
+    {
+        "question": "Show accounts payable aging",
+        "sql": "SELECT CASE WHEN julianday('now') - julianday(po.order_date) <= 30 THEN '0-30 days' WHEN julianday('now') - julianday(po.order_date) <= 60 THEN '31-60 days' ELSE '60+ days' END as aging_bucket, SUM(po.total_amount - COALESCE(paid.total_paid, 0)) as outstanding FROM purchase_orders po LEFT JOIN (SELECT supplier_id, SUM(amount) as total_paid FROM supplier_payments GROUP BY supplier_id) paid ON po.supplier_id = paid.supplier_id WHERE po.status = 'received' GROUP BY aging_bucket"
+    }
+]

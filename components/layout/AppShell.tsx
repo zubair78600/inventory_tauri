@@ -8,6 +8,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { PasswordPromptModal } from '@/components/shared/PasswordPromptModal';
 import { listen } from '@tauri-apps/api/event';
+import { AIChatButton } from '@/components/ai-chat';
+import {
+    hasLocalBiometricEnrollment,
+    authenticateWithBiometric,
+    getBiometricErrorMessage,
+} from '@/lib/biometric';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
     const { user, loading, logout } = useAuth();
@@ -69,6 +75,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     const handlePasswordSuccess = () => {
+        // Store timestamp so SettingsPage knows we already authenticated
+        sessionStorage.setItem('settings_auth_ts', Date.now().toString());
         router.push('/settings');
     };
 
@@ -87,7 +95,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 onSuccess={handlePasswordSuccess}
                 title="Settings Access"
                 description="Please enter your password to access settings."
+                onBiometric={user && hasLocalBiometricEnrollment(user.username) ? async () => {
+                    try {
+                        const result = await authenticateWithBiometric(user.username);
+                        if (result) {
+                            handlePasswordSuccess();
+                            setShowPasswordPrompt(false);
+                        }
+                    } catch (err) {
+                        console.error('Biometric auth failed:', getBiometricErrorMessage(err));
+                    }
+                } : undefined}
             />
+
+            {/* AI Chat Button */}
+            <AIChatButton />
         </div>
     );
 }

@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "tauri": "tauri",
-    "tauri:dev": "next dev --webpack & TAURI_DEV_HOST=localhost tauri dev",
+    "tauri:dev": "TAURI_DEV_HOST=localhost tauri dev",
     "tauri:build": "tauri build",
     "tauri:build:mac": "tauri build --target universal-apple-darwin",
     "tauri:build:win": "tauri build --target x86_64-pc-windows-msvc",
@@ -20,6 +20,8 @@
   "dependencies": {
     "@choochmeque/tauri-plugin-biometry-api": "^0.2.5",
     "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-progress": "^1.1.8",
+    "@radix-ui/react-scroll-area": "^1.2.10",
     "@tanstack/react-query": "^5.90.10",
     "@tanstack/react-virtual": "^3.13.12",
     "@tauri-apps/api": "^2.0.0",

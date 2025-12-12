@@ -1,0 +1,62 @@
+[
+    {
+        "question": "Show me all products",
+        "sql": "SELECT * FROM products"
+    },
+    {
+        "question": "List all products with their stock quantity",
+        "sql": "SELECT name, sku, stock_quantity FROM products ORDER BY name"
+    },
+    {
+        "question": "What products have low stock?",
+        "sql": "SELECT name, sku, stock_quantity FROM products WHERE stock_quantity < 10 ORDER BY stock_quantity ASC"
+    },
+    {
+        "question": "Show products that are out of stock",
+        "sql": "SELECT name, sku FROM products WHERE stock_quantity = 0"
+    },
+    {
+        "question": "What is the total value of inventory?",
+        "sql": "SELECT SUM(stock_quantity * price) as total_inventory_value FROM products"
+    },
+    {
+        "question": "What is the potential revenue from current stock?",
+        "sql": "SELECT SUM(stock_quantity * selling_price) as potential_revenue FROM products WHERE selling_price IS NOT NULL"
+    },
+    {
+        "question": "Show top 10 products by stock quantity",
+        "sql": "SELECT name, stock_quantity FROM products ORDER BY stock_quantity DESC LIMIT 10"
+    },
+    {
+        "question": "List products by category",
+        "sql": "SELECT category, name, stock_quantity FROM products ORDER BY category, name"
+    },
+    {
+        "question": "What categories exist in products?",
+        "sql": "SELECT DISTINCT category FROM products WHERE category IS NOT NULL ORDER BY category"
+    },
+    {
+        "question": "Show products with their profit margin",
+        "sql": "SELECT name, price as cost_price, selling_price, (selling_price - price) as profit_per_unit FROM products WHERE selling_price IS NOT NULL ORDER BY profit_per_unit DESC"
+    },
+    {
+        "question": "Find products with highest profit margin",
+        "sql": "SELECT name, price, selling_price, ((selling_price - price) / price * 100) as margin_percent FROM products WHERE price > 0 AND selling_price IS NOT NULL ORDER BY margin_percent DESC LIMIT 10"
+    },
+    {
+        "question": "How many products do we have?",
+        "sql": "SELECT COUNT(*) as total_products FROM products"
+    },
+    {
+        "question": "Show recently added products",
+        "sql": "SELECT name, sku, created_at FROM products ORDER BY created_at DESC LIMIT 10"
+    },
+    {
+        "question": "What is the average product price?",
+        "sql": "SELECT AVG(price) as avg_cost_price, AVG(selling_price) as avg_selling_price FROM products"
+    },
+    {
+        "question": "Show products without a supplier",
+        "sql": "SELECT name, sku FROM products WHERE supplier_id IS NULL"
+    }
+]
