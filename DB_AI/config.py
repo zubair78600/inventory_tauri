@@ -45,7 +45,7 @@ DB_PATH = APP_DATA / "inventory.db"
 
 # Model configuration
 MODEL_NAME = "Qwen2.5-3B-Instruct-GGUF"
-MODEL_FILE = "model.gguf"  # The actual model file name
+MODEL_FILE = "qwen2.5-3b-instruct-q4_k_m.gguf"  # The actual model file name
 MODEL_PATH = MODELS_DIR / MODEL_FILE
 MODEL_REPO = "Qwen/Qwen2.5-3B-Instruct-GGUF"
 

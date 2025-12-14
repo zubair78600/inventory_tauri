@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::process::{Child, Command, Stdio};
 
 /// Base GitHub release URL for sidecar downloads
-const SIDECAR_RELEASE_BASE: &str = "https://github.com/zubair78600/inventory_tauri/releases/download/v1.0.1";
+const SIDECAR_RELEASE_BASE: &str = "https://github.com/zubair78600/inventory_tauri/releases/download/v1.0.2";
 
 /// Get platform-specific binary name
 fn get_sidecar_binary_name() -> &'static str {
@@ -174,12 +174,38 @@ pub async fn start_ai_sidecar(app: tauri::AppHandle) -> Result<(), String> {
     log::info!("Starting AI sidecar from: {:?}", sidecar_path);
 
     // Spawn the process
-    let child = Command::new(&sidecar_path)
+    let mut child = Command::new(&sidecar_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
     
+    // Stream stdout
+    if let Some(stdout) = child.stdout.take() {
+        tauri::async_runtime::spawn(async move {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    log::info!("[Sidecar] {}", line);
+                }
+            }
+        });
+    }
+
+    // Stream stderr
+    if let Some(stderr) = child.stderr.take() {
+        tauri::async_runtime::spawn(async move {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    log::error!("[Sidecar Error] {}", line);
+                }
+            }
+        });
+    }
+
     log::info!("AI sidecar started with PID: {}", child.id());
     *process_guard = Some(child);
     
