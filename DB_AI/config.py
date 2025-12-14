@@ -45,9 +45,10 @@ DB_PATH = APP_DATA / "inventory.db"
 
 # Model configuration
 MODEL_NAME = "Qwen2.5-3B-Instruct-GGUF"
-MODEL_FILE = "qwen2.5-3b-instruct-q4_k_m.gguf"  # The actual model file name
+MODEL_FILE = "model.gguf"  # Local model file name (user's existing model)
 MODEL_PATH = MODELS_DIR / MODEL_FILE
 MODEL_REPO = "Qwen/Qwen2.5-3B-Instruct-GGUF"
+MODEL_REPO_FILE = "qwen2.5-3b-instruct-q4_k_m.gguf"  # The HuggingFace file to download
 
 # Server configuration
 SERVER_HOST = "127.0.0.1"

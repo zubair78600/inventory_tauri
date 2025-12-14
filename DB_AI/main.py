@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 vanna_ai: Optional[VannaAI] = None
 sql_executor: Optional[SQLExecutor] = None
+model_init_error: Optional[str] = None
 
 
 class QueryRequest(BaseModel):
@@ -39,9 +40,11 @@ class TrainingRequest(BaseModel):
 
 class SetupStatus(BaseModel):
     model_downloaded: bool
+    model_valid: bool = True  # True if model file is valid/loadable
     vectordb_initialized: bool
     training_data_loaded: bool
     ready: bool
+    initialization_error: Optional[str] = None  # Error message if model failed to init
 
 
 class DownloadProgress(BaseModel):
@@ -56,7 +59,7 @@ class DownloadProgress(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global vanna_ai, sql_executor
+    global vanna_ai, sql_executor, model_init_error
     logger.info("Starting AI Chat sidecar...")
     
     # Initialize SQL executor (always available for read-only queries)
@@ -71,11 +74,15 @@ async def lifespan(app: FastAPI):
                 vectordb_path=str(VECTORDB_PATH)
             )
             logger.info("VannaAI initialized successfully")
+            model_init_error = None
         except Exception as e:
-            logger.error(f"Failed to initialize VannaAI: {e}")
+            error_msg = str(e)
+            logger.error(f"Failed to initialize VannaAI: {error_msg}")
+            model_init_error = error_msg
             vanna_ai = None
     else:
         logger.warning(f"Model not found at {MODEL_PATH}")
+        model_init_error = "Model file not found or empty"
     
     yield
     
@@ -101,13 +108,23 @@ async def health_check():
 @app.get("/status", response_model=SetupStatus)
 async def get_status():
     """Get the current setup status"""
-    # Check model exists AND has content (not empty/corrupt)
-    model_downloaded = MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 1000000  # > 1MB
+    # Check model exists AND has reasonable size (>1GB for valid GGUF)
+    model_exists = MODEL_PATH.exists()
+    model_size = MODEL_PATH.stat().st_size if model_exists else 0
+    model_downloaded = model_exists and model_size > 1000000  # > 1MB means file exists
+    
+    # Model is valid if it loaded successfully (vanna_ai is not None)
+    # or if file exists with proper size (>1GB) - may just need restart
+    min_valid_size = 1 * 1024 * 1024 * 1024  # 1GB
+    model_valid = vanna_ai is not None or (model_exists and model_size >= min_valid_size)
+    
     return SetupStatus(
         model_downloaded=model_downloaded,
+        model_valid=model_valid,
         vectordb_initialized=VECTORDB_PATH.exists(),
         training_data_loaded=vanna_ai is not None and vanna_ai.is_trained(),
-        ready=vanna_ai is not None
+        ready=vanna_ai is not None,
+        initialization_error=model_init_error if vanna_ai is None else None
     )
 
 
@@ -224,6 +241,26 @@ async def cancel_download():
         return {"success": True}
     except Exception as e:
         logger.error(f"Failed to cancel download: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/force-redownload")
+async def force_redownload():
+    """Force delete model and start fresh download (user explicitly requested)"""
+    import threading
+    try:
+        from scripts.download_model import force_delete_model, download_qwen_model
+        
+        # Delete existing model
+        force_delete_model()
+        
+        # Start new download in background
+        thread = threading.Thread(target=download_qwen_model, daemon=True)
+        thread.start()
+        
+        return {"success": True, "message": "Model deleted, download started"}
+    except Exception as e:
+        logger.error(f"Force redownload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

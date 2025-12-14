@@ -14,9 +14,11 @@ export interface QueryResponse {
 
 export interface SetupStatus {
     model_downloaded: boolean;
+    model_valid: boolean;  // True if model file is valid/loadable
     vectordb_initialized: boolean;
     training_data_loaded: boolean;
     ready: boolean;
+    initialization_error?: string;  // Error message if model failed to init
 }
 
 export interface DownloadProgress {
@@ -143,6 +145,16 @@ export const aiChatApi = {
      */
     cancelDownload: async (): Promise<void> => {
         await fetch(`${AI_SERVER_URL}/cancel-download`, { method: 'POST' });
+    },
+
+    /**
+     * Force delete model and start fresh download (user explicitly requested)
+     */
+    forceRedownload: async (): Promise<void> => {
+        const response = await fetch(`${AI_SERVER_URL}/force-redownload`, { method: 'POST' });
+        if (!response.ok) {
+            throw new Error('Failed to start re-download');
+        }
     },
 
     /**

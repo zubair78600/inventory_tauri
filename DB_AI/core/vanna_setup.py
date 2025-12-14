@@ -25,15 +25,21 @@ class LlamaCppLLM:
         )
         logger.info("Model loaded successfully")
 
-    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.1) -> str:
+    def generate(self, prompt: str, context: str = "", max_tokens: int = 512, temperature: float = 0.1) -> str:
         """Generate SQL from a prompt using the Qwen model"""
-        logger.info(f"LLM prompt: {prompt}")
-        response = self.llm.create_chat_completion(
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are a SQL expert for an inventory management SQLite database.
+        
+        # Build system prompt with emphasis on SQLite
+        system_content = """You are a SQL expert for an inventory management SQLite database.
 Generate ONLY valid SQLite SQL. Return ONLY the query, no markdown, no explanations.
+
+CRITICAL: This is SQLite, NOT MySQL! Use SQLite date functions:
+- For current month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+- For today: DATE(created_at) = DATE('now')  
+- For this week: created_at >= DATE('now', '-7 days')
+- NEVER use MONTH(), YEAR(), CURDATE() - these are MySQL functions!
+
+For name searches, ALWAYS use case-insensitive LIKE:
+- WHERE LOWER(name) LIKE LOWER('%search_term%')
 
 DATABASE SCHEMA:
 
@@ -58,16 +64,21 @@ CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT UNIQUE, sup
 -- Purchase Order Items: id, po_id, product_id, quantity, unit_cost, total_cost
 CREATE TABLE purchase_order_items (id INTEGER PRIMARY KEY, po_id INTEGER, product_id INTEGER, quantity INTEGER, unit_cost REAL, total_cost REAL);
 
-Example queries:
-Q: Show today's sales -> SELECT * FROM invoices WHERE DATE(created_at) = DATE('now')
-Q: Low stock products -> SELECT name, stock_quantity FROM products WHERE stock_quantity < 10
-Q: Products from each supplier -> SELECT s.name, p.name FROM suppliers s JOIN products p ON s.id = p.supplier_id
-
 RULES:
 1. Column 'name' is just 'name', NOT 'product_name' or 'customer_name'
-2. Use DATE(created_at) = DATE('now') for today
-3. Always start with SELECT"""
-                },
+2. Use strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') for THIS MONTH
+3. Use DATE(created_at) = DATE('now') for TODAY
+4. Always start with SELECT
+5. For customer/supplier searches by name, use LOWER() for case-insensitive matching"""
+
+        # Add context from training data if available
+        if context:
+            system_content += f"\n\nRELEVANT EXAMPLES:\n{context}"
+
+        logger.info(f"LLM prompt: {prompt}")
+        response = self.llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=max_tokens,
@@ -152,10 +163,14 @@ class VannaAI:
 
     def generate_sql(self, question: str) -> str:
         """Generate SQL from a natural language question"""
-        # The system prompt already contains the full DDL schema
-        # Just pass the question directly
         logger.info(f"Generating SQL for question: {question}")
-        sql = self.llm.generate(question)
+        
+        # Get relevant training examples from vector store
+        context = self.vector_store.get_relevant_context(question, n_results=5)
+        logger.info(f"Retrieved context: {context[:200]}..." if context else "No context found")
+        
+        # Generate SQL with context
+        sql = self.llm.generate(question, context=context)
         logger.info(f"Raw LLM output: {repr(sql)}")
         
         # Clean up any markdown or extra formatting
