@@ -162,12 +162,19 @@ export const aiChatApi = {
     /**
      * Check if the AI server is healthy
      */
-    healthCheck: async (): Promise<boolean> => {
+    /**
+     * Check if the AI server is healthy and ready
+     */
+    healthCheck: async (): Promise<{ healthy: boolean; ready: boolean }> => {
         try {
             const response = await fetch(`${AI_SERVER_URL}/health`);
-            return response.ok;
+            if (response.ok) {
+                const data = await response.json();
+                return { healthy: true, ready: data.ready };
+            }
+            return { healthy: false, ready: false };
         } catch {
-            return false;
+            return { healthy: false, ready: false };
         }
     },
 };

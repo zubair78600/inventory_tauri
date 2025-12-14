@@ -6,6 +6,7 @@ import {
     Dialog,
     DialogContent,
     DialogTitle,
+    DialogDescription,
 } from '@/components/ui/dialog';
 import {
     Send,
@@ -117,11 +118,20 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
 
     const checkServerStatus = useCallback(async () => {
         try {
-            const isHealthy = await aiChatApi.healthCheck();
-            setIsServerReady(isHealthy);
-            if (isHealthy) {
+            const { healthy, ready } = await aiChatApi.healthCheck();
+            setIsServerReady(healthy);
+
+            if (healthy && ready) {
                 const setupStatus = await aiChatApi.getStatus();
                 setStatus(setupStatus);
+            } else if (healthy && !ready) {
+                // Server is running but model not ready - triggers Setup Mode
+                setStatus({
+                    model_downloaded: false,
+                    vectordb_initialized: false,
+                    training_data_loaded: false,
+                    ready: false
+                });
             }
         } catch {
             setIsServerReady(false);
@@ -137,11 +147,20 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         } catch (error) {
             // Dev mode fallback
             console.log('Dev mode: checking manual server...');
-            const isHealthy = await aiChatApi.healthCheck();
-            if (isHealthy) {
+            const { healthy, ready } = await aiChatApi.healthCheck();
+            if (healthy) {
                 setIsServerReady(true);
-                const setupStatus = await aiChatApi.getStatus();
-                setStatus(setupStatus);
+                if (ready) {
+                    const setupStatus = await aiChatApi.getStatus();
+                    setStatus(setupStatus);
+                } else {
+                    setStatus({
+                        model_downloaded: false,
+                        vectordb_initialized: false,
+                        training_data_loaded: false,
+                        ready: false
+                    });
+                }
             } else {
                 alert('AI Server not running.\nRun manually: cd DB_AI && python main.py');
             }
@@ -213,6 +232,9 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                         <Sparkles className="h-6 w-6 text-sky-500" />
                         Setting up AI Backend
                     </DialogTitle>
+                    <DialogDescription className="text-center text-muted-foreground">
+                        Configure and download necessary AI components
+                    </DialogDescription>
                     <div className="space-y-4 p-6 text-center">
                         {!isDownloadingSidecar && !sidecarProgress && (
                             <>
@@ -266,6 +288,9 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                         <Sparkles className="h-6 w-6 text-sky-500" />
                         Setting up AI Model
                     </DialogTitle>
+                    <DialogDescription className="hidden">
+                        Downloading and configuring the AI model
+                    </DialogDescription>
                     <DownloadProgress onComplete={() => checkServerStatus()} onCancel={() => onOpenChange(false)} />
                 </DialogContent>
             </Dialog>
@@ -279,6 +304,9 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                     className="sm:max-w-[800px] h-[650px] flex flex-col p-0 gap-0 border-white/20 bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl shadow-2xl rounded-[40px] overflow-hidden ring-1 ring-black/5 dark:ring-white/10"
                     onInteractOutside={(e) => e.preventDefault()}
                 >
+                    <DialogDescription className="hidden">
+                        AI Chat Interface to interact with inventory data
+                    </DialogDescription>
                     {/* Header */}
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}

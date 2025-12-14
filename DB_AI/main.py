@@ -1,6 +1,6 @@
 import time
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
@@ -62,8 +62,8 @@ async def lifespan(app: FastAPI):
     # Initialize SQL executor (always available for read-only queries)
     sql_executor = SQLExecutor(str(DB_PATH))
     
-    # Initialize VannaAI only if model is downloaded
-    if MODEL_PATH.exists():
+    # Initialize VannaAI only if model is downloaded and valid
+    if MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 0:
         try:
             vanna_ai = VannaAI(
                 model_path=str(MODEL_PATH),
@@ -182,11 +182,12 @@ async def train(request: TrainingRequest):
 
 
 @app.post("/download-model")
-async def download_model():
+async def download_model(background_tasks: BackgroundTasks):
     """Trigger model download (runs in background)"""
     try:
         from scripts.download_model import download_qwen_model
-        download_qwen_model()
+        # Run in background to avoid blocking the API
+        background_tasks.add_task(download_qwen_model)
         return {"success": True}
     except Exception as e:
         logger.error(f"Model download failed: {e}")

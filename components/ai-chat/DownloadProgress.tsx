@@ -16,6 +16,18 @@ export function DownloadProgress({ onComplete, onCancel }: DownloadProgressProps
     const [progress, setProgress] = useState<DownloadProgressType | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+    // Check for existing download on mount
+    useEffect(() => {
+        const checkExisting = async () => {
+            const data = await aiChatApi.getDownloadProgress();
+            if (data && data.status === 'downloading') {
+                setProgress(data);
+                setIsDownloading(true);
+            }
+        };
+        checkExisting();
+    }, []);
+
     // Poll progress while downloading
     useEffect(() => {
         if (!isDownloading) return;
@@ -57,8 +69,8 @@ export function DownloadProgress({ onComplete, onCancel }: DownloadProgressProps
         onCancel();
     };
 
-    // Not started yet
-    if (!isDownloading && !progress) {
+    // Not started yet, Error, or Cancelled
+    if ((!isDownloading && !progress) || (!isDownloading && progress && progress.status !== 'complete')) {
         return (
             <div className="space-y-4 p-6 text-center">
                 <Download className="h-12 w-12 mx-auto text-muted-foreground" />
@@ -74,9 +86,15 @@ export function DownloadProgress({ onComplete, onCancel }: DownloadProgressProps
                         <span>{error}</span>
                     </div>
                 )}
+                {progress?.status === 'cancelled' && (
+                    <div className="flex items-center justify-center gap-2 text-sm text-yellow-600">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>Download was cancelled.</span>
+                    </div>
+                )}
                 <Button onClick={handleStartDownload} className="w-full">
                     <Download className="mr-2 h-4 w-4" />
-                    Download AI Model
+                    {progress ? 'Retry Download' : 'Download AI Model'}
                 </Button>
             </div>
         );
@@ -121,6 +139,21 @@ export function DownloadProgress({ onComplete, onCancel }: DownloadProgressProps
                     </p>
                 </div>
                 <Loader2 className="h-6 w-6 mx-auto animate-spin" />
+            </div>
+        );
+    }
+
+    // Starting download (loading state)
+    if (isDownloading && !progress) {
+        return (
+            <div className="space-y-4 p-6 text-center">
+                <Loader2 className="h-10 w-10 mx-auto animate-spin text-primary" />
+                <div>
+                    <h3 className="font-semibold">Starting Download...</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Connecting to server...
+                    </p>
+                </div>
             </div>
         );
     }
