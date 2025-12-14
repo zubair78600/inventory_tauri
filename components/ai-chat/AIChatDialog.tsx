@@ -18,7 +18,9 @@ import {
     User,
     ArrowRight,
     Search,
-    ChevronRight
+    ChevronRight,
+    Maximize2,
+    Minimize2
 } from 'lucide-react';
 import {
     aiChatApi,
@@ -63,6 +65,9 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
     const [sidecarDownloaded, setSidecarDownloaded] = useState<boolean | null>(null);
     const [isDownloadingSidecar, setIsDownloadingSidecar] = useState(false);
     const [sidecarProgress, setSidecarProgress] = useState<{ percentage: number; speed_mbps: number } | null>(null);
+
+    // UI state
+    const [isMaximized, setIsMaximized] = useState(false);
 
     // Check sidecar status on open
     useEffect(() => {
@@ -140,6 +145,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                 // Server is running but model not ready - triggers Setup Mode
                 setStatus({
                     model_downloaded: false,
+                    model_valid: false,
                     vectordb_initialized: false,
                     training_data_loaded: false,
                     ready: false
@@ -208,6 +214,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                 } else {
                     setStatus({
                         model_downloaded: false,
+                        model_valid: false,
                         vectordb_initialized: false,
                         training_data_loaded: false,
                         ready: false
@@ -332,6 +339,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
     }
 
     // Render Model Download if sidecar ready but model not downloaded
+    // OR show error if model exists but is corrupted
     if (open && status && !status.model_downloaded) {
         return (
             <Dialog open={open} onOpenChange={onOpenChange}>
@@ -343,7 +351,94 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                     <DialogDescription className="hidden">
                         Downloading and configuring the AI model
                     </DialogDescription>
-                    <DownloadProgress onComplete={() => checkServerStatus()} onCancel={() => onOpenChange(false)} />
+                    <DownloadProgress onComplete={async () => {
+                        // Restart sidecar to load the newly downloaded model
+                        try {
+                            await aiChatApi.stopSidecar();
+                        } catch {
+                            // Ignore stop errors
+                        }
+                        await startServer();
+                    }} onCancel={() => onOpenChange(false)} />
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    // Model exists but failed to initialize - show error with restart option
+    if (open && status && status.model_downloaded && !status.ready) {
+        return (
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-[500px] border-none bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl rounded-2xl">
+                    <DialogTitle className="flex items-center gap-2 text-xl font-light">
+                        <Bot className="h-6 w-6 text-amber-500" />
+                        AI Model Initialization
+                    </DialogTitle>
+                    <DialogDescription className="hidden">
+                        AI model initialization status
+                    </DialogDescription>
+                    <div className="space-y-4 p-6 text-center">
+                        {isStartingServer ? (
+                            <>
+                                <Loader2 className="h-12 w-12 mx-auto animate-spin text-sky-500" />
+                                <div>
+                                    <h3 className="font-semibold">Initializing AI Model...</h3>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        This may take up to 30 seconds on first load.
+                                    </p>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="h-12 w-12 mx-auto rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center">
+                                    <Bot className="h-6 w-6 text-amber-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold">Model Ready to Initialize</h3>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        {status.model_valid
+                                            ? "Model file found. Click below to start the AI."
+                                            : "Model file may be corrupted. Try restarting or re-download."}
+                                    </p>
+                                    {status.initialization_error && (
+                                        <p className="text-xs text-red-500 mt-2 font-mono bg-red-50 dark:bg-red-900/20 rounded p-2">
+                                            {status.initialization_error}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <button
+                                        onClick={startServer}
+                                        className="w-full px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <RefreshCw className="h-4 w-4" />
+                                        {status.model_valid ? "Start AI Server" : "Retry Initialization"}
+                                    </button>
+                                    {!status.model_valid && (
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    // Force delete and re-download via API
+                                                    await aiChatApi.forceRedownload();
+                                                    // Update status to show download UI
+                                                    setStatus({
+                                                        ...status,
+                                                        model_downloaded: false,
+                                                        model_valid: false
+                                                    });
+                                                } catch (e) {
+                                                    console.error('Failed to force re-download:', e);
+                                                }
+                                            }}
+                                            className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg font-medium transition-colors text-sm"
+                                        >
+                                            Re-download Model (~2 GB)
+                                        </button>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </DialogContent>
             </Dialog>
         );
@@ -353,7 +448,12 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent
-                    className="sm:max-w-[800px] h-[650px] flex flex-col p-0 gap-0 border-white/20 bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl shadow-2xl rounded-[40px] overflow-hidden ring-1 ring-black/5 dark:ring-white/10"
+                    className={cn(
+                        "flex flex-col p-0 gap-0 border-white/20 bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl shadow-2xl overflow-hidden ring-1 ring-black/5 dark:ring-white/10 transition-all duration-300",
+                        isMaximized
+                            ? "!max-w-[100vw] !w-[100vw] !h-[100vh] !rounded-none"
+                            : "sm:max-w-[800px] h-[650px] rounded-[40px]"
+                    )}
                     onInteractOutside={(e) => e.preventDefault()}
                 >
                     <DialogDescription className="hidden">
@@ -396,6 +496,13 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                                 </motion.button>
                             )}
                             <button
+                                onClick={() => setIsMaximized(!isMaximized)}
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                                title={isMaximized ? "Minimize" : "Maximize"}
+                            >
+                                {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                            </button>
+                            <button
                                 onClick={() => onOpenChange(false)}
                                 className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
                             >
@@ -406,7 +513,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
 
                     {/* Chat Area */}
                     <div className="flex-1 overflow-hidden relative bg-slate-50/50 dark:bg-slate-900/50">
-                        <ScrollArea className="h-full px-6 py-4">
+                        <ScrollArea className="h-full px-6 pt-6 pb-4">
                             {!isServerReady && !isStartingServer ? (
                                 <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
                                     <Bot className="h-16 w-16 text-muted-foreground mb-4" />

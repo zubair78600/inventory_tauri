@@ -11,7 +11,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import MODEL_REPO, MODEL_FILE, MODELS_DIR
+from config import MODEL_REPO, MODEL_FILE, MODELS_DIR, MODEL_REPO_FILE
 
 # Progress file for frontend to read
 PROGRESS_FILE = MODELS_DIR / ".download_progress.json"
@@ -37,9 +37,22 @@ def download_qwen_model():
     """Download model with progress tracking"""
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # HuggingFace direct download URL
-    url = f"https://huggingface.co/{MODEL_REPO}/resolve/main/{MODEL_FILE}"
+    # HuggingFace direct download URL (uses the repo file name)
+    url = f"https://huggingface.co/{MODEL_REPO}/resolve/main/{MODEL_REPO_FILE}"
+    # Save as our local model file name
     output_path = MODELS_DIR / MODEL_FILE
+
+    # Clean up any existing corrupted/incomplete file (less than 1GB)
+    if output_path.exists():
+        file_size = output_path.stat().st_size
+        min_valid_size = 1 * 1024 * 1024 * 1024  # 1GB
+        if file_size < min_valid_size:
+            print(f"Removing incomplete/corrupted file ({file_size} bytes)...")
+            output_path.unlink()
+        else:
+            print(f"Model already exists and appears valid ({file_size / (1024**3):.2f} GB)")
+            update_progress(file_size, file_size, "complete")
+            return str(output_path)
 
     print(f"Downloading {MODEL_FILE}...")
     print(f"From: {url}")
@@ -120,9 +133,28 @@ def cancel_download():
 
 
 def check_model_exists():
-    """Check if model is already downloaded"""
+    """Check if model is already downloaded and valid (not empty/corrupt)"""
     model_path = MODELS_DIR / MODEL_FILE
-    return model_path.exists()
+    if not model_path.exists():
+        return False
+    # Model should be at least 1GB (valid GGUF file)
+    # If it's smaller, it's likely corrupted or incomplete
+    file_size = model_path.stat().st_size
+    min_valid_size = 1 * 1024 * 1024 * 1024  # 1GB
+    return file_size >= min_valid_size
+
+
+def force_delete_model():
+    """Explicitly delete the model file for re-download (user requested)"""
+    model_path = MODELS_DIR / MODEL_FILE
+    if model_path.exists():
+        print(f"Deleting model file: {model_path}")
+        model_path.unlink()
+        # Also clear progress file
+        if PROGRESS_FILE.exists():
+            PROGRESS_FILE.unlink()
+        return True
+    return False
 
 
 if __name__ == "__main__":

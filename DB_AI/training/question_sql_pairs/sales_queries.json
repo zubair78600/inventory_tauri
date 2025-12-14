@@ -16,6 +16,22 @@
         "sql": "SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
     },
     {
+        "question": "Total revenue this month",
+        "sql": "SELECT SUM(total_amount) as total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+    },
+    {
+        "question": "This month revenue",
+        "sql": "SELECT SUM(total_amount) as revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+    },
+    {
+        "question": "Monthly revenue",
+        "sql": "SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+    },
+    {
+        "question": "How much revenue did we make this month?",
+        "sql": "SELECT SUM(total_amount) as total_revenue, COUNT(*) as order_count FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+    },
+    {
         "question": "Show last 10 invoices",
         "sql": "SELECT invoice_number, total_amount, created_at FROM invoices ORDER BY created_at DESC LIMIT 10"
     },
@@ -58,5 +74,13 @@
     {
         "question": "What is the credit sales total?",
         "sql": "SELECT SUM(total_amount) as credit_sales FROM invoices WHERE payment_method = 'Credit'"
+    },
+    {
+        "question": "How many orders this month?",
+        "sql": "SELECT COUNT(*) as order_count FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+    },
+    {
+        "question": "Total sales this month",
+        "sql": "SELECT SUM(total_amount) as total_sales, COUNT(*) as total_orders FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
     }
 ]

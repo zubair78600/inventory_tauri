@@ -42,6 +42,7 @@ src-tauri/WixTools
 
 # AI Model files (downloaded on-demand)
 DB_AI/models/
+DB_AI/vectordb/
 *.gguf
 
 # Python cache
