@@ -835,12 +835,14 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                     {isUser ? <User className="h-4 w-4" /> : <Bot className="h-5 w-5" />}
                 </div>
 
-                <div className={cn(
-                    "relative px-5 py-3.5 shadow-md text-sm min-w-[60px] overflow-hidden",
-                    isUser
-                        ? "bg-indigo-600 text-white rounded-3xl"
-                        : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-3xl"
-                )}>
+                <div
+                    style={{ backgroundColor: isUser ? '#4f46e5' : undefined }}
+                    className={cn(
+                        "relative px-5 py-3.5 shadow-md text-sm min-w-[60px] overflow-hidden",
+                        isUser
+                            ? "text-white rounded-3xl"
+                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-3xl"
+                    )}>
                     <p className={cn(
                         "leading-relaxed whitespace-pre-wrap break-words",
                         isUser ? "text-white" : "text-slate-900 dark:text-slate-100"
@@ -894,14 +896,14 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                         </div>
                     ) : (
                         message.results && message.results.length > 0 && (
-                            <div className="mt-4 rounded-xl border border-black/5 dark:border-white/5 overflow-hidden bg-white/50 dark:bg-black/20">
-                                <div className="overflow-x-auto w-full">
-                                    <table className="w-full text-xs min-w-max">
+                            <div className="mt-4 rounded-xl border border-black/5 dark:border-white/5 overflow-hidden bg-white/50 dark:bg-black/20 max-w-full">
+                                <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
+                                    <table className="w-full text-[10px] min-w-max">
                                         <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5">
                                             <tr>
                                                 {Object.keys(message.results[0]).map((key) => (
-                                                    <th key={key} className="px-4 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">
-                                                        {key}
+                                                    <th key={key} className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap uppercase tracking-wider">
+                                                        {key.replace(/_/g, ' ')}
                                                     </th>
                                                 ))}
                                             </tr>
@@ -910,7 +912,7 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                                             {message.results.slice(0, 10).map((row, i) => (
                                                 <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                                                     {Object.values(row).map((value, j) => (
-                                                        <td key={j} className="px-4 py-2.5 whitespace-nowrap max-w-[200px] truncate" title={String(value)}>
+                                                        <td key={j} className="px-2 py-1.5 whitespace-nowrap max-w-[120px] truncate" title={String(value)}>
                                                             {String(value ?? '-')}
                                                         </td>
                                                     ))}
@@ -919,7 +921,7 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="bg-slate-50 dark:bg-slate-900 px-3 py-2 text-[10px] text-muted-foreground flex justify-between border-t border-black/5">
+                                <div className="bg-slate-50 dark:bg-slate-900 px-3 py-1.5 text-[9px] text-muted-foreground flex justify-between border-t border-black/5">
                                     <span>Showing {Math.min(message.results.length, 10)} of {message.results.length} results</span>
                                     {message.timing && <span>Exec: {formatTime(message.timing.sqlRun)}</span>}
                                 </div>

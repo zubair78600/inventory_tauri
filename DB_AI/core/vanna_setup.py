@@ -239,26 +239,32 @@ class VannaAI:
             return sql
         
         # Customer queries (name, details, info, or just "customer X")
-        if question_lower.startswith('customer ') or any(keyword in question_lower for keyword in ['customer name', 'customer details', 'customer info', 'who is customer']):
+        if question_lower.startswith('customer ') or question_lower.startswith('customers ') or any(keyword in question_lower for keyword in ['customer name', 'customer details', 'customer info', 'who is customer']):
             # Check for phone number in query
             if phone_match:
                 phone = phone_match.group(1)
-                sql = f"SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.phone LIKE '%{phone}%' GROUP BY c.id"
+                sql = f"SELECT c.id, c.name, c.email, c.phone, c.address, c.place, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.phone LIKE '%{phone}%' GROUP BY c.id"
                 logger.info(f"Detected customer phone query, using hardcoded SQL: {sql}")
                 return sql
             
             # Check for email in query
             if email_match:
                 email = email_match.group(0)
-                sql = f"SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.email LIKE '%{email}%' GROUP BY c.id"
+                sql = f"SELECT c.id, c.name, c.email, c.phone, c.address, c.place, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.email LIKE '%{email}%' GROUP BY c.id"
                 logger.info(f"Detected customer email query, using hardcoded SQL: {sql}")
                 return sql
             
             # Default to name search
-            name_match = re.search(r'(?:customer name|customer details for|customer info for|who is customer|customer)\s+(\w+)', question_lower)
+            name_match = re.search(r'(?:customer name|customer details for|customer info for|who is customer|customers|customer)\s+(\w+)', question_lower)
             customer_name = name_match.group(1).strip() if name_match else question.split()[-1]
             
-            sql = f"SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%') GROUP BY c.id"
+            # Handle "customer list" or "customer all" explicitly
+            if customer_name.lower() in ['list', 'all', 'data', 'details', 'detail', 'info']:
+                sql = "SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id GROUP BY c.id"
+                logger.info(f"Detected customer list query, using hardcoded SQL: {sql}")
+                return sql
+            
+            sql = f"SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%') GROUP BY c.id"
             logger.info(f"Detected customer name query, using hardcoded SQL: {sql}")
             return sql
         
