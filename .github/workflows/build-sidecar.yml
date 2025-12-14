@@ -42,7 +42,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake
+          sudo apt-get install -y build-essential cmake libopenblas-dev
       
       - name: Install build tools (Windows)
         if: runner.os == 'Windows'
@@ -71,10 +71,11 @@ jobs:
         run: |
           cd DB_AI
           pip install --upgrade pip wheel setuptools
-          # Remove llama-cpp-python from requirements
+          # Remove llama-cpp-python from requirements to build from source
           sed -i '/llama-cpp-python/d' requirements.txt
-          pip install llama-cpp-python==0.2.90 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
           pip install -r requirements.txt
+          # Build llama-cpp-python from source for glibc compatibility
+          CMAKE_ARGS="-DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS" pip install llama-cpp-python==0.2.90 --no-binary llama-cpp-python
           pip install pyinstaller
       
       - name: Install dependencies (Windows)
