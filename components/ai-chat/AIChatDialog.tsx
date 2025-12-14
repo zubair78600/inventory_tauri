@@ -27,6 +27,9 @@ import {
     generateMessageId,
     formatTime,
 } from '@/lib/ai-chat';
+
+import { listen } from '@tauri-apps/api/event';
+import { getVersion } from '@tauri-apps/api/app';
 import { DownloadProgress } from './DownloadProgress';
 import { TrainingFeedbackModal } from './TrainingFeedbackModal';
 import { cn } from '@/lib/utils';
@@ -138,13 +141,53 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         }
     }, []);
 
+    const [backendLogs, setBackendLogs] = useState<string[]>([]);
+
+    useEffect(() => {
+        const unlistenOutput = listen('ai-sidecar-output', (event: any) => {
+            setBackendLogs(prev => [...prev, `[INFO] ${event.payload}`].slice(-50));
+        });
+        const unlistenError = listen('ai-sidecar-error', (event: any) => {
+            setBackendLogs(prev => [...prev, `[ERROR] ${event.payload}`].slice(-50));
+        });
+
+        return () => {
+            unlistenOutput.then(f => f());
+            unlistenError.then(f => f());
+        };
+    }, []);
+
     const startServer = async () => {
         setIsStartingServer(true);
+        setBackendLogs([]); // Clear logs on start
         try {
             await aiChatApi.startSidecar();
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            // Poll for server readiness (up to 15 seconds)
+            let retries = 0;
+            const maxRetries = 15;
+            while (retries < maxRetries) {
+                try {
+                    const isHealthy = await aiChatApi.healthCheck();
+                    if (isHealthy) {
+                        break;
+                    }
+                } catch (e) {
+                    // Ignore error and retry
+                }
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                retries++;
+            }
+
             await checkServerStatus();
         } catch (error) {
+            const errorMsg = String(error);
+            if (errorMsg.includes("Corrupt sidecar") || errorMsg.includes("not downloaded")) {
+                alert(errorMsg);
+                setSidecarDownloaded(false);
+                return;
+            }
+
             // Dev mode fallback
             console.log('Dev mode: checking manual server...');
             const { healthy, ready } = await aiChatApi.healthCheck();
@@ -162,7 +205,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                     });
                 }
             } else {
-                alert('AI Server not running.\nRun manually: cd DB_AI && python main.py');
+                alert('AI Server not running.\n\nLogs:\n' + backendLogs.join('\n'));
             }
         } finally {
             setIsStartingServer(false);

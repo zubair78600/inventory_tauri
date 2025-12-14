@@ -59,31 +59,31 @@ pub struct SidecarDownloadProgress {
     pub speed_mbps: f32,
 }
 
-/// Get the path where sidecar should be stored
-fn get_sidecar_path() -> PathBuf {
-    let app_data = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("com.inventry.tauri")
-        .join("bin");
+/// Get the path where sidecar should be stored (using Tauri's app data dir)
+fn get_sidecar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    
+    let bin_dir = app_data.join("bin");
     
     #[cfg(target_os = "windows")]
-    { app_data.join("db-ai-server.exe") }
+    { Ok(bin_dir.join("db-ai-server.exe")) }
     
     #[cfg(not(target_os = "windows"))]
-    { app_data.join("db-ai-server") }
+    { Ok(bin_dir.join("db-ai-server")) }
 }
 
 /// Check if AI sidecar is downloaded
 #[tauri::command]
-pub async fn check_sidecar_downloaded() -> Result<bool, String> {
-    let path = get_sidecar_path();
+pub async fn check_sidecar_downloaded(app: tauri::AppHandle) -> Result<bool, String> {
+    let path = get_sidecar_path(&app)?;
     Ok(path.exists())
 }
 
 /// Download the AI sidecar binary with progress events
 #[tauri::command]
 pub async fn download_ai_sidecar(app: tauri::AppHandle) -> Result<(), String> {
-    let sidecar_path = get_sidecar_path();
+    let sidecar_path = get_sidecar_path(&app)?;
     
     // Create directory if needed
     if let Some(parent) = sidecar_path.parent() {
@@ -102,6 +102,10 @@ pub async fn download_ai_sidecar(app: tauri::AppHandle) -> Result<(), String> {
         .send()
         .await
         .map_err(|e| format!("Failed to start download: {}", e))?;
+    
+    if !response.status().is_success() {
+        return Err(format!("Download failed with status: {}. Is the repo public?", response.status()));
+    }
     
     let total_size = response.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
@@ -166,47 +170,69 @@ pub async fn start_ai_sidecar(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
     
-    let sidecar_path = get_sidecar_path();
+    let sidecar_path = get_sidecar_path(&app)?;
     if !sidecar_path.exists() {
         return Err("AI sidecar not downloaded. Please download first.".to_string());
+    }
+
+    // Check file size to detect corrupt downloads (e.g. 404 HTML pages are small)
+    if let Ok(metadata) = std::fs::metadata(&sidecar_path) {
+        if metadata.len() < 1000 * 1000 { // Less than 1MB
+            let _ = std::fs::remove_file(&sidecar_path);
+            return Err("Corrupt sidecar binary detected (file too small). It has been deleted. Please download again.".to_string());
+        }
     }
 
     log::info!("Starting AI sidecar from: {:?}", sidecar_path);
 
     // Spawn the process
-    let mut child = Command::new(&sidecar_path)
+    let mut command = Command::new(&sidecar_path);
+    
+    // Set CWD to the sidecar directory so it can find local files/DBs
+    if let Some(parent) = sidecar_path.parent() {
+        command.current_dir(parent);
+    }
+
+    let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
     
-    // Stream stdout
-    if let Some(stdout) = child.stdout.take() {
-        tauri::async_runtime::spawn(async move {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    log::info!("[Sidecar] {}", line);
-                }
-            }
-        });
-    }
-
-    // Stream stderr
-    if let Some(stderr) = child.stderr.take() {
-        tauri::async_runtime::spawn(async move {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    log::error!("[Sidecar Error] {}", line);
-                }
-            }
-        });
-    }
-
     log::info!("AI sidecar started with PID: {}", child.id());
+
+    // Capture output in background threads to log it and prevent pipe blocking
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    if let Some(stdout) = stdout {
+        let app_handle = app.clone();
+        std::thread::spawn(move || {
+            let reader = std::io::BufReader::new(stdout);
+            use std::io::BufRead;
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    log::info!("[AI Sidecar] {}", line);
+                    let _ = app_handle.emit("ai-sidecar-output", &line);
+                }
+            }
+        });
+    }
+
+    if let Some(stderr) = stderr {
+        let app_handle = app.clone();
+        std::thread::spawn(move || {
+            let reader = std::io::BufReader::new(stderr);
+            use std::io::BufRead;
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    log::error!("[AI Sidecar Error] {}", line);
+                    let _ = app_handle.emit("ai-sidecar-error", &line);
+                }
+            }
+        });
+    }
+
     *process_guard = Some(child);
     
     log::info!("AI sidecar started successfully");
