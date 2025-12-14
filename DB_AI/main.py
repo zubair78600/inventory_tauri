@@ -12,6 +12,7 @@ from config import DB_PATH, MODEL_PATH, VECTORDB_PATH
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+print("DEBUG: main.py STARTING UP - IF YOU SEE THIS, I AM THE CORRECT FILE")
 
 vanna_ai: Optional[VannaAI] = None
 sql_executor: Optional[SQLExecutor] = None

@@ -64,6 +64,10 @@ CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT UNIQUE, sup
 -- Purchase Order Items: id, po_id, product_id, quantity, unit_cost, total_cost
 CREATE TABLE purchase_order_items (id INTEGER PRIMARY KEY, po_id INTEGER, product_id INTEGER, quantity INTEGER, unit_cost REAL, total_cost REAL);
 
+MANDATORY QUERY TEMPLATES (USE THESE EXACTLY):
+When user asks for customer by name, customer info, customer details, or customer name:
+SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%CUSTOMERNAME%') GROUP BY c.id
+
 RULES:
 1. Column 'name' is just 'name', NOT 'product_name' or 'customer_name'
 2. Use strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') for THIS MONTH
@@ -71,10 +75,10 @@ RULES:
 4. Always start with SELECT
 5. For customer/supplier searches by name, use LOWER() for case-insensitive matching"""
 
-        # Add context from training data if available
         if context:
             system_content += f"\n\nRELEVANT EXAMPLES:\n{context}"
 
+        logger.info(f"DEBUG: System Prompt:\n{system_content}")
         logger.info(f"LLM prompt: {prompt}")
         response = self.llm.create_chat_completion(
             messages=[
@@ -125,9 +129,11 @@ class SimpleVectorStore:
     def get_relevant_context(self, question: str, n_results: int = 5) -> str:
         """Get relevant training data for a question"""
         try:
+            # Filter to only get Q+SQL pairs, not documentation
             results = self.collection.query(
                 query_texts=[question],
-                n_results=n_results
+                n_results=n_results,
+                where={"type": "question_sql"}
             )
             if results and results["documents"]:
                 return "\n\n---\n\n".join(results["documents"][0])
@@ -163,20 +169,194 @@ class VannaAI:
 
     def generate_sql(self, question: str) -> str:
         """Generate SQL from a natural language question"""
+        logger.info(f"DEBUG: generate_sql called with question: {question}")
+        logger.info(f"DEBUG: vector_store type: {type(self.vector_store)}")
         logger.info(f"Generating SQL for question: {question}")
         
+        question_lower = question.lower()
+        import re
+        
+        # Extract potential identifiers from question
+        phone_match = re.search(r'(\d{7,12})', question)
+        email_match = re.search(r'[\w\.-]+@[\w\.-]+', question)
+        
+        # =================
+        # CUSTOMER QUERIES
+        # =================
+        
+        # Customer credit queries (specific request for credit info)
+        if 'customer credit' in question_lower or 'credit for customer' in question_lower:
+            # Check for phone in credit query
+            if phone_match:
+                phone = phone_match.group(1)
+                sql = f"""SELECT c.*, 
+                    COUNT(DISTINCT i.id) as total_invoices, 
+                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                    MAX(i.created_at) as last_billed,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                    FROM customers c 
+                    LEFT JOIN invoices i ON c.id = i.customer_id 
+                    WHERE c.phone LIKE '%{phone}%' 
+                    GROUP BY c.id"""
+                logger.info(f"Detected customer credit phone query, using hardcoded SQL: {sql}")
+                return sql
+            
+            # Check for email in credit query
+            if email_match:
+                email = email_match.group(0)
+                sql = f"""SELECT c.*, 
+                    COUNT(DISTINCT i.id) as total_invoices, 
+                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                    MAX(i.created_at) as last_billed,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                    FROM customers c 
+                    LEFT JOIN invoices i ON c.id = i.customer_id 
+                    WHERE c.email LIKE '%{email}%' 
+                    GROUP BY c.id"""
+                logger.info(f"Detected customer credit email query, using hardcoded SQL: {sql}")
+                return sql
+            
+            # Default to name search
+            name_match = re.search(r'(?:customer credit|credit for customer)\s+(\w+)', question_lower)
+            customer_name = name_match.group(1).strip() if name_match else question.split()[-1]
+            
+            sql = f"""SELECT c.*, 
+                COUNT(DISTINCT i.id) as total_invoices, 
+                COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                MAX(i.created_at) as last_billed,
+                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                FROM customers c 
+                LEFT JOIN invoices i ON c.id = i.customer_id 
+                WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%') 
+                GROUP BY c.id"""
+            logger.info(f"Detected customer credit query, using hardcoded SQL: {sql}")
+            return sql
+        
+        # Customer queries (name, details, info, or just "customer X")
+        if question_lower.startswith('customer ') or any(keyword in question_lower for keyword in ['customer name', 'customer details', 'customer info', 'who is customer']):
+            # Check for phone number in query
+            if phone_match:
+                phone = phone_match.group(1)
+                sql = f"SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.phone LIKE '%{phone}%' GROUP BY c.id"
+                logger.info(f"Detected customer phone query, using hardcoded SQL: {sql}")
+                return sql
+            
+            # Check for email in query
+            if email_match:
+                email = email_match.group(0)
+                sql = f"SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.email LIKE '%{email}%' GROUP BY c.id"
+                logger.info(f"Detected customer email query, using hardcoded SQL: {sql}")
+                return sql
+            
+            # Default to name search
+            name_match = re.search(r'(?:customer name|customer details for|customer info for|who is customer|customer)\s+(\w+)', question_lower)
+            customer_name = name_match.group(1).strip() if name_match else question.split()[-1]
+            
+            sql = f"SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%') GROUP BY c.id"
+            logger.info(f"Detected customer name query, using hardcoded SQL: {sql}")
+            return sql
+        
+        # =================
+        # SUPPLIER QUERIES
+        # =================
+        
+        # Supplier queries (name, details, info, or just "supplier X")
+        if question_lower.startswith('supplier ') or any(keyword in question_lower for keyword in ['supplier name', 'supplier details', 'supplier info', 'who is supplier']):
+            # Check for phone number in query
+            if phone_match:
+                phone = phone_match.group(1)
+                sql = f"""SELECT s.*, 
+                    COUNT(DISTINCT p.id) as total_products, 
+                    COALESCE(SUM(p.stock_quantity), 0) as total_stock, 
+                    COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,
+                    COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - 
+                             COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount
+                    FROM suppliers s 
+                    LEFT JOIN products p ON s.id = p.supplier_id 
+                    WHERE s.contact_info LIKE '%{phone}%' 
+                    GROUP BY s.id"""
+                logger.info(f"Detected supplier phone query, using hardcoded SQL: {sql}")
+                return sql
+            
+            # Check for email in query
+            if email_match:
+                email = email_match.group(0)
+                sql = f"""SELECT s.*, 
+                    COUNT(DISTINCT p.id) as total_products, 
+                    COALESCE(SUM(p.stock_quantity), 0) as total_stock, 
+                    COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,
+                    COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - 
+                             COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount
+                    FROM suppliers s 
+                    LEFT JOIN products p ON s.id = p.supplier_id 
+                    WHERE s.email LIKE '%{email}%' 
+                    GROUP BY s.id"""
+                logger.info(f"Detected supplier email query, using hardcoded SQL: {sql}")
+                return sql
+            
+            # Default to name search
+            name_match = re.search(r'(?:supplier name|supplier details for|supplier info for|who is supplier|supplier)\s+(\w+)', question_lower)
+            supplier_name = name_match.group(1).strip() if name_match else question.split()[-1]
+            
+            sql = f"""SELECT s.*, 
+                COUNT(DISTINCT p.id) as total_products, 
+                COALESCE(SUM(p.stock_quantity), 0) as total_stock, 
+                COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,
+                COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - 
+                         COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount
+                FROM suppliers s 
+                LEFT JOIN products p ON s.id = p.supplier_id 
+                WHERE LOWER(s.name) LIKE LOWER('%{supplier_name}%') 
+                GROUP BY s.id"""
+            logger.info(f"Detected supplier name query, using hardcoded SQL: {sql}")
+            return sql
+        
         # Get relevant training examples from vector store
-        context = self.vector_store.get_relevant_context(question, n_results=5)
-        logger.info(f"Retrieved context: {context[:200]}..." if context else "No context found")
+        context = self.vector_store.get_relevant_context(question, n_results=2)
+        if context:
+            logger.info(f"Retrieved context: {context[:200]}...")
+        else:
+            logger.warning("No context found for question!")
         
         # Generate SQL with context
         sql = self.llm.generate(question, context=context)
         logger.info(f"Raw LLM output: {repr(sql)}")
         
+        sql = sql.strip()
+        
         # Clean up any markdown or extra formatting
-        if sql.startswith("```"):
+        if "```" in sql:
             lines = sql.split("\n")
-            sql = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+            new_lines = []
+            in_code_block = False
+            for line in lines:
+                if "```" in line:
+                    in_code_block = not in_code_block
+                    continue
+                if in_code_block:
+                    new_lines.append(line)
+            
+            if new_lines:
+                sql = "\n".join(new_lines)
+            else:
+                # If we failed to extract code block content, try a simpler fallback
+                # This handles cases where the logic above might fail or there's no matching closing backtick
+                parts = sql.split("```")
+                if len(parts) > 1:
+                    sql = parts[1]
+                    if sql.lower().startswith("sql"):
+                        sql = sql[3:]
+                    sql = sql.strip()
+        
+        # Remove "SQL:" prefix if present
+        if sql.lower().startswith("sql:"):
+            sql = sql[4:].strip()
         
         result = sql.strip()
         logger.info(f"Cleaned SQL: {repr(result)}")

@@ -20,8 +20,13 @@ import {
     Search,
     ChevronRight,
     Maximize2,
-    Minimize2
+    Minimize2,
+    History,
+    Trash2,
+    Settings
 } from 'lucide-react';
+import { CustomerCard } from "./CustomerCard";
+import { SupplierCard } from "./SupplierCard";
 import {
     aiChatApi,
     type ChatMessage,
@@ -68,6 +73,112 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
 
     // UI state
     const [isMaximized, setIsMaximized] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
+    const [hasOldHistory, setHasOldHistory] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const chatContainerRef = useRef<HTMLDivElement>(null);
+
+    // Chat history folder and monthly file format
+    const CHAT_HISTORY_FOLDER = 'chat_history';
+
+    const getMonthlyFileName = () => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}.json`;
+    };
+
+    // Check if old history exists on mount
+    useEffect(() => {
+        const checkHistory = async () => {
+            try {
+                const { appDataDir, join } = await import('@tauri-apps/api/path');
+                const { exists, readDir } = await import('@tauri-apps/plugin-fs');
+
+                const appDir = await appDataDir();
+                const historyFolder = await join(appDir, CHAT_HISTORY_FOLDER);
+
+                if (await exists(historyFolder)) {
+                    const files = await readDir(historyFolder);
+                    setHasOldHistory(files.length > 0);
+                }
+            } catch (e) {
+                console.error('Failed to check history:', e);
+            }
+        };
+        checkHistory();
+    }, []);
+
+    // Load old history when user clicks "Load History"
+    const loadOldHistory = async () => {
+        setIsLoadingHistory(true);
+        try {
+            const { appDataDir, join } = await import('@tauri-apps/api/path');
+            const { readTextFile, readDir, exists } = await import('@tauri-apps/plugin-fs');
+
+            const appDir = await appDataDir();
+            const historyFolder = await join(appDir, CHAT_HISTORY_FOLDER);
+
+            if (await exists(historyFolder)) {
+                const files = await readDir(historyFolder);
+                // Sort files by name descending (newest first)
+                const sortedFiles = files
+                    .filter(f => f.name?.endsWith('.json'))
+                    .sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+
+                const allMessages: ChatMessage[] = [];
+                for (const file of sortedFiles) {
+                    if (file.name) {
+                        const filePath = await join(historyFolder, file.name);
+                        const content = await readTextFile(filePath);
+                        const parsed = JSON.parse(content);
+                        if (Array.isArray(parsed)) {
+                            allMessages.push(...parsed);
+                        }
+                    }
+                }
+
+                // Sort by timestamp and prepend to current messages
+                allMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                setMessages(prev => [...allMessages, ...prev.filter(m => !allMessages.find(h => h.id === m.id))]);
+                setShowHistory(false);
+            }
+        } catch (e) {
+            console.error('Failed to load history:', e);
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    };
+
+    // Save chat history to monthly file when messages change
+    useEffect(() => {
+        const saveHistory = async () => {
+            if (messages.length > 0) {
+                try {
+                    const { appDataDir, join } = await import('@tauri-apps/api/path');
+                    const { writeTextFile, mkdir, exists } = await import('@tauri-apps/plugin-fs');
+
+                    const appDir = await appDataDir();
+                    const historyFolder = await join(appDir, CHAT_HISTORY_FOLDER);
+
+                    // Ensure chat_history folder exists
+                    if (!(await exists(historyFolder))) {
+                        await mkdir(historyFolder, { recursive: true });
+                    }
+
+                    const filePath = await join(historyFolder, getMonthlyFileName());
+                    await writeTextFile(filePath, JSON.stringify(messages, null, 2));
+                    setHasOldHistory(true);
+                } catch (e) {
+                    console.error('Failed to save chat history:', e);
+                }
+            }
+        };
+        saveHistory();
+    }, [messages]);
+
+    // Clear current session only (doesn't delete history files)
+    const clearHistory = () => {
+        setMessages([]);
+    };
 
     // Check sidecar status on open
     useEffect(() => {
@@ -482,7 +593,36 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                             </div>
                         </DialogTitle>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                            {/* Toolbar buttons */}
+                            <button
+                                onClick={() => setShowHistory(!showHistory)}
+                                className={cn(
+                                    "h-8 w-8 rounded-full flex items-center justify-center transition-colors",
+                                    showHistory
+                                        ? "bg-sky-100 dark:bg-sky-900/50 text-sky-600 dark:text-sky-400"
+                                        : "hover:bg-black/5 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground"
+                                )}
+                                title="Chat History"
+                            >
+                                <History className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={clearHistory}
+                                className="h-8 w-8 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors text-muted-foreground hover:text-red-500"
+                                title="Clear Chat"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                            <button
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                                title="Settings"
+                            >
+                                <Settings className="h-4 w-4" />
+                            </button>
+
+                            <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+
                             {!isServerReady && (
                                 <motion.button
                                     whileHover={{ scale: 1.05 }}
@@ -514,6 +654,32 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                     {/* Chat Area */}
                     <div className="flex-1 overflow-hidden relative bg-slate-50/50 dark:bg-slate-900/50">
                         <ScrollArea className="h-full px-6 pt-6 pb-4">
+                            {/* Load History Button */}
+                            {hasOldHistory && messages.length === 0 && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="flex justify-center mb-4"
+                                >
+                                    <button
+                                        onClick={loadOldHistory}
+                                        disabled={isLoadingHistory}
+                                        className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-sm font-medium text-slate-600 dark:text-slate-300 flex items-center gap-2 transition-colors shadow-sm"
+                                    >
+                                        {isLoadingHistory ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Loading...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <History className="h-4 w-4" />
+                                                Load Previous Conversations
+                                            </>
+                                        )}
+                                    </button>
+                                </motion.div>
+                            )}
                             {!isServerReady && !isStartingServer ? (
                                 <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
                                     <Bot className="h-16 w-16 text-muted-foreground mb-4" />
@@ -675,7 +841,12 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                         ? "bg-indigo-600 text-white rounded-3xl"
                         : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-3xl"
                 )}>
-                    <p className="leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
+                    <p className={cn(
+                        "leading-relaxed whitespace-pre-wrap break-words",
+                        isUser ? "text-white" : "text-slate-900 dark:text-slate-100"
+                    )}>
+                        {message.content || (isUser ? "[Message]" : "[Response]")}
+                    </p>
 
                     {/* SQL Code Block - Collapsible */}
                     {message.sql && (
@@ -710,38 +881,50 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                         </div>
                     )}
 
-                    {/* Results Table */}
-                    {message.results && message.results.length > 0 && (
-                        <div className="mt-4 rounded-xl border border-black/5 dark:border-white/5 overflow-hidden bg-white/50 dark:bg-black/20">
-                            <div className="overflow-x-auto w-full">
-                                <table className="w-full text-xs min-w-max">
-                                    <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5">
-                                        <tr>
-                                            {Object.keys(message.results[0]).map((key) => (
-                                                <th key={key} className="px-4 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">
-                                                    {key}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-black/5 dark:divide-white/5">
-                                        {message.results.slice(0, 10).map((row, i) => (
-                                            <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                                                {Object.values(row).map((value, j) => (
-                                                    <td key={j} className="px-4 py-2.5 whitespace-nowrap max-w-[200px] truncate" title={String(value)}>
-                                                        {String(value ?? '-')}
-                                                    </td>
+                    {/* Results: Card or Table */}
+                    {message.results && message.results.length === 1 && message.results[0].name && message.results[0].total_products !== undefined ? (
+                        /* Supplier Card */
+                        <div className="mt-4">
+                            <SupplierCard data={message.results[0] as any} />
+                        </div>
+                    ) : message.results && message.results.length === 1 && message.results[0].name && (message.results[0].total_invoices !== undefined || message.results[0].total_spent !== undefined) ? (
+                        /* Customer Card */
+                        <div className="mt-4">
+                            <CustomerCard data={message.results[0] as any} />
+                        </div>
+                    ) : (
+                        message.results && message.results.length > 0 && (
+                            <div className="mt-4 rounded-xl border border-black/5 dark:border-white/5 overflow-hidden bg-white/50 dark:bg-black/20">
+                                <div className="overflow-x-auto w-full">
+                                    <table className="w-full text-xs min-w-max">
+                                        <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5">
+                                            <tr>
+                                                {Object.keys(message.results[0]).map((key) => (
+                                                    <th key={key} className="px-4 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">
+                                                        {key}
+                                                    </th>
                                                 ))}
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-black/5 dark:divide-white/5">
+                                            {message.results.slice(0, 10).map((row, i) => (
+                                                <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                                    {Object.values(row).map((value, j) => (
+                                                        <td key={j} className="px-4 py-2.5 whitespace-nowrap max-w-[200px] truncate" title={String(value)}>
+                                                            {String(value ?? '-')}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-slate-900 px-3 py-2 text-[10px] text-muted-foreground flex justify-between border-t border-black/5">
+                                    <span>Showing {Math.min(message.results.length, 10)} of {message.results.length} results</span>
+                                    {message.timing && <span>Exec: {formatTime(message.timing.sqlRun)}</span>}
+                                </div>
                             </div>
-                            <div className="bg-slate-50 dark:bg-slate-900 px-3 py-2 text-[10px] text-muted-foreground flex justify-between border-t border-black/5">
-                                <span>Showing {Math.min(message.results.length, 10)} of {message.results.length} results</span>
-                                {message.timing && <span>Exec: {formatTime(message.timing.sqlRun)}</span>}
-                            </div>
-                        </div>
+                        )
                     )}
 
                     {/* Error State */}
