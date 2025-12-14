@@ -15,6 +15,14 @@
     "fs:allow-download-write",
     "fs:allow-desktop-write",
     "fs:allow-document-write",
+    "fs:allow-appdata-read",
+    "fs:allow-appdata-write",
+    "fs:allow-appdata-read-recursive",
+    "fs:allow-appdata-write-recursive",
+    "fs:scope-appdata-recursive",
+    "fs:allow-exists",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
     {
       "identifier": "fs:allow-write-file",
       "allow": [

@@ -1,0 +1,489 @@
+DEBUG: main.py STARTING UP - IF YOU SEE THIS, I AM THE CORRECT FILE
+INFO:     Started server process [46975]
+INFO:     Waiting for application startup.
+INFO:__main__:Starting AI Chat sidecar...
+INFO:chromadb.telemetry.product.posthog:Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+INFO:core.vanna_setup:Loading model from /Users/zubair/Library/Application Support/com.inventry.tauri/models/model.gguf
+llama_context: n_ctx_per_seq (4096) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+ggml_metal_init: skipping kernel_get_rows_bf16                     (not supported)
+ggml_metal_init: skipping kernel_set_rows_bf16                     (not supported)
+ggml_metal_init: skipping kernel_mul_mv_bf16_f32                   (not supported)
+ggml_metal_init: skipping kernel_mul_mv_bf16_f32_c4                (not supported)
+ggml_metal_init: skipping kernel_mul_mv_bf16_f32_1row              (not supported)
+ggml_metal_init: skipping kernel_mul_mv_bf16_f32_l4                (not supported)
+ggml_metal_init: skipping kernel_mul_mv_bf16_bf16                  (not supported)
+ggml_metal_init: skipping kernel_mul_mv_id_bf16_f32                (not supported)
+ggml_metal_init: skipping kernel_mul_mm_bf16_f32                   (not supported)
+ggml_metal_init: skipping kernel_mul_mm_id_bf16_f16                (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h64           (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h80           (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h96           (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h112          (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h128          (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h192          (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_hk192_hv128   (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h256          (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_bf16_hk576_hv512   (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h64       (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h96       (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h128      (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h192      (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_hk192_hv128 (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h256      (not supported)
+ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_hk576_hv512 (not supported)
+ggml_metal_init: skipping kernel_cpy_f32_bf16                      (not supported)
+ggml_metal_init: skipping kernel_cpy_bf16_f32                      (not supported)
+ggml_metal_init: skipping kernel_cpy_bf16_bf16                     (not supported)
+INFO:core.vanna_setup:Model loaded successfully
+INFO:core.vanna_setup:VannaAI initialized
+INFO:__main__:VannaAI initialized successfully
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: Customer Credit 8121685728
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: Customer Credit 8121685728
+INFO:core.vanna_setup:Detected customer credit phone query, using hardcoded SQL: SELECT c.*, 
+                    COUNT(DISTINCT i.id) as total_invoices, 
+                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                    MAX(i.created_at) as last_billed,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                    FROM customers c 
+                    LEFT JOIN invoices i ON c.id = i.customer_id 
+                    WHERE c.phone LIKE '%8121685728%' 
+                    GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, \n                    COUNT(DISTINCT i.id) as total_invoices, \n                    COALESCE(SUM(i.total_amount), 0) as total_spent, \n                    MAX(i.created_at) as last_billed,\n                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,\n                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,\n                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit\n                    FROM customers c \n                    LEFT JOIN invoices i ON c.id = i.customer_id \n                    WHERE c.phone LIKE '%8121685728%' \n                    GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, 
+                    COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, 
+                    COALES...
+INFO:__main__:Extracted SQL: SELECT c.*, 
+                    COUNT(DISTINCT i.id) as total_invoices, 
+                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                    MAX(i.created_at) as last_billed,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                    FROM customers c 
+                    LEFT JOIN invoices i ON c.id = i.customer_id 
+                    WHERE c.phone LIKE '%8121685728%' 
+                    GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.00s
+INFO:     127.0.0.1:64568 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64592 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64592 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64592 - "GET /status HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: Customer Credit 8121685728
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: Customer Credit 8121685728
+INFO:core.vanna_setup:Detected customer credit phone query, using hardcoded SQL: SELECT c.*, 
+                    COUNT(DISTINCT i.id) as total_invoices, 
+                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                    MAX(i.created_at) as last_billed,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                    FROM customers c 
+                    LEFT JOIN invoices i ON c.id = i.customer_id 
+                    WHERE c.phone LIKE '%8121685728%' 
+                    GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, \n                    COUNT(DISTINCT i.id) as total_invoices, \n                    COALESCE(SUM(i.total_amount), 0) as total_spent, \n                    MAX(i.created_at) as last_billed,\n                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,\n                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,\n                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit\n                    FROM customers c \n                    LEFT JOIN invoices i ON c.id = i.customer_id \n                    WHERE c.phone LIKE '%8121685728%' \n                    GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, 
+                    COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, 
+                    COALES...
+INFO:__main__:Extracted SQL: SELECT c.*, 
+                    COUNT(DISTINCT i.id) as total_invoices, 
+                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                    MAX(i.created_at) as last_billed,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                    FROM customers c 
+                    LEFT JOIN invoices i ON c.id = i.customer_id 
+                    WHERE c.phone LIKE '%8121685728%' 
+                    GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.00s
+INFO:     127.0.0.1:64592 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64673 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64673 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64673 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64681 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64681 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64681 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64689 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64689 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64689 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64914 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64914 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64914 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64917 - "OPTIONS /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: Customer zubair
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: Customer zubair
+INFO:core.vanna_setup:Detected customer name query, using hardcoded SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, COALESCE(SUM(I.TOTAL_AMOUNT), 0) AS TOTAL_SPENT,...
+INFO:__main__:Extracted SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.01s
+INFO:__main__:  [Total]: 0.01s
+INFO:     127.0.0.1:64917 - "POST /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: Customer waseem
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: Customer waseem
+INFO:core.vanna_setup:Detected customer name query, using hardcoded SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%waseem%') GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%waseem%') GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, COALESCE(SUM(I.TOTAL_AMOUNT), 0) AS TOTAL_SPENT,...
+INFO:__main__:Extracted SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%waseem%') GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.00s
+INFO:     127.0.0.1:64922 - "POST /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: customer credit waseem
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: customer credit waseem
+INFO:core.vanna_setup:Detected customer credit query, using hardcoded SQL: SELECT c.*, 
+                COUNT(DISTINCT i.id) as total_invoices, 
+                COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                MAX(i.created_at) as last_billed,
+                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                FROM customers c 
+                LEFT JOIN invoices i ON c.id = i.customer_id 
+                WHERE LOWER(c.name) LIKE LOWER('%waseem%') 
+                GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, \n                COUNT(DISTINCT i.id) as total_invoices, \n                COALESCE(SUM(i.total_amount), 0) as total_spent, \n                MAX(i.created_at) as last_billed,\n                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,\n                COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,\n                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit\n                FROM customers c \n                LEFT JOIN invoices i ON c.id = i.customer_id \n                WHERE LOWER(c.name) LIKE LOWER('%waseem%') \n                GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, 
+                COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, 
+                COALESCE(SUM(I...
+INFO:__main__:Extracted SQL: SELECT c.*, 
+                COUNT(DISTINCT i.id) as total_invoices, 
+                COALESCE(SUM(i.total_amount), 0) as total_spent, 
+                MAX(i.created_at) as last_billed,
+                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                FROM customers c 
+                LEFT JOIN invoices i ON c.id = i.customer_id 
+                WHERE LOWER(c.name) LIKE LOWER('%waseem%') 
+                GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.00s
+INFO:     127.0.0.1:64933 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64956 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64956 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64956 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65032 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65032 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65032 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65035 - "OPTIONS /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: supplier qureshi
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: supplier qureshi
+INFO:core.vanna_setup:Detected supplier name query, using hardcoded SQL: SELECT s.*, 
+                COUNT(DISTINCT p.id) as total_products, 
+                COALESCE(SUM(p.stock_quantity), 0) as total_stock, 
+                COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,
+                COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - 
+                         COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount
+                FROM suppliers s 
+                LEFT JOIN products p ON s.id = p.supplier_id 
+                WHERE LOWER(s.name) LIKE LOWER('%qureshi%') 
+                GROUP BY s.id
+INFO:core.sql_executor:Executing SQL: "SELECT s.*, \n                COUNT(DISTINCT p.id) as total_products, \n                COALESCE(SUM(p.stock_quantity), 0) as total_stock, \n                COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,\n                COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - \n                         COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount\n                FROM suppliers s \n                LEFT JOIN products p ON s.id = p.supplier_id \n                WHERE LOWER(s.name) LIKE LOWER('%qureshi%') \n                GROUP BY s.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT S.*, 
+                COUNT(DISTINCT P.ID) AS TOTAL_PRODUCTS, 
+                COALESCE(SUM(P...
+INFO:__main__:Extracted SQL: SELECT s.*, 
+                COUNT(DISTINCT p.id) as total_products, 
+                COALESCE(SUM(p.stock_quantity), 0) as total_stock, 
+                COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,
+                COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - 
+                         COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount
+                FROM suppliers s 
+                LEFT JOIN products p ON s.id = p.supplier_id 
+                WHERE LOWER(s.name) LIKE LOWER('%qureshi%') 
+                GROUP BY s.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.00s
+INFO:     127.0.0.1:65035 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65063 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65063 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65063 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65138 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65138 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65138 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65211 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65211 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65211 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65213 - "OPTIONS /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: customer zubair
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: customer zubair
+INFO:core.vanna_setup:Detected customer name query, using hardcoded SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, COALESCE(SUM(I.TOTAL_AMOUNT), 0) AS TOTAL_SPENT,...
+INFO:__main__:Extracted SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.01s
+INFO:__main__:  [Total]: 0.01s
+INFO:     127.0.0.1:65213 - "POST /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: customer list
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: customer list
+INFO:core.vanna_setup:Detected customer name query, using hardcoded SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%list%') GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%list%') GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, COALESCE(SUM(I.TOTAL_AMOUNT), 0) AS TOTAL_SPENT,...
+INFO:__main__:Extracted SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%list%') GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.00s
+INFO:     127.0.0.1:65213 - "POST /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: customers list
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: customers list
+INFO:core.vanna_setup:Retrieved context: Question: List all customers
+SQL: SELECT * FROM customers ORDER BY name
+
+---
+
+Question: How many customers do we have?
+SQL: SELECT COUNT(*) as total_customers FROM customers...
+INFO:core.vanna_setup:DEBUG: System Prompt:
+You are a SQL expert for an inventory management SQLite database.
+Generate ONLY valid SQLite SQL. Return ONLY the query, no markdown, no explanations.
+
+CRITICAL: This is SQLite, NOT MySQL! Use SQLite date functions:
+- For current month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+- For today: DATE(created_at) = DATE('now')  
+- For this week: created_at >= DATE('now', '-7 days')
+- NEVER use MONTH(), YEAR(), CURDATE() - these are MySQL functions!
+
+For name searches, ALWAYS use case-insensitive LIKE:
+- WHERE LOWER(name) LIKE LOWER('%search_term%')
+
+DATABASE SCHEMA:
+
+-- Products: id, name, sku, price, selling_price, stock_quantity, supplier_id, category
+CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, sku TEXT UNIQUE, price REAL, selling_price REAL, stock_quantity INTEGER, supplier_id INTEGER, category TEXT);
+
+-- Suppliers: id, name, contact_info, email, address, state, district, town
+CREATE TABLE suppliers (id INTEGER PRIMARY KEY, name TEXT, contact_info TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+
+-- Customers: id, name, phone, email, address, state, district, town
+CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+
+-- Invoices (Sales): id, invoice_number, customer_id, total_amount, payment_method, status, created_at
+CREATE TABLE invoices (id INTEGER PRIMARY KEY, invoice_number TEXT UNIQUE, customer_id INTEGER, total_amount REAL, payment_method TEXT, status TEXT, created_at TEXT);
+
+-- Invoice Items: id, invoice_id, product_id, quantity, unit_price
+CREATE TABLE invoice_items (id INTEGER PRIMARY KEY, invoice_id INTEGER, product_id INTEGER, quantity INTEGER, unit_price REAL);
+
+-- Purchase Orders: id, po_number, supplier_id, total_amount, status, order_date
+CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT UNIQUE, supplier_id INTEGER, total_amount REAL, status TEXT, order_date TEXT);
+
+-- Purchase Order Items: id, po_id, product_id, quantity, unit_cost, total_cost
+CREATE TABLE purchase_order_items (id INTEGER PRIMARY KEY, po_id INTEGER, product_id INTEGER, quantity INTEGER, unit_cost REAL, total_cost REAL);
+
+MANDATORY QUERY TEMPLATES (USE THESE EXACTLY):
+When user asks for customer by name, customer info, customer details, or customer name:
+SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%CUSTOMERNAME%') GROUP BY c.id
+
+RULES:
+1. Column 'name' is just 'name', NOT 'product_name' or 'customer_name'
+2. Use strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') for THIS MONTH
+3. Use DATE(created_at) = DATE('now') for TODAY
+4. Always start with SELECT
+5. For customer/supplier searches by name, use LOWER() for case-insensitive matching
+
+RELEVANT EXAMPLES:
+Question: List all customers
+SQL: SELECT * FROM customers ORDER BY name
+
+---
+
+Question: How many customers do we have?
+SQL: SELECT COUNT(*) as total_customers FROM customers
+INFO:core.vanna_setup:LLM prompt: customers list
+INFO:core.vanna_setup:LLM raw response: {'id': 'chatcmpl-af1f04f4-caa5-4fbf-8fd2-e3c69c24f182', 'object': 'chat.completion', 'created': 1765751564, 'model': '/Users/zubair/Library/Application Support/com.inventry.tauri/models/model.gguf', 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'SELECT * FROM customers ORDER BY name'}, 'logprobs': None, 'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 751, 'completion_tokens': 7, 'total_tokens': 758}}
+INFO:core.vanna_setup:Raw LLM output: 'SELECT * FROM customers ORDER BY name'
+INFO:core.vanna_setup:Cleaned SQL: 'SELECT * FROM customers ORDER BY name'
+INFO:core.sql_executor:Executing SQL: 'SELECT * FROM customers ORDER BY name'
+INFO:core.sql_executor:Checking SQL safety: SELECT * FROM CUSTOMERS ORDER BY NAME...
+INFO:__main__:Extracted SQL: SELECT * FROM customers ORDER BY name
+INFO:__main__:  [SQL Gen]: 4.32s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 4.32s
+INFO:     127.0.0.1:65216 - "POST /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: customer list
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: customer list
+INFO:core.vanna_setup:Detected customer name query, using hardcoded SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%list%') GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%list%') GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, COALESCE(SUM(I.TOTAL_AMOUNT), 0) AS TOTAL_SPENT,...
+INFO:__main__:Extracted SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%list%') GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.00s
+INFO:     127.0.0.1:65216 - "POST /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: customers list
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: customers list
+INFO:core.vanna_setup:Retrieved context: Question: List all customers
+SQL: SELECT * FROM customers ORDER BY name
+
+---
+
+Question: How many customers do we have?
+SQL: SELECT COUNT(*) as total_customers FROM customers...
+INFO:core.vanna_setup:DEBUG: System Prompt:
+You are a SQL expert for an inventory management SQLite database.
+Generate ONLY valid SQLite SQL. Return ONLY the query, no markdown, no explanations.
+
+CRITICAL: This is SQLite, NOT MySQL! Use SQLite date functions:
+- For current month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+- For today: DATE(created_at) = DATE('now')  
+- For this week: created_at >= DATE('now', '-7 days')
+- NEVER use MONTH(), YEAR(), CURDATE() - these are MySQL functions!
+
+For name searches, ALWAYS use case-insensitive LIKE:
+- WHERE LOWER(name) LIKE LOWER('%search_term%')
+
+DATABASE SCHEMA:
+
+-- Products: id, name, sku, price, selling_price, stock_quantity, supplier_id, category
+CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, sku TEXT UNIQUE, price REAL, selling_price REAL, stock_quantity INTEGER, supplier_id INTEGER, category TEXT);
+
+-- Suppliers: id, name, contact_info, email, address, state, district, town
+CREATE TABLE suppliers (id INTEGER PRIMARY KEY, name TEXT, contact_info TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+
+-- Customers: id, name, phone, email, address, state, district, town
+CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+
+-- Invoices (Sales): id, invoice_number, customer_id, total_amount, payment_method, status, created_at
+CREATE TABLE invoices (id INTEGER PRIMARY KEY, invoice_number TEXT UNIQUE, customer_id INTEGER, total_amount REAL, payment_method TEXT, status TEXT, created_at TEXT);
+
+-- Invoice Items: id, invoice_id, product_id, quantity, unit_price
+CREATE TABLE invoice_items (id INTEGER PRIMARY KEY, invoice_id INTEGER, product_id INTEGER, quantity INTEGER, unit_price REAL);
+
+-- Purchase Orders: id, po_number, supplier_id, total_amount, status, order_date
+CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT UNIQUE, supplier_id INTEGER, total_amount REAL, status TEXT, order_date TEXT);
+
+-- Purchase Order Items: id, po_id, product_id, quantity, unit_cost, total_cost
+CREATE TABLE purchase_order_items (id INTEGER PRIMARY KEY, po_id INTEGER, product_id INTEGER, quantity INTEGER, unit_cost REAL, total_cost REAL);
+
+MANDATORY QUERY TEMPLATES (USE THESE EXACTLY):
+When user asks for customer by name, customer info, customer details, or customer name:
+SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%CUSTOMERNAME%') GROUP BY c.id
+
+RULES:
+1. Column 'name' is just 'name', NOT 'product_name' or 'customer_name'
+2. Use strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') for THIS MONTH
+3. Use DATE(created_at) = DATE('now') for TODAY
+4. Always start with SELECT
+5. For customer/supplier searches by name, use LOWER() for case-insensitive matching
+
+RELEVANT EXAMPLES:
+Question: List all customers
+SQL: SELECT * FROM customers ORDER BY name
+
+---
+
+Question: How many customers do we have?
+SQL: SELECT COUNT(*) as total_customers FROM customers
+INFO:core.vanna_setup:LLM prompt: customers list
+INFO:core.vanna_setup:LLM raw response: {'id': 'chatcmpl-79e1014b-a892-455a-8999-dd3c5be3991b', 'object': 'chat.completion', 'created': 1765751576, 'model': '/Users/zubair/Library/Application Support/com.inventry.tauri/models/model.gguf', 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'SELECT * FROM customers ORDER BY name'}, 'logprobs': None, 'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 751, 'completion_tokens': 7, 'total_tokens': 758}}
+INFO:core.vanna_setup:Raw LLM output: 'SELECT * FROM customers ORDER BY name'
+INFO:core.vanna_setup:Cleaned SQL: 'SELECT * FROM customers ORDER BY name'
+INFO:core.sql_executor:Executing SQL: 'SELECT * FROM customers ORDER BY name'
+INFO:core.sql_executor:Checking SQL safety: SELECT * FROM CUSTOMERS ORDER BY NAME...
+INFO:__main__:Extracted SQL: SELECT * FROM customers ORDER BY name
+INFO:__main__:  [SQL Gen]: 0.68s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.68s
+INFO:     127.0.0.1:65216 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65272 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65272 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65272 - "GET /status HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: Total revenue this month
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: Total revenue this month
+INFO:core.vanna_setup:Retrieved context: Question: What is the total revenue this month?
+SQL: SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+
+---
+
+Question: How much r...
+INFO:core.vanna_setup:DEBUG: System Prompt:
+You are a SQL expert for an inventory management SQLite database.
+Generate ONLY valid SQLite SQL. Return ONLY the query, no markdown, no explanations.
+
+CRITICAL: This is SQLite, NOT MySQL! Use SQLite date functions:
+- For current month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+- For today: DATE(created_at) = DATE('now')  
+- For this week: created_at >= DATE('now', '-7 days')
+- NEVER use MONTH(), YEAR(), CURDATE() - these are MySQL functions!
+
+For name searches, ALWAYS use case-insensitive LIKE:
+- WHERE LOWER(name) LIKE LOWER('%search_term%')
+
+DATABASE SCHEMA:
+
+-- Products: id, name, sku, price, selling_price, stock_quantity, supplier_id, category
+CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, sku TEXT UNIQUE, price REAL, selling_price REAL, stock_quantity INTEGER, supplier_id INTEGER, category TEXT);
+
+-- Suppliers: id, name, contact_info, email, address, state, district, town
+CREATE TABLE suppliers (id INTEGER PRIMARY KEY, name TEXT, contact_info TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+
+-- Customers: id, name, phone, email, address, state, district, town
+CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+
+-- Invoices (Sales): id, invoice_number, customer_id, total_amount, payment_method, status, created_at
+CREATE TABLE invoices (id INTEGER PRIMARY KEY, invoice_number TEXT UNIQUE, customer_id INTEGER, total_amount REAL, payment_method TEXT, status TEXT, created_at TEXT);
+
+-- Invoice Items: id, invoice_id, product_id, quantity, unit_price
+CREATE TABLE invoice_items (id INTEGER PRIMARY KEY, invoice_id INTEGER, product_id INTEGER, quantity INTEGER, unit_price REAL);
+
+-- Purchase Orders: id, po_number, supplier_id, total_amount, status, order_date
+CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT UNIQUE, supplier_id INTEGER, total_amount REAL, status TEXT, order_date TEXT);
+
+-- Purchase Order Items: id, po_id, product_id, quantity, unit_cost, total_cost
+CREATE TABLE purchase_order_items (id INTEGER PRIMARY KEY, po_id INTEGER, product_id INTEGER, quantity INTEGER, unit_cost REAL, total_cost REAL);
+
+MANDATORY QUERY TEMPLATES (USE THESE EXACTLY):
+When user asks for customer by name, customer info, customer details, or customer name:
+SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%CUSTOMERNAME%') GROUP BY c.id
+
+RULES:
+1. Column 'name' is just 'name', NOT 'product_name' or 'customer_name'
+2. Use strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') for THIS MONTH
+3. Use DATE(created_at) = DATE('now') for TODAY
+4. Always start with SELECT
+5. For customer/supplier searches by name, use LOWER() for case-insensitive matching
+
+RELEVANT EXAMPLES:
+Question: What is the total revenue this month?
+SQL: SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+
+---
+
+Question: How much revenue did we make this month?
+SQL: SELECT SUM(total_amount) as total_revenue, COUNT(*) as order_count FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+INFO:core.vanna_setup:LLM prompt: Total revenue this month
+INFO:core.vanna_setup:LLM raw response: {'id': 'chatcmpl-fec2a019-f993-4339-a607-cb7d8d529de7', 'object': 'chat.completion', 'created': 1765751744, 'model': '/Users/zubair/Library/Application Support/com.inventry.tauri/models/model.gguf', 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': "SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"}, 'logprobs': None, 'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 810, 'completion_tokens': 31, 'total_tokens': 841}}
+INFO:core.vanna_setup:Raw LLM output: "SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+INFO:core.vanna_setup:Cleaned SQL: "SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+INFO:core.sql_executor:Executing SQL: "SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+INFO:core.sql_executor:Checking SQL safety: SELECT SUM(TOTAL_AMOUNT) AS TOTAL_REVENUE FROM INVOICES WHERE STRFTIME('%Y-%M', CREATED_AT) = STRFTI...
+INFO:__main__:Extracted SQL: SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+INFO:__main__:  [SQL Gen]: 4.65s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 4.65s
+INFO:     127.0.0.1:65274 - "POST /query HTTP/1.1" 200 OK

@@ -57,22 +57,26 @@
     },
     {
         "question": "Show details for customer X",
-        "sql": "SELECT c.*, COUNT(i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.name LIKE '%X%' GROUP BY c.id"
+        "sql": "SELECT c.*, COUNT(i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.name LIKE '%X%' GROUP BY c.id"
     },
     {
         "question": "Search customer by name",
-        "sql": "SELECT c.*, COUNT(i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.name LIKE '%SEARCH_TERM%' GROUP BY c.id"
+        "sql": "SELECT c.*, COUNT(i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.name LIKE '%SEARCH_TERM%' GROUP BY c.id"
     },
     {
         "question": "Customer info for NAME",
-        "sql": "SELECT c.name, c.phone, c.email, c.address, c.state, c.district, c.town, COUNT(i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_purchase FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.name LIKE '%NAME%' GROUP BY c.id"
+        "sql": "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed, (COALESCE(SUM(i.total_amount), 0) - COALESCE((SELECT SUM(amount) FROM customer_payments WHERE customer_id = c.id), 0)) as current_credit FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.name LIKE '%NAME%' GROUP BY c.id"
     },
     {
         "question": "Get customer details by name",
-        "sql": "SELECT c.name, c.phone, c.email, c.address, c.state, c.district, c.town, COUNT(i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.name LIKE '%NAME%' GROUP BY c.id"
+        "sql": "SELECT c.name, c.phone, c.email, c.address, c.state, c.district, c.town, COUNT(i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE c.name LIKE '%NAME%' GROUP BY c.id"
     },
     {
         "question": "Who is customer NAME?",
-        "sql": "SELECT c.*, COUNT(i.id) as total_orders, COALESCE(SUM(i.total_amount), 0) as total_spent FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%NAME%') GROUP BY c.id"
+        "sql": "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed, (COALESCE(SUM(i.total_amount), 0) - COALESCE((SELECT SUM(amount) FROM customer_payments WHERE customer_id = c.id), 0)) as current_credit FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%NAME%') GROUP BY c.id"
+    },
+    {
+        "question": "Customer details for NAME",
+        "sql": "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%NAME%') GROUP BY c.id"
     }
 ]
