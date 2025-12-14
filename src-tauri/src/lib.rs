@@ -31,8 +31,8 @@ pub fn run() {
       // Store database in app state
       app.manage(db);
 
-      // Initialize AI sidecar state (uncomment when AI feature is ready)
-      // app.manage(commands::AiSidecarState::default());
+      // Initialize AI sidecar state
+      app.manage(commands::AiSidecarState::default());
 
       // Create Settings menu item
       let settings_item = MenuItemBuilder::with_id("settings", "Settings...").build(app)?;
