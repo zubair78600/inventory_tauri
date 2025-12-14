@@ -8,13 +8,23 @@ tmp_ret = collect_all('chromadb')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('vanna')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('llama_cpp')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+# Manually locate llama dependencies
+import os
+import llama_cpp
+llama_cpp_path = os.path.dirname(llama_cpp.__file__)
+# Include the specific library files
+binaries += [(os.path.join(llama_cpp_path, 'lib', 'libllama.dylib'), '.')]
+datas += [(os.path.join(llama_cpp_path, 'lib', '*'), 'llama_cpp/lib')]
+hiddenimports += ['llama_cpp']
+
+# Include local packages
+datas += [('core', 'core'), ('scripts', 'scripts'), ('vectordb', 'vectordb'), ('training', 'training')]
+binaries += []
 
 
 a = Analysis(
     ['main.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

@@ -92,13 +92,15 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd DB_AI
-          pyinstaller --onefile --name ${{ matrix.name }} --paths=. --hidden-import=vanna --hidden-import=chromadb --hidden-import=llama_cpp --hidden-import=core --hidden-import=config --hidden-import=scripts main.py
+          python build_spec.py --name ${{ matrix.name }}
+          pyinstaller ${{ matrix.name }}.spec
       
       - name: Build sidecar (Windows)
         if: runner.os == 'Windows'
         run: |
           cd DB_AI
-          pyinstaller --onefile --name ${{ matrix.name }} --paths=. --hidden-import=vanna --hidden-import=chromadb --hidden-import=llama_cpp --hidden-import=core --hidden-import=config --hidden-import=scripts main.py
+          python build_spec.py --name ${{ matrix.name }}
+          pyinstaller ${{ matrix.name }}.spec
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
