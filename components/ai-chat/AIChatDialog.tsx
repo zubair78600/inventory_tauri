@@ -76,7 +76,14 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
             const downloaded = await aiChatApi.checkSidecarDownloaded();
             setSidecarDownloaded(downloaded);
             if (downloaded) {
-                checkServerStatus();
+                // Try to connect to existing server or start it
+                const { healthy } = await aiChatApi.healthCheck();
+                if (healthy) {
+                    await checkServerStatus();
+                } else {
+                    // Server not running, start it
+                    await startServer();
+                }
             }
         } catch {
             setSidecarDownloaded(false);
@@ -97,7 +104,9 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
 
             setSidecarDownloaded(true);
             setSidecarProgress(null);
-            checkServerStatus();
+
+            // Start the server after download completes
+            await startServer();
         } catch (error) {
             console.error('Failed to download sidecar:', error);
         } finally {
@@ -168,8 +177,8 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
             const maxRetries = 15;
             while (retries < maxRetries) {
                 try {
-                    const isHealthy = await aiChatApi.healthCheck();
-                    if (isHealthy) {
+                    const { healthy } = await aiChatApi.healthCheck();
+                    if (healthy) {
                         break;
                     }
                 } catch (e) {
