@@ -101,8 +101,10 @@ async def health_check():
 @app.get("/status", response_model=SetupStatus)
 async def get_status():
     """Get the current setup status"""
+    # Check model exists AND has content (not empty/corrupt)
+    model_downloaded = MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 1000000  # > 1MB
     return SetupStatus(
-        model_downloaded=MODEL_PATH.exists(),
+        model_downloaded=model_downloaded,
         vectordb_initialized=VECTORDB_PATH.exists(),
         training_data_loaded=vanna_ai is not None and vanna_ai.is_trained(),
         ready=vanna_ai is not None
