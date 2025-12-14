@@ -1,6 +1,6 @@
 import time
 import logging
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
@@ -182,12 +182,17 @@ async def train(request: TrainingRequest):
 
 
 @app.post("/download-model")
-async def download_model(background_tasks: BackgroundTasks):
-    """Trigger model download (runs in background)"""
+async def download_model():
+    """Trigger model download (runs in a separate thread to not block API)"""
+    import threading
     try:
         from scripts.download_model import download_qwen_model
-        # Run in background to avoid blocking the API
-        background_tasks.add_task(download_qwen_model)
+
+        # Run in a separate thread to ensure API returns immediately
+        # BackgroundTasks runs synchronously with single uvicorn worker
+        thread = threading.Thread(target=download_qwen_model, daemon=True)
+        thread.start()
+
         return {"success": True}
     except Exception as e:
         logger.error(f"Model download failed: {e}")

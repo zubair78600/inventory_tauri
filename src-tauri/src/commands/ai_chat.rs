@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::process::{Child, Command, Stdio};
 
 /// Base GitHub release URL for sidecar downloads
-const SIDECAR_RELEASE_BASE: &str = "https://github.com/zubair78600/inventory_tauri/releases/download/v1.0.2";
+const SIDECAR_RELEASE_BASE: &str = "https://github.com/zubair78600/inventory_tauri/releases/download/v1.0.3";
 
 /// Get platform-specific binary name
 fn get_sidecar_binary_name() -> &'static str {
