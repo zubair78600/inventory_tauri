@@ -275,18 +275,11 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
             const { healthy, ready } = await aiChatApi.healthCheck();
             setIsServerReady(healthy);
 
-            if (healthy && ready) {
+            if (healthy) {
+                // Always get full status from server if it's running
+                // This ensures we detect if model exists even if it failed to load (ready=false)
                 const setupStatus = await aiChatApi.getStatus();
                 setStatus(setupStatus);
-            } else if (healthy && !ready) {
-                // Server is running but model not ready - triggers Setup Mode
-                setStatus({
-                    model_downloaded: false,
-                    model_valid: false,
-                    vectordb_initialized: false,
-                    training_data_loaded: false,
-                    ready: false
-                });
             }
         } catch {
             setIsServerReady(false);
@@ -342,21 +335,11 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
 
             // Dev mode fallback
             console.log('Dev mode: checking manual server...');
-            const { healthy, ready } = await aiChatApi.healthCheck();
+            const { healthy } = await aiChatApi.healthCheck();
             if (healthy) {
                 setIsServerReady(true);
-                if (ready) {
-                    const setupStatus = await aiChatApi.getStatus();
-                    setStatus(setupStatus);
-                } else {
-                    setStatus({
-                        model_downloaded: false,
-                        model_valid: false,
-                        vectordb_initialized: false,
-                        training_data_loaded: false,
-                        ready: false
-                    });
-                }
+                const setupStatus = await aiChatApi.getStatus();
+                setStatus(setupStatus);
             } else {
                 alert('AI Server not running.\n\nLogs:\n' + backendLogs.join('\n'));
             }

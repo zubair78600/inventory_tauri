@@ -1,15 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
-import os
 
-datas = [('/Users/naziya/inventory_tauri/DB_AI/.venv/lib/python3.13/site-packages/llama_cpp/lib/*', 'llama_cpp/lib'), ('core', 'core'), ('scripts', 'scripts'), ('vectordb', 'vectordb'), ('training', 'training')]
-binaries = [('/Users/naziya/inventory_tauri/DB_AI/.venv/lib/python3.13/site-packages/llama_cpp/lib/libggml.dylib', '.'), ('/Users/naziya/inventory_tauri/DB_AI/.venv/lib/python3.13/site-packages/llama_cpp/lib/libmtmd.dylib', '.'), ('/Users/naziya/inventory_tauri/DB_AI/.venv/lib/python3.13/site-packages/llama_cpp/lib/libggml-base.dylib', '.'), ('/Users/naziya/inventory_tauri/DB_AI/.venv/lib/python3.13/site-packages/llama_cpp/lib/libggml-blas.dylib', '.'), ('/Users/naziya/inventory_tauri/DB_AI/.venv/lib/python3.13/site-packages/llama_cpp/lib/libllama.dylib', '.'), ('/Users/naziya/inventory_tauri/DB_AI/.venv/lib/python3.13/site-packages/llama_cpp/lib/libggml-cpu.dylib', '.'), ('/Users/naziya/inventory_tauri/DB_AI/.venv/lib/python3.13/site-packages/llama_cpp/lib/libggml-metal.dylib', '.')]
-hiddenimports = ['uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on', 'chromadb', 'chromadb.telemetry.product.posthog', 'chromadb.db.impl.sqlite', 'sqlite3', 'llama_cpp', 'vanna']
+datas = []
+binaries = []
+hiddenimports = ['uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on', 'chromadb', 'chromadb.telemetry.product.posthog', 'chromadb.db.impl.sqlite', 'sqlite3', 'core', 'core.vanna_setup', 'core.sql_executor', 'core.cache', 'core.llm_backend', 'config']
+tmp_ret = collect_all('chromadb')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('vanna')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('llama_cpp')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
-# Collect dependencies for complex packages
-for pkg in ['chromadb', 'vanna']:
-    tmp_ret = collect_all(pkg)
-    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['main.py'],
