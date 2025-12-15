@@ -22,8 +22,9 @@ import {
     Maximize2,
     Minimize2,
     History,
-    Trash2,
-    Settings
+    Settings,
+    BarChart3,
+    Table2
 } from 'lucide-react';
 import { CustomerCard } from "./CustomerCard";
 import { SupplierCard } from "./SupplierCard";
@@ -34,6 +35,13 @@ import {
     generateMessageId,
     formatTime,
 } from '@/lib/ai-chat';
+import dynamic from 'next/dynamic';
+
+// Lazy load recharts to avoid SSR issues and improve initial load
+const LazyChart = dynamic(() => import('./ResultChart'), {
+    ssr: false,
+    loading: () => <div className="h-32 flex items-center justify-center text-xs text-muted-foreground">Loading chart...</div>
+});
 
 import { listen } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
@@ -73,13 +81,17 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
 
     // UI state
     const [isMaximized, setIsMaximized] = useState(false);
-    const [showHistory, setShowHistory] = useState(false);
     const [hasOldHistory, setHasOldHistory] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [historyOffset, setHistoryOffset] = useState(0);
+    const [totalHistoryCount, setTotalHistoryCount] = useState(0);
+    const [allHistoryMessages, setAllHistoryMessages] = useState<ChatMessage[]>([]);
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     // Chat history folder and monthly file format
     const CHAT_HISTORY_FOLDER = 'AI/chat_history';
+    const CHAT_FAILED_FOLDER = 'AI/chat_failed';
+    const HISTORY_LOAD_BATCH = 20;
 
     const getMonthlyFileName = () => {
         const now = new Date();
@@ -107,7 +119,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         checkHistory();
     }, []);
 
-    // Load old history when user clicks "Load History"
+    // Load old history when user clicks "Load Previous Conversations"
     const loadOldHistory = async () => {
         setIsLoadingHistory(true);
         try {
@@ -118,28 +130,47 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
             const historyFolder = await join(appDir, CHAT_HISTORY_FOLDER);
 
             if (await exists(historyFolder)) {
-                const files = await readDir(historyFolder);
-                // Sort files by name descending (newest first)
-                const sortedFiles = files
-                    .filter(f => f.name?.endsWith('.json'))
-                    .sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+                // If we haven't loaded all history yet, load it first
+                if (allHistoryMessages.length === 0) {
+                    const files = await readDir(historyFolder);
+                    // Sort files by name descending (newest first)
+                    const sortedFiles = files
+                        .filter(f => f.name?.endsWith('.json'))
+                        .sort((a, b) => (b.name || '').localeCompare(a.name || ''));
 
-                const allMessages: ChatMessage[] = [];
-                for (const file of sortedFiles) {
-                    if (file.name) {
-                        const filePath = await join(historyFolder, file.name);
-                        const content = await readTextFile(filePath);
-                        const parsed = JSON.parse(content);
-                        if (Array.isArray(parsed)) {
-                            allMessages.push(...parsed);
+                    const loadedMessages: ChatMessage[] = [];
+                    for (const file of sortedFiles) {
+                        if (file.name) {
+                            const filePath = await join(historyFolder, file.name);
+                            const content = await readTextFile(filePath);
+                            const parsed = JSON.parse(content);
+                            if (Array.isArray(parsed)) {
+                                loadedMessages.push(...parsed);
+                            }
                         }
                     }
-                }
 
-                // Sort by timestamp and prepend to current messages
-                allMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-                setMessages(prev => [...allMessages, ...prev.filter(m => !allMessages.find(h => h.id === m.id))]);
-                setShowHistory(false);
+                    // Sort by timestamp descending (newest first) for pagination
+                    loadedMessages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                    setAllHistoryMessages(loadedMessages);
+                    setTotalHistoryCount(loadedMessages.length);
+
+                    // Load first batch
+                    const firstBatch = loadedMessages.slice(0, HISTORY_LOAD_BATCH);
+                    // Sort ascending for display (oldest first within batch)
+                    firstBatch.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                    setMessages(prev => [...firstBatch, ...prev.filter(m => !firstBatch.find(h => h.id === m.id))]);
+                    setHistoryOffset(HISTORY_LOAD_BATCH);
+                } else {
+                    // Load next batch
+                    const nextBatch = allHistoryMessages.slice(historyOffset, historyOffset + HISTORY_LOAD_BATCH);
+                    if (nextBatch.length > 0) {
+                        // Sort ascending for display
+                        nextBatch.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                        setMessages(prev => [...nextBatch, ...prev.filter(m => !nextBatch.find(h => h.id === m.id))]);
+                        setHistoryOffset(prev => prev + HISTORY_LOAD_BATCH);
+                    }
+                }
             }
         } catch (e) {
             console.error('Failed to load history:', e);
@@ -174,11 +205,6 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         };
         saveHistory();
     }, [messages]);
-
-    // Clear current session only (doesn't delete history files)
-    const clearHistory = () => {
-        setMessages([]);
-    };
 
     // Check sidecar status on open
     useEffect(() => {
@@ -372,15 +398,26 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                 error: response.error || undefined,
             };
             setMessages((prev) => [...prev, assistantMessage]);
+
+            // Auto-save failed queries OR 0 results to chat_failed folder
+            if (!response.success && response.sql) {
+                saveFailedQuery(userMessage.content, response.sql, response.error || undefined);
+            } else if (response.success && response.results.length === 0 && response.sql) {
+                // Also save queries that returned 0 results for training improvement
+                saveFailedQuery(userMessage.content, response.sql, 'Query returned 0 results');
+            }
         } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
             const errorMessage: ChatMessage = {
                 id: generateMessageId(),
                 role: 'assistant',
                 content: 'Failed to process query. Please try again.',
                 timestamp: new Date(),
-                error: error instanceof Error ? error.message : 'Unknown error',
+                error: errorMsg,
             };
             setMessages((prev) => [...prev, errorMessage]);
+            // Save failed query
+            saveFailedQuery(userMessage.content, '', errorMsg);
         } finally {
             setIsLoading(false);
             // Keep focus on input after sending
@@ -388,9 +425,54 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         }
     };
 
+    // Save failed query to chat_failed folder
+    const saveFailedQuery = async (question: string, sql: string, error?: string) => {
+        try {
+            const { appDataDir, join } = await import('@tauri-apps/api/path');
+            const { writeTextFile, mkdir, exists, readTextFile } = await import('@tauri-apps/plugin-fs');
+
+            const appDir = await appDataDir();
+            const failedFolder = await join(appDir, CHAT_FAILED_FOLDER);
+
+            // Ensure chat_failed folder exists
+            if (!(await exists(failedFolder))) {
+                await mkdir(failedFolder, { recursive: true });
+            }
+
+            // Use monthly file format like chat_history
+            const fileName = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}.json`;
+            const filePath = await join(failedFolder, fileName);
+
+            // Load existing failed queries
+            let existingData: Array<{ question: string; sql: string; error?: string; timestamp: string }> = [];
+            if (await exists(filePath)) {
+                try {
+                    const content = await readTextFile(filePath);
+                    existingData = JSON.parse(content);
+                } catch {
+                    existingData = [];
+                }
+            }
+
+            // Add new failed query
+            existingData.push({
+                question,
+                sql,
+                error,
+                timestamp: new Date().toISOString()
+            });
+
+            await writeTextFile(filePath, JSON.stringify(existingData, null, 2));
+        } catch (e) {
+            console.error('Failed to save failed query:', e);
+        }
+    };
+
     const handleImproveQuery = (question: string, sql: string) => {
         setFailedQuery({ question, sql });
         setShowTrainingModal(true);
+        // Save to chat_failed folder
+        saveFailedQuery(question, sql);
     };
 
     // Render Sidecar Download UI if needed
@@ -596,25 +678,6 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                         <div className="flex items-center gap-1">
                             {/* Toolbar buttons */}
                             <button
-                                onClick={() => setShowHistory(!showHistory)}
-                                className={cn(
-                                    "h-8 w-8 rounded-full flex items-center justify-center transition-colors",
-                                    showHistory
-                                        ? "bg-sky-100 dark:bg-sky-900/50 text-sky-600 dark:text-sky-400"
-                                        : "hover:bg-black/5 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground"
-                                )}
-                                title="Chat History"
-                            >
-                                <History className="h-4 w-4" />
-                            </button>
-                            <button
-                                onClick={clearHistory}
-                                className="h-8 w-8 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors text-muted-foreground hover:text-red-500"
-                                title="Clear Chat"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </button>
-                            <button
                                 className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
                                 title="Settings"
                             >
@@ -654,8 +717,8 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                     {/* Chat Area */}
                     <div className="flex-1 overflow-hidden relative bg-slate-50/50 dark:bg-slate-900/50">
                         <ScrollArea className="h-full px-6 pt-6 pb-4">
-                            {/* Load History Button */}
-                            {hasOldHistory && messages.length === 0 && (
+                            {/* Load History Button - show when there's history to load */}
+                            {(hasOldHistory && historyOffset < totalHistoryCount) || (hasOldHistory && allHistoryMessages.length === 0) ? (
                                 <motion.div
                                     initial={{ opacity: 0, y: -10 }}
                                     animate={{ opacity: 1, y: 0 }}
@@ -674,12 +737,15 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                                         ) : (
                                             <>
                                                 <History className="h-4 w-4" />
-                                                Load Previous Conversations
+                                                {allHistoryMessages.length === 0
+                                                    ? 'Load Previous Conversations'
+                                                    : `Load ${Math.min(HISTORY_LOAD_BATCH, totalHistoryCount - historyOffset)} more (${totalHistoryCount - historyOffset} remaining)`
+                                                }
                                             </>
                                         )}
                                     </button>
                                 </motion.div>
-                            )}
+                            ) : null}
                             {!isServerReady && !isStartingServer ? (
                                 <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
                                     <Bot className="h-16 w-16 text-muted-foreground mb-4" />
@@ -730,6 +796,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                                                 key={msg.id}
                                                 message={msg}
                                                 onImprove={handleImproveQuery}
+                                                isCompact={!isMaximized}
                                             />
                                         ))}
                                     </AnimatePresence>
@@ -815,9 +882,26 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
     );
 }
 
-function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove: (q: string, s: string) => void }) {
+function MessageBubble({ message, onImprove, isCompact = false }: { message: ChatMessage; onImprove: (q: string, s: string) => void; isCompact?: boolean }) {
     const isUser = message.role === 'user';
+    // SQL and Chart collapsed, Raw Data open by default
     const [showSql, setShowSql] = useState(false);
+    const [showChart, setShowChart] = useState(false);
+    const [showRawData, setShowRawData] = useState(true);
+
+    // Check if results can be visualized as chart
+    const hasChartableData = message.results && message.results.length > 0 && !message.error;
+
+    // Check if this is a card-type result (customer/supplier)
+    const firstResult = message.results?.[0] as Record<string, unknown> | undefined;
+    const isCardResult = Boolean(
+        message.results &&
+        message.results.length === 1 &&
+        firstResult?.name &&
+        (firstResult?.total_products !== undefined ||
+            firstResult?.total_invoices !== undefined ||
+            firstResult?.total_spent !== undefined)
+    );
 
     return (
         <motion.div
@@ -826,7 +910,11 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
             animate={{ opacity: 1, y: 0, scale: 1 }}
             className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
         >
-            <div className={`max-w-[90%] min-w-0 overflow-hidden flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div className={cn(
+                "min-w-0 overflow-hidden flex gap-3",
+                isUser ? 'flex-row-reverse' : 'flex-row',
+                isCompact ? "w-[50%] min-w-[280px]" : "w-[50%] min-w-[400px]"
+            )}>
                 {/* Avatar */}
                 <div className={cn(
                     "h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm mt-1",
@@ -841,7 +929,7 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                         "relative px-5 py-3.5 shadow-md text-sm min-w-0",
                         isUser
                             ? "text-white rounded-3xl"
-                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-3xl"
+                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-3xl flex-1"
                     )}>
                     <p className={cn(
                         "leading-relaxed whitespace-pre-wrap break-words",
@@ -850,8 +938,181 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                         {message.content || (isUser ? "[Message]" : "[Response]")}
                     </p>
 
-                    {/* SQL Code Block - Collapsible */}
-                    {message.sql && (
+                    {/* Card Results (Customer/Supplier) - Show directly without collapse */}
+                    {isCardResult && firstResult && (
+                        <div className="mt-4">
+                            {firstResult.total_products !== undefined ? (
+                                <SupplierCard data={firstResult as any} />
+                            ) : (
+                                <CustomerCard data={firstResult as any} />
+                            )}
+                        </div>
+                    )}
+
+                    {/* Collapsible Sections for non-card results */}
+                    {!isCardResult && message.results && message.results.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                            {/* 1. SQL Query - Collapsible */}
+                            {message.sql && (
+                                <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
+                                    <button
+                                        onClick={() => setShowSql(!showSql)}
+                                        className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] font-mono text-muted-foreground flex justify-between items-center transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
+                                    >
+                                        <div className="flex items-center gap-1.5">
+                                            <ChevronRight className={cn("h-3 w-3 transition-transform", showSql && "rotate-90")} />
+                                            <span>SQL Query</span>
+                                        </div>
+                                        {message.timing && <span>{formatTime(message.timing.sqlGen)}</span>}
+                                    </button>
+                                    <AnimatePresence>
+                                        {showSql && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="bg-slate-50 dark:bg-slate-950 p-3 border-t border-black/5">
+                                                    <code className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 whitespace-pre-wrap break-all">
+                                                        {message.sql}
+                                                    </code>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            )}
+
+                            {/* 2. Raw Data Table - Collapsible */}
+                            {(() => {
+                                const allKeys = Object.keys(message.results[0]);
+                                const maxColumns = isCompact
+                                    ? 5
+                                    : Math.min(10, Math.max(6, Math.ceil(allKeys.length * 0.5)));
+                                const displayKeys = allKeys.length > maxColumns
+                                    ? allKeys.slice(0, maxColumns)
+                                    : allKeys;
+                                const hasMoreColumns = allKeys.length > maxColumns;
+
+                                return (
+                                    <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
+                                        <button
+                                            onClick={() => setShowRawData(!showRawData)}
+                                            className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] text-muted-foreground flex justify-between items-center transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
+                                        >
+                                            <div className="flex items-center gap-1.5">
+                                                <ChevronRight className={cn("h-3 w-3 transition-transform", showRawData && "rotate-90")} />
+                                                <Table2 className="h-3 w-3" />
+                                                <span>Raw Data</span>
+                                            </div>
+                                            <span>{message.results.length} rows</span>
+                                        </button>
+                                        <AnimatePresence>
+                                            {showRawData && (
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="border-t border-black/5">
+                                                        <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
+                                                            <table className={cn(
+                                                                "w-full",
+                                                                isCompact ? "text-[9px]" : "text-[10px]"
+                                                            )}>
+                                                                <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5">
+                                                                    <tr>
+                                                                        {displayKeys.map((key) => (
+                                                                            <th key={key} className={cn(
+                                                                                "text-left font-semibold text-muted-foreground whitespace-nowrap uppercase tracking-wider",
+                                                                                isCompact ? "px-1.5 py-1" : "px-2 py-1.5"
+                                                                            )}>
+                                                                                {key.replace(/_/g, ' ')}
+                                                                            </th>
+                                                                        ))}
+                                                                        {hasMoreColumns && (
+                                                                            <th className="px-1.5 py-1 text-left font-semibold text-muted-foreground">...</th>
+                                                                        )}
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-black/5 dark:divide-white/5">
+                                                                    {message.results.slice(0, 10).map((row, i) => (
+                                                                        <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                                                            {displayKeys.map((key) => (
+                                                                                <td
+                                                                                    key={key}
+                                                                                    className={cn(
+                                                                                        "whitespace-nowrap truncate",
+                                                                                        isCompact ? "px-1.5 py-1 max-w-[70px]" : "px-2 py-1.5 max-w-[120px]"
+                                                                                    )}
+                                                                                    title={String((row as any)[key])}
+                                                                                >
+                                                                                    {String((row as any)[key] ?? '-')}
+                                                                                </td>
+                                                                            ))}
+                                                                            {hasMoreColumns && (
+                                                                                <td className="px-1.5 py-1 text-muted-foreground">...</td>
+                                                                            )}
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                        <div className={cn(
+                                                            "bg-slate-50 dark:bg-slate-900 text-muted-foreground flex justify-between border-t border-black/5",
+                                                            isCompact ? "px-2 py-1 text-[8px]" : "px-3 py-1.5 text-[9px]"
+                                                        )}>
+                                                            <span>
+                                                                Showing {Math.min(message.results.length, 10)} of {message.results.length} results
+                                                                {hasMoreColumns && ` (${allKeys.length - maxColumns} more columns)`}
+                                                            </span>
+                                                            {message.timing && <span>Exec: {formatTime(message.timing.sqlRun)}</span>}
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* 3. Chart Visualization - Collapsible (Last) */}
+                            {hasChartableData && (
+                                <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
+                                    <button
+                                        onClick={() => setShowChart(!showChart)}
+                                        className="w-full bg-indigo-50 dark:bg-indigo-950/50 px-3 py-2 text-[10px] text-indigo-600 dark:text-indigo-400 flex justify-between items-center transition-colors hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
+                                    >
+                                        <div className="flex items-center gap-1.5">
+                                            <ChevronRight className={cn("h-3 w-3 transition-transform", showChart && "rotate-90")} />
+                                            <BarChart3 className="h-3 w-3" />
+                                            <span className="font-medium">Chart</span>
+                                        </div>
+                                        <span className="text-[9px] opacity-70">Visualization</span>
+                                    </button>
+                                    <AnimatePresence>
+                                        {showChart && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="bg-white dark:bg-slate-900 p-3 border-t border-black/5">
+                                                    <LazyChart data={message.results} isCompact={isCompact} />
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* SQL only (no results) - still show collapsible */}
+                    {message.sql && (!message.results || message.results.length === 0) && !message.error && (
                         <div className="mt-3 rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
                             <button
                                 onClick={() => setShowSql(!showSql)}
@@ -863,7 +1124,6 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                                 </div>
                                 {message.timing && <span>{formatTime(message.timing.sqlGen)}</span>}
                             </button>
-
                             <AnimatePresence>
                                 {showSql && (
                                     <motion.div
@@ -872,8 +1132,8 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                                         exit={{ height: 0, opacity: 0 }}
                                         className="overflow-hidden"
                                     >
-                                        <div className="bg-slate-50 dark:bg-slate-950 p-3 overflow-x-auto border-t border-black/5">
-                                            <code className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 whitespace-pre">
+                                        <div className="bg-slate-50 dark:bg-slate-950 p-3 border-t border-black/5">
+                                            <code className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 whitespace-pre-wrap break-all">
                                                 {message.sql}
                                             </code>
                                         </div>
@@ -881,52 +1141,6 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                                 )}
                             </AnimatePresence>
                         </div>
-                    )}
-
-                    {/* Results: Card or Table */}
-                    {message.results && message.results.length === 1 && message.results[0].name && message.results[0].total_products !== undefined ? (
-                        /* Supplier Card */
-                        <div className="mt-4">
-                            <SupplierCard data={message.results[0] as any} />
-                        </div>
-                    ) : message.results && message.results.length === 1 && message.results[0].name && (message.results[0].total_invoices !== undefined || message.results[0].total_spent !== undefined) ? (
-                        /* Customer Card */
-                        <div className="mt-4">
-                            <CustomerCard data={message.results[0] as any} />
-                        </div>
-                    ) : (
-                        message.results && message.results.length > 0 && (
-                            <div className="mt-4 rounded-xl border border-black/5 dark:border-white/5 overflow-hidden bg-white/50 dark:bg-black/20 w-full">
-                                <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
-                                    <table className="w-full text-[10px] min-w-max">
-                                        <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5">
-                                            <tr>
-                                                {Object.keys(message.results[0]).map((key) => (
-                                                    <th key={key} className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap uppercase tracking-wider">
-                                                        {key.replace(/_/g, ' ')}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-black/5 dark:divide-white/5">
-                                            {message.results.slice(0, 10).map((row, i) => (
-                                                <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                                                    {Object.values(row).map((value, j) => (
-                                                        <td key={j} className="px-2 py-1.5 whitespace-nowrap max-w-[120px] truncate" title={String(value)}>
-                                                            {String(value ?? '-')}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div className="bg-slate-50 dark:bg-slate-900 px-3 py-1.5 text-[9px] text-muted-foreground flex justify-between border-t border-black/5">
-                                    <span>Showing {Math.min(message.results.length, 10)} of {message.results.length} results</span>
-                                    {message.timing && <span>Exec: {formatTime(message.timing.sqlRun)}</span>}
-                                </div>
-                            </div>
-                        )
                     )}
 
                     {/* Error State */}
