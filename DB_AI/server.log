@@ -1258,3 +1258,102 @@ INFO:__main__:  [SQL Gen]: 4.74s
 INFO:__main__:  [SQL Run]: 0.00s
 INFO:__main__:  [Total]: 4.75s
 INFO:     127.0.0.1:49447 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51873 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51873 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51873 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51873 - "OPTIONS /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: Total revenue this month
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: Total revenue this month
+INFO:core.vanna_setup:Retrieved context: Question: What is the total revenue this month?
+SQL: SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+
+---
+
+Question: How much r...
+INFO:core.vanna_setup:DEBUG: System Prompt:
+You are a SQL expert for an inventory management SQLite database.
+Generate ONLY valid SQLite SQL. Return ONLY the query, no markdown, no explanations.
+
+CRITICAL: This is SQLite, NOT MySQL! Use SQLite date functions:
+- For current month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+- For today: DATE(created_at) = DATE('now')  
+- For this week: created_at >= DATE('now', '-7 days')
+- NEVER use MONTH(), YEAR(), CURDATE() - these are MySQL functions!
+
+For name searches, ALWAYS use case-insensitive LIKE:
+- WHERE LOWER(name) LIKE LOWER('%search_term%')
+
+DATABASE SCHEMA:
+
+-- Products: id, name, sku, price, selling_price, stock_quantity, supplier_id, category
+CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, sku TEXT UNIQUE, price REAL, selling_price REAL, stock_quantity INTEGER, supplier_id INTEGER, category TEXT);
+
+-- Suppliers: id, name, contact_info, email, address, state, district, town
+CREATE TABLE suppliers (id INTEGER PRIMARY KEY, name TEXT, contact_info TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+
+-- Customers: id, name, phone, email, address, state, district, town
+CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+
+-- Invoices (Sales): id, invoice_number, customer_id, total_amount, payment_method, status, created_at
+CREATE TABLE invoices (id INTEGER PRIMARY KEY, invoice_number TEXT UNIQUE, customer_id INTEGER, total_amount REAL, payment_method TEXT, status TEXT, created_at TEXT);
+
+-- Invoice Items: id, invoice_id, product_id, quantity, unit_price
+CREATE TABLE invoice_items (id INTEGER PRIMARY KEY, invoice_id INTEGER, product_id INTEGER, quantity INTEGER, unit_price REAL);
+
+-- Purchase Orders: id, po_number, supplier_id, total_amount, status, order_date
+CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT UNIQUE, supplier_id INTEGER, total_amount REAL, status TEXT, order_date TEXT);
+
+-- Purchase Order Items: id, po_id, product_id, quantity, unit_cost, total_cost
+CREATE TABLE purchase_order_items (id INTEGER PRIMARY KEY, po_id INTEGER, product_id INTEGER, quantity INTEGER, unit_cost REAL, total_cost REAL);
+
+MANDATORY QUERY TEMPLATES (USE THESE EXACTLY):
+When user asks for customer by name, customer info, customer details, or customer name:
+SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%CUSTOMERNAME%') GROUP BY c.id
+
+RULES:
+1. Column 'name' is just 'name', NOT 'product_name' or 'customer_name'
+2. Use strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') for THIS MONTH
+3. Use DATE(created_at) = DATE('now') for TODAY
+4. Always start with SELECT
+5. For customer/supplier searches by name, use LOWER() for case-insensitive matching
+
+RELEVANT EXAMPLES:
+Question: What is the total revenue this month?
+SQL: SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+
+---
+
+Question: How much revenue did we make this month?
+SQL: SELECT SUM(total_amount) as total_revenue, COUNT(*) as order_count FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+INFO:core.vanna_setup:LLM prompt: Total revenue this month
+INFO:core.vanna_setup:LLM raw response: {'id': 'chatcmpl-34131209-dfe8-48fa-b407-d1aaa51d7361', 'object': 'chat.completion', 'created': 1765776656, 'model': '/Users/zubair/Library/Application Support/com.inventry.tauri/models/model.gguf', 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': "SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"}, 'logprobs': None, 'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 810, 'completion_tokens': 31, 'total_tokens': 841}}
+INFO:core.vanna_setup:Raw LLM output: "SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+INFO:core.vanna_setup:Cleaned SQL: "SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+INFO:core.sql_executor:Executing SQL: "SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+INFO:core.sql_executor:Checking SQL safety: SELECT SUM(TOTAL_AMOUNT) AS TOTAL_REVENUE FROM INVOICES WHERE STRFTIME('%Y-%M', CREATED_AT) = STRFTI...
+INFO:__main__:Extracted SQL: SELECT SUM(total_amount) AS total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+INFO:__main__:  [SQL Gen]: 7.71s
+INFO:__main__:  [SQL Run]: 0.01s
+INFO:__main__:  [Total]: 7.72s
+INFO:     127.0.0.1:51873 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51907 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51907 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51907 - "GET /status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51907 - "OPTIONS /query HTTP/1.1" 200 OK
+INFO:core.vanna_setup:DEBUG: generate_sql called with question: customer zubair
+INFO:core.vanna_setup:DEBUG: vector_store type: <class 'core.vanna_setup.SimpleVectorStore'>
+INFO:core.vanna_setup:Generating SQL for question: customer zubair
+INFO:core.vanna_setup:Detected customer name query, using hardcoded SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id
+INFO:core.sql_executor:Executing SQL: "SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id"
+INFO:core.sql_executor:Checking SQL safety: SELECT C.*, COUNT(DISTINCT I.ID) AS TOTAL_INVOICES, COALESCE(SUM(I.TOTAL_AMOUNT), 0) AS TOTAL_SPENT,...
+INFO:__main__:Extracted SQL: SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%zubair%') GROUP BY c.id
+INFO:__main__:  [SQL Gen]: 0.00s
+INFO:__main__:  [SQL Run]: 0.00s
+INFO:__main__:  [Total]: 0.00s
+INFO:     127.0.0.1:51907 - "POST /query HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:__main__:Shutting down AI Chat sidecar...
+INFO:     Application shutdown complete.
+INFO:     Finished server process [46975]

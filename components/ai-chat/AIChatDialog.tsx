@@ -79,7 +79,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     // Chat history folder and monthly file format
-    const CHAT_HISTORY_FOLDER = 'chat_history';
+    const CHAT_HISTORY_FOLDER = 'AI/chat_history';
 
     const getMonthlyFileName = () => {
         const now = new Date();
@@ -563,7 +563,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                         "flex flex-col p-0 gap-0 border-white/20 bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl shadow-2xl overflow-hidden ring-1 ring-black/5 dark:ring-white/10 transition-all duration-300",
                         isMaximized
                             ? "!max-w-[100vw] !w-[100vw] !h-[100vh] !rounded-none"
-                            : "sm:max-w-[800px] h-[650px] rounded-[40px]"
+                            : "sm:max-w-[800px] w-full h-[650px] rounded-[40px]"
                     )}
                     onInteractOutside={(e) => e.preventDefault()}
                 >
@@ -826,7 +826,7 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
             animate={{ opacity: 1, y: 0, scale: 1 }}
             className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
         >
-            <div className={`max-w-[90%] flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div className={`max-w-[90%] min-w-0 overflow-hidden flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
                 {/* Avatar */}
                 <div className={cn(
                     "h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm mt-1",
@@ -838,7 +838,7 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                 <div
                     style={{ backgroundColor: isUser ? '#4f46e5' : undefined }}
                     className={cn(
-                        "relative px-5 py-3.5 shadow-md text-sm min-w-[60px] overflow-hidden",
+                        "relative px-5 py-3.5 shadow-md text-sm min-w-0",
                         isUser
                             ? "text-white rounded-3xl"
                             : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-3xl"
@@ -896,7 +896,7 @@ function MessageBubble({ message, onImprove }: { message: ChatMessage; onImprove
                         </div>
                     ) : (
                         message.results && message.results.length > 0 && (
-                            <div className="mt-4 rounded-xl border border-black/5 dark:border-white/5 overflow-hidden bg-white/50 dark:bg-black/20 max-w-full">
+                            <div className="mt-4 rounded-xl border border-black/5 dark:border-white/5 overflow-hidden bg-white/50 dark:bg-black/20 w-full">
                                 <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
                                     <table className="w-full text-[10px] min-w-max">
                                         <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5">

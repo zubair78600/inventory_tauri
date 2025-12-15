@@ -140,7 +140,7 @@ export async function authenticateWithBiometric(username: string): Promise<User 
         // This is the critical security gate - user must authenticate with Touch ID
         await authenticate('Sign in to Inventory System', {
             allowDeviceCredential: false,
-            cancelTitle: 'Use Password',
+            cancelTitle: 'Cancel',
         });
 
         // Biometric auth succeeded - now verify token with backend
