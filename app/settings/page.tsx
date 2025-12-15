@@ -1108,37 +1108,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Backup & Restore Section (Moved here) */}
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Backup & Restore</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-              Export all application settings to a JSON file or restore from a backup.
-            </p>
 
-            <div className="flex flex-wrap gap-4">
-              <button
-                onClick={() => void handleExportSettings()}
-                className="btn btn-secondary inline-flex items-center"
-              >
-                <Download size={16} className="mr-2" />
-                Export Settings (JSON)
-              </button>
-
-              <button
-                onClick={() => void handleImportSettings()}
-                className="btn btn-secondary inline-flex items-center"
-                disabled={loading}
-              >
-                {loading ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Upload size={16} className="mr-2" />}
-                Import Settings (JSON)
-              </button>
-            </div>
-            {importingInfo && (
-              <div className="mt-4 p-4 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg text-sm">
-                {importingInfo}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -1254,6 +1224,38 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Backup & Restore Section (Moved from General) */}
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">Backup & Restore</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              Export all application settings to a JSON file or restore from a backup.
+            </p>
+
+            <div className="flex flex-wrap gap-4">
+              <button
+                onClick={() => void handleExportSettings()}
+                className="btn btn-secondary inline-flex items-center"
+              >
+                <Download size={16} className="mr-2" />
+                Export Settings (JSON)
+              </button>
+
+              <button
+                onClick={() => void handleImportSettings()}
+                className="btn btn-secondary inline-flex items-center"
+                disabled={loading}
+              >
+                {loading ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Upload size={16} className="mr-2" />}
+                Import Settings (JSON)
+              </button>
+            </div>
+            {importingInfo && (
+              <div className="mt-4 p-4 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg text-sm">
+                {importingInfo}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -18,10 +18,10 @@ const formatCurrency = (value: number): string => {
   return `₹${value.toFixed(0)}`;
 };
 
-export function PaymentMethodChart({ data, loading }: PaymentMethodChartProps) {
+export function PaymentMethodChart({ data, loading, className }: PaymentMethodChartProps & { className?: string }) {
   if (loading) {
     return (
-      <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
         <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded mb-3 animate-pulse" />
         <div className="flex items-center gap-4">
           <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-700/50 animate-pulse" />
@@ -37,7 +37,7 @@ export function PaymentMethodChart({ data, loading }: PaymentMethodChartProps) {
 
   if (!data || data.length === 0) {
     return (
-      <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
         <div className="flex items-center gap-2 mb-3">
           <CreditCard size={16} className="text-purple-500" />
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Payment Methods</h3>
@@ -71,7 +71,7 @@ export function PaymentMethodChart({ data, loading }: PaymentMethodChartProps) {
   };
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+    <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
       <div className="flex items-center gap-2 mb-3">
         <CreditCard size={16} className="text-purple-500" />
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Payment Methods</h3>
