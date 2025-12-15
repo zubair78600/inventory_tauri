@@ -49,8 +49,8 @@ CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, sku TEXT UNIQUE, price
 -- Suppliers: id, name, contact_info, email, address, state, district, town
 CREATE TABLE suppliers (id INTEGER PRIMARY KEY, name TEXT, contact_info TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
 
--- Customers: id, name, phone, email, address, state, district, town
-CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
+-- Customers: id, name, phone, email, address, state, district, town, created_at
+CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 
 -- Invoices (Sales): id, invoice_number, customer_id, total_amount, payment_method, status, created_at
 CREATE TABLE invoices (id INTEGER PRIMARY KEY, invoice_number TEXT UNIQUE, customer_id INTEGER, total_amount REAL, payment_method TEXT, status TEXT, created_at TEXT);
@@ -167,6 +167,123 @@ class VannaAI:
 
         logger.info("VannaAI initialized")
 
+    def get_date_filter(self, question: str, column: str) -> str:
+        """Extract date filter from question and return SQL condition"""
+        import re
+        from datetime import datetime
+        q = question.lower()
+        
+        # 1. Explicit Date Ranges ("From X to Y")
+        # Matches: from 12-11-2025 to 15-12-2025, from 12th nov to 15th dec, etc.
+        range_match = re.search(r'from\s+(.+?)\s+to\s+(.+)', q)
+        if range_match:
+            start_str = range_match.group(1).strip()
+            end_str = range_match.group(2).strip()
+            
+            def parse_date_str(date_str):
+                # Try common formats
+                formats = [
+                    '%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d',
+                    '%d %B', '%dth %B', '%dst %B', '%dnd %B', '%drd %B',  # 12th November
+                    '%d %b', '%dth %b', '%dst %b', '%dnd %b', '%drd %b',  # 12th Nov
+                    '%B %d', '%b %d' # November 12
+                ]
+                
+                # Clean up "th", "st", "nd", "rd" if followed by space (e.g. 12th november)
+                # But be careful not to break "12-11"
+                clean_str = re.sub(r'(\d+)(st|nd|rd|th)\s+', r'\1 ', date_str) 
+                
+                for fmt in formats:
+                    try:
+                        dt = datetime.strptime(clean_str, fmt)
+                        # If year is missing (1900), set to current year
+                        if dt.year == 1900:
+                            dt = dt.replace(year=datetime.now().year)
+                        return dt.strftime('%Y-%m-%d')
+                    except ValueError:
+                        continue
+                        
+                # Try adding year if missing for formats like "12th November"
+                try:
+                    clean_str_with_year = f"{clean_str} {datetime.now().year}"
+                    for fmt in [f"{f} %Y" for f in formats]:
+                         try:
+                            dt = datetime.strptime(clean_str_with_year, fmt)
+                            return dt.strftime('%Y-%m-%d')
+                         except ValueError:
+                            continue
+                except:
+                    pass
+                return None
+
+            start_date = parse_date_str(start_str)
+            end_date = parse_date_str(end_str)
+            
+            if start_date and end_date:
+                return f"DATE({column}) BETWEEN DATE('{start_date}') AND DATE('{end_date}')"
+
+        # 2. Week Numbers ("Week 45")
+        week_match = re.search(r'week\s+(\d+)', q)
+        if week_match:
+             week_num = week_match.group(1)
+             # SQLite %W is 00-53. Ensure 2 digits.
+             return f"strftime('%W', {column}) = '{int(week_num):02d}'"
+
+        # 3. Relative Ranges ("Last X months", "Past X years")
+        # "From 1 year" -> Treated as "Last 1 year"
+        relative_match = re.search(r'(?:last|past|from)\s+(\d+)\s+(year|month|week|day)s?', q)
+        if relative_match:
+            amount = relative_match.group(1)
+            unit = relative_match.group(2) # year, month, week, day
+            if unit == 'week': unit = 'day'; amount = str(int(amount) * 7) # SQLite doesn't strictly support '-X weeks' in all versions, days is safer
+            
+            return f"DATE({column}) >= DATE('now', '-{amount} {unit}s')"
+
+        # 4. Specific Months ("November", "Nov")
+        # Map month names to numbers
+        months = {
+            'january': '01', 'jan': '01',
+            'february': '02', 'feb': '02',
+            'march': '03', 'mar': '03',
+            'april': '04', 'apr': '04',
+            'may': '05',
+            'june': '06', 'jun': '06',
+            'july': '07', 'jul': '07',
+            'august': '08', 'aug': '08',
+            'september': '09', 'sep': '09',
+            'october': '10', 'oct': '10',
+            'november': '11', 'nov': '11',
+            'december': '12', 'dec': '12'
+        }
+        for month_name, month_num in months.items():
+            # Check for word boundary logic manually or simple strict match
+            # "november" in q might match "november rain" but reasonably implies date filter here
+            if f" {month_name} " in f" {q} ": # simplistic word boundary
+                # Verify it's not part of "last november" which implies range? 
+                # Actually "last november" usually means "the previous november", but simplistic "month = 11" 
+                # gets ALL novembers. User asked for "November month".
+                return f"strftime('%m', {column}) = '{month_num}'"
+
+        # 5. Shortcuts (Today, Yesterday, etc) - Keep existing logic
+        if 'today' in q:
+            return f"DATE({column}) = DATE('now')"
+        if 'yesterday' in q:
+            return f"DATE({column}) = DATE('now', '-1 day')"
+        if 'this week' in q:
+            return f"strftime('%Y-%W', {column}) = strftime('%Y-%W', 'now')"
+        if 'last week' in q: # This is "previous week", distinct from "last 7 days" regex above
+            return f"strftime('%Y-%W', {column}) = strftime('%Y-%W', 'now', '-7 days')"
+        if 'this month' in q:
+            return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now')"
+        if 'last month' in q: # Previous calendar month
+            return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now', '-1 month')"
+        if 'this year' in q:
+            return f"strftime('%Y', {column}) = strftime('%Y', 'now')"
+        if 'last year' in q:
+            return f"strftime('%Y', {column}) = strftime('%Y', 'now', '-1 year')"
+            
+        return ""
+
     def generate_sql(self, question: str) -> str:
         """Generate SQL from a natural language question"""
         logger.info(f"DEBUG: generate_sql called with question: {question}")
@@ -260,13 +377,39 @@ class VannaAI:
             
             # Handle "customer list" or "customer all" explicitly
             if customer_name.lower() in ['list', 'all', 'data', 'details', 'detail', 'info']:
-                sql = "SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id GROUP BY c.id"
-                logger.info(f"Detected customer list query, using hardcoded SQL: {sql}")
+                base_sql = "SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id"
+                
+                # Apply date filter if present
+                date_filter = self.get_date_filter(question, 'c.created_at')
+                if date_filter:
+                    base_sql += f" WHERE {date_filter}"
+                
+                sql = base_sql + " GROUP BY c.id"
+                logger.info(f"Detected customer list query (filtered: {bool(date_filter)}), using hardcoded SQL: {sql}")
                 return sql
             
             sql = f"SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%') GROUP BY c.id"
             logger.info(f"Detected customer name query, using hardcoded SQL: {sql}")
             return sql
+        
+        # =================
+        # REVENUE QUERIES
+        # =================
+        if 'revenue' in question_lower or 'sales' in question_lower or 'income' in question_lower:
+            # Only intercept if it looks like a general revenue query, not per-customer (which might be handled above or by LLM)
+            # The customer block above handles "customer" keyword. If we are here, it's likely general revenue.
+            
+            date_filter = self.get_date_filter(question, 'created_at')
+            if date_filter:
+                sql = f"SELECT SUM(total_amount) as total_revenue FROM invoices WHERE {date_filter}"
+                logger.info(f"Detected date-filtered revenue query, using hardcoded SQL: {sql}")
+                return sql
+            
+            # If specifically asking for "total revenue" or "total sales" without date, usually means all time
+            if 'total' in question_lower:
+                sql = "SELECT SUM(total_amount) as total_revenue FROM invoices"
+                logger.info(f"Detected total revenue query, using hardcoded SQL: {sql}")
+                return sql
         
         # =================
         # SUPPLIER QUERIES

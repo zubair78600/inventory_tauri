@@ -55,3 +55,7 @@ DB_AI/dist/
 
 # Sidecar binaries (downloaded/built separately)
 src-tauri/binaries/
+
+# Logs
+*.log
+DB_AI/server.log

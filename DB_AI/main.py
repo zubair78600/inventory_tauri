@@ -8,6 +8,7 @@ from typing import Optional
 
 from core.vanna_setup import VannaAI
 from core.sql_executor import SQLExecutor
+from core.cache import QueryCache
 from config import DB_PATH, MODEL_PATH, VECTORDB_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -16,6 +17,7 @@ print("DEBUG: main.py STARTING UP - IF YOU SEE THIS, I AM THE CORRECT FILE")
 
 vanna_ai: Optional[VannaAI] = None
 sql_executor: Optional[SQLExecutor] = None
+query_cache: Optional[QueryCache] = None
 model_init_error: Optional[str] = None
 
 
@@ -60,11 +62,14 @@ class DownloadProgress(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global vanna_ai, sql_executor, model_init_error
+    global vanna_ai, sql_executor, query_cache, model_init_error
     logger.info("Starting AI Chat sidecar...")
     
     # Initialize SQL executor (always available for read-only queries)
     sql_executor = SQLExecutor(str(DB_PATH))
+    
+    # Initialize Cache
+    query_cache = QueryCache(str(DB_PATH.parent))
     
     # Initialize VannaAI only if model is downloaded and valid
     if MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 0:
@@ -110,6 +115,7 @@ async def health_check():
 async def get_status():
     """Get the current setup status"""
     # Check model exists AND has reasonable size (>1GB for valid GGUF)
+    logger.info(f"Checking model at: {MODEL_PATH}")
     model_exists = MODEL_PATH.exists()
     model_size = MODEL_PATH.stat().st_size if model_exists else 0
     model_downloaded = model_exists and model_size > 1000000  # > 1MB means file exists
@@ -137,23 +143,35 @@ async def query(request: QueryRequest):
 
     total_start = time.perf_counter()
 
-    # SQL Generation
-    sql_start = time.perf_counter()
-    try:
-        sql = vanna_ai.generate_sql(request.question)
-    except Exception as e:
-        logger.error(f"SQL generation failed: {e}")
-        return QueryResponse(
-            sql="", results=[], sql_extraction_time_ms=0,
-            execution_time_ms=0, total_time_ms=0, success=False,
-            error=f"SQL generation failed: {str(e)}"
-        )
-    sql_time = (time.perf_counter() - sql_start) * 1000
+    # Check cache first
+    cached_sql = query_cache.get(request.question)
+    if cached_sql:
+        logger.info(f"Cache HIT for query: {request.question}")
+        sql = cached_sql
+        sql_time = 0.0
+    else:
+        # SQL Generation
+        sql_start = time.perf_counter()
+        try:
+            sql = vanna_ai.generate_sql(request.question)
+        except Exception as e:
+            logger.error(f"SQL generation failed: {e}")
+            return QueryResponse(
+                sql="", results=[], sql_extraction_time_ms=0,
+                execution_time_ms=0, total_time_ms=0, success=False,
+                error=f"SQL generation failed: {str(e)}"
+            )
+        sql_time = (time.perf_counter() - sql_start) * 1000
 
     # SQL Execution
     exec_start = time.perf_counter()
     try:
         results = sql_executor.execute(sql)
+        
+        # Only cache if execution was successful and we didn't just read it from cache
+        if not cached_sql:
+            query_cache.set(request.question, sql)
+            
     except Exception as e:
         logger.error(f"SQL execution failed: {e}")
         return QueryResponse(
