@@ -191,13 +191,13 @@ export default function Dashboard() {
       {/* Row 2: Revenue Chart + Top Products + Payment Methods */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         <div className="lg:col-span-6">
-          <RevenueChart data={revenueTrend ?? []} loading={trendLoading} />
+          <RevenueChart data={revenueTrend ?? []} loading={trendLoading} className="h-full" />
         </div>
         <div className="lg:col-span-3">
-          <TopProductsChart data={topProducts ?? []} loading={productsLoading} />
+          <TopProductsChart data={topProducts ?? []} loading={productsLoading} className="h-full" />
         </div>
         <div className="lg:col-span-3">
-          <PaymentMethodChart data={paymentMethods ?? []} loading={paymentsLoading} />
+          <PaymentMethodChart data={paymentMethods ?? []} loading={paymentsLoading} className="h-full" />
         </div>
       </div>
 

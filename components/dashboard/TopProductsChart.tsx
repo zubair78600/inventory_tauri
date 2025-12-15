@@ -18,10 +18,10 @@ const formatCurrency = (value: number): string => {
 
 const COLORS = ['#0ea5e9', '#06b6d4', '#14b8a6', '#10b981', '#22c55e'];
 
-export function TopProductsChart({ data, loading, limit = 5 }: TopProductsChartProps) {
+export function TopProductsChart({ data, loading, limit = 5, className }: TopProductsChartProps & { className?: string }) {
   if (loading) {
     return (
-      <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
         <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded mb-3 animate-pulse" />
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -34,7 +34,7 @@ export function TopProductsChart({ data, loading, limit = 5 }: TopProductsChartP
 
   if (!data || data.length === 0) {
     return (
-      <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
         <div className="flex items-center gap-2 mb-3">
           <Package size={16} className="text-emerald-500" />
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Top Products</h3>
@@ -50,7 +50,7 @@ export function TopProductsChart({ data, loading, limit = 5 }: TopProductsChartP
   const maxRevenue = Math.max(...chartData.map(p => p.revenue));
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+    <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
       <div className="flex items-center gap-2 mb-3">
         <Package size={16} className="text-emerald-500" />
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Top Products</h3>

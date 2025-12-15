@@ -38,12 +38,12 @@ const formatDate = (dateStr: string): string => {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }).replace(' ', '\n');
 };
 
-export function RevenueChart({ data, loading, compact = false }: RevenueChartProps) {
+export function RevenueChart({ data, loading, compact = false, className }: RevenueChartProps & { className?: string }) {
   const height = compact ? 180 : 270;
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
         <div className="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded mb-3 animate-pulse" />
         <div className={`bg-slate-100 dark:bg-slate-700/50 rounded animate-pulse`} style={{ height }} />
       </div>
@@ -52,7 +52,7 @@ export function RevenueChart({ data, loading, compact = false }: RevenueChartPro
 
   if (!data || data.length === 0) {
     return (
-      <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
         <div className="flex items-center gap-2 mb-3">
           <TrendingUp size={16} className="text-sky-500" />
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Revenue Trend</h3>
@@ -69,7 +69,7 @@ export function RevenueChart({ data, loading, compact = false }: RevenueChartPro
   const totalOrders = data.reduce((sum, d) => sum + d.order_count, 0);
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+    <div className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <TrendingUp size={16} className="text-sky-500" />
