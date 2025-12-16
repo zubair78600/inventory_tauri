@@ -10,6 +10,7 @@ pub struct CreateInvoiceItemInput {
     pub product_id: i32,
     pub quantity: i32,
     pub unit_price: f64,
+    pub discount_amount: Option<f64>, // Per-item weighted discount
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,6 +45,7 @@ pub struct InvoiceItemWithProduct {
     pub product_sku: String,
     pub quantity: i32,
     pub unit_price: f64,
+    pub discount_amount: f64, // Per-item weighted discount
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -188,6 +190,7 @@ pub fn get_invoices(
                 customer_phone: row.get(17)?,
                 item_count: row.get(18)?,
                 quantity: None,
+                product_amount: None,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -211,9 +214,10 @@ pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<V
 
     let conn = db.get_conn()?;
 
+    // Query now fetches necessary fields to calculate weighted discount
     let mut stmt = conn
         .prepare(
-            "SELECT i.id, i.invoice_number, i.customer_id, i.total_amount, i.tax_amount, i.discount_amount, i.payment_method, i.created_at, i.cgst_amount, i.fy_year, i.gst_rate, i.igst_amount, i.sgst_amount, i.state, i.district, i.town, ii.quantity
+            "SELECT i.id, i.invoice_number, i.customer_id, i.total_amount, i.tax_amount, i.discount_amount, i.payment_method, i.created_at, i.cgst_amount, i.fy_year, i.gst_rate, i.igst_amount, i.sgst_amount, i.state, i.district, i.town, ii.quantity, ii.unit_price, ii.discount_amount
              FROM invoices i
              JOIN invoice_items ii ON i.id = ii.invoice_id
              WHERE ii.product_id = ?1
@@ -223,13 +227,36 @@ pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<V
 
     let invoice_iter = stmt
         .query_map([product_id], |row| {
+            let total_amount: f64 = row.get(3)?;
+            let tax_amount: f64 = row.get(4)?;
+            let global_discount: f64 = row.get(5)?;
+            let qty: i32 = row.get(16)?;
+            let unit_price: f64 = row.get(17)?;
+            let item_discount: f64 = row.get::<_, Option<f64>>(18)?.unwrap_or(0.0);
+
+            // Calculate Net Product Amount applying both item and weighted global discount
+            let item_gross = qty as f64 * unit_price;
+            
+            // Reconstruct Invoice Gross Subtotal to calculate weight
+            // Invoice Total = Subtotal + Tax - Discount
+            // Subtotal = Invoice Total - Tax + Discount
+            let invoice_subtotal = total_amount - tax_amount + global_discount;
+
+            let weighted_global_discount = if invoice_subtotal > 0.0 && global_discount > 0.0 {
+                (item_gross / invoice_subtotal) * global_discount
+            } else {
+                0.0
+            };
+
+            let net_product_amount = item_gross - item_discount - weighted_global_discount;
+
             Ok(Invoice {
                 id: row.get(0)?,
                 invoice_number: row.get(1)?,
                 customer_id: row.get(2)?,
-                total_amount: row.get(3)?,
-                tax_amount: row.get(4)?,
-                discount_amount: row.get(5)?,
+                total_amount,
+                tax_amount,
+                discount_amount: global_discount,
                 payment_method: row.get(6)?,
                 created_at: row.get(7)?,
                 cgst_amount: row.get(8)?,
@@ -243,7 +270,8 @@ pub fn get_invoices_by_product(product_id: i32, db: State<Database>) -> Result<V
                 customer_name: None,
                 customer_phone: None,
                 item_count: None,
-                quantity: Some(row.get(16)?),
+                quantity: Some(qty),
+                product_amount: Some(net_product_amount), // Corrected Net Amount
             })
         })
         .map_err(|e| e.to_string())?;
@@ -300,6 +328,7 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
                     customer_phone: row.get(17)?,
                     item_count: row.get(18)?,
                     quantity: None,
+                    product_amount: None,
                 })
             },
         )
@@ -308,7 +337,7 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
     // Get invoice items with product details
     let mut stmt = conn
         .prepare(
-            "SELECT ii.id, ii.invoice_id, ii.product_id, p.name, p.sku, ii.quantity, ii.unit_price
+            "SELECT ii.id, ii.invoice_id, ii.product_id, p.name, p.sku, ii.quantity, ii.unit_price, COALESCE(ii.discount_amount, 0)
              FROM invoice_items ii
              JOIN products p ON ii.product_id = p.id
              WHERE ii.invoice_id = ?1"
@@ -325,6 +354,7 @@ pub fn get_invoice(id: i32, db: State<Database>) -> Result<InvoiceWithItems, Str
                 product_sku: row.get(4)?,
                 quantity: row.get(5)?,
                 unit_price: row.get(6)?,
+                discount_amount: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -350,32 +380,53 @@ pub fn get_product_sales_summary(
 
     let conn = db.get_conn()?;
 
-    // Total quantity and total amount for this product across all invoices
-    let (total_qty, total_amount): (i64, f64) = conn
-        .query_row(
-            "SELECT
-                COALESCE(SUM(quantity), 0) AS total_qty,
-                COALESCE(SUM(quantity * unit_price), 0.0) AS total_amount
-             FROM invoice_items
-             WHERE product_id = ?1",
-            [product_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .unwrap_or((0, 0.0));
+    // Fetch individual item details to calculate correct weighted net amount
+    let mut stmt = conn.prepare(
+        "SELECT ii.quantity, ii.unit_price, ii.discount_amount,
+                i.total_amount, i.tax_amount, i.discount_amount, i.id
+         FROM invoice_items ii
+         JOIN invoices i ON ii.invoice_id = i.id
+         WHERE ii.product_id = ?1"
+    ).map_err(|e| e.to_string())?;
 
-    // Number of distinct invoices that contain this product
-    let invoice_count: i32 = conn
-        .query_row(
-            "SELECT COUNT(DISTINCT invoice_id) FROM invoice_items WHERE product_id = ?1",
-            [product_id],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
+    let sales_data = stmt.query_map([product_id], |row| {
+        let qty: i32 = row.get(0)?;
+        let unit_price: f64 = row.get(1)?;
+        let item_discount: f64 = row.get::<_, Option<f64>>(2)?.unwrap_or(0.0);
+        let invoice_total: f64 = row.get(3)?;
+        let invoice_tax: f64 = row.get(4)?;
+        let invoice_global_discount: f64 = row.get(5)?;
+        let invoice_id: i32 = row.get(6)?;
+
+        let item_gross = qty as f64 * unit_price;
+        let invoice_subtotal = invoice_total - invoice_tax + invoice_global_discount;
+
+        let weighted_global_discount = if invoice_subtotal > 0.0 && invoice_global_discount > 0.0 {
+            (item_gross / invoice_subtotal) * invoice_global_discount
+        } else {
+            0.0
+        };
+
+        let net_amount = item_gross - item_discount - weighted_global_discount;
+
+        Ok((qty, net_amount, invoice_id))
+    }).map_err(|e| e.to_string())?;
+
+    let mut total_qty = 0;
+    let mut total_amount = 0.0;
+    let mut invoice_ids = std::collections::HashSet::new();
+
+    for result in sales_data {
+        let (qty, amount, inv_id) = result.map_err(|e| e.to_string())?;
+        total_qty += qty;
+        total_amount += amount;
+        invoice_ids.insert(inv_id);
+    }
 
     Ok(ProductSalesSummary {
-        total_quantity: total_qty as i32,
+        total_quantity: total_qty,
         total_amount,
-        invoice_count,
+        invoice_count: invoice_ids.len() as i32,
     })
 }
 
@@ -491,10 +542,11 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
             |row| row.get(0),
         ).map_err(|e| format!("Failed to get product name: {}", e))?;
 
-        // Insert invoice item
+        // Insert invoice item with per-item discount
+        let item_discount = item.discount_amount.unwrap_or(0.0);
         tx.execute(
-            "INSERT INTO invoice_items (invoice_id, product_id, quantity, unit_price, product_name) VALUES (?1, ?2, ?3, ?4, ?5)",
-            (invoice_id, item.product_id, item.quantity, item.unit_price, product_name),
+            "INSERT INTO invoice_items (invoice_id, product_id, quantity, unit_price, product_name, discount_amount) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            (invoice_id, item.product_id, item.quantity, item.unit_price, product_name, item_discount),
         )
         .map_err(|e| format!("Failed to create invoice item: {}", e))?;
 
@@ -540,6 +592,7 @@ pub fn create_invoice(input: CreateInvoiceInput, db: State<Database>) -> Result<
         customer_phone: None,
         item_count: Some(input.items.len() as i32),
         quantity: None,
+        product_amount: None,
     };
 
     log::info!("Created invoice with id: {}", invoice_id);
@@ -634,6 +687,7 @@ pub fn delete_invoice(id: i32, deleted_by: Option<String>, db: State<Database>) 
                 customer_phone: None,
                 item_count: None,
                 quantity: None,
+                product_amount: None,
             })
         },
     )
@@ -644,7 +698,7 @@ pub fn delete_invoice(id: i32, deleted_by: Option<String>, db: State<Database>) 
     // 1. Get invoice items (full details for archive + restocking)
     let items_details: Vec<InvoiceItemWithProduct> = {
         let mut stmt = tx.prepare(
-            "SELECT ii.id, ii.invoice_id, ii.product_id, p.name, p.sku, ii.quantity, ii.unit_price
+            "SELECT ii.id, ii.invoice_id, ii.product_id, p.name, p.sku, ii.quantity, ii.unit_price, COALESCE(ii.discount_amount, 0)
              FROM invoice_items ii
              JOIN products p ON ii.product_id = p.id
              WHERE ii.invoice_id = ?1"
@@ -659,9 +713,10 @@ pub fn delete_invoice(id: i32, deleted_by: Option<String>, db: State<Database>) 
                 product_sku: row.get(4)?,
                 quantity: row.get(5)?,
                 unit_price: row.get(6)?,
+                discount_amount: row.get(7)?,
             })
         }).map_err(|e| e.to_string())?;
-        
+
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
     };
 
@@ -717,7 +772,7 @@ pub fn update_invoice_items(input: UpdateInvoiceItemsInput, db: State<Database>)
     // Get current items
     let current_items: Vec<InvoiceItemWithProduct> = {
         let mut stmt = conn.prepare(
-            "SELECT ii.id, ii.invoice_id, ii.product_id, p.name, p.sku, ii.quantity, ii.unit_price
+            "SELECT ii.id, ii.invoice_id, ii.product_id, p.name, p.sku, ii.quantity, ii.unit_price, COALESCE(ii.discount_amount, 0)
              FROM invoice_items ii
              JOIN products p ON ii.product_id = p.id
              WHERE ii.invoice_id = ?1"
@@ -732,9 +787,10 @@ pub fn update_invoice_items(input: UpdateInvoiceItemsInput, db: State<Database>)
                 product_sku: row.get(4)?,
                 quantity: row.get(5)?,
                 unit_price: row.get(6)?,
+                discount_amount: row.get(7)?,
             })
         }).map_err(|e| e.to_string())?;
-        
+
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
     };
 
@@ -778,10 +834,11 @@ pub fn update_invoice_items(input: UpdateInvoiceItemsInput, db: State<Database>)
             return Err(format!("Insufficient stock for product '{}'. Available: {}, Requested: {}", product_name, stock, item.quantity));
         }
 
-        // Insert new item
+        // Insert new item with per-item discount
+        let item_discount = item.discount_amount.unwrap_or(0.0);
         tx.execute(
-            "INSERT INTO invoice_items (invoice_id, product_id, quantity, unit_price, product_name) VALUES (?1, ?2, ?3, ?4, ?5)",
-            (input.invoice_id, item.product_id, item.quantity, item.unit_price, &product_name),
+            "INSERT INTO invoice_items (invoice_id, product_id, quantity, unit_price, product_name, discount_amount) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            (input.invoice_id, item.product_id, item.quantity, item.unit_price, &product_name, item_discount),
         ).map_err(|e| format!("Failed to insert item: {}", e))?;
 
         // Deduct stock

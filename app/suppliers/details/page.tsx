@@ -87,9 +87,9 @@ function SupplierDetailsContent() {
         );
     }
 
-    const totalStock = products.reduce((acc, p) => acc + p.stock_quantity, 0);
+    const totalStock = products.reduce((acc, p) => acc + (p.total_purchased_quantity ?? 0), 0);
     const totalValue = products.reduce(
-        (acc, p) => acc + p.price * p.stock_quantity,
+        (acc, p) => acc + p.price * (p.total_purchased_quantity ?? 0),
         0,
     );
     const totalPending = Object.values(paymentSummaries).reduce((sum, summary) => {
@@ -174,7 +174,7 @@ function SupplierDetailsContent() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
                     <div className="text-sm text-slate-500 font-medium">Total Products</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">{products.length}</div>
@@ -193,19 +193,29 @@ function SupplierDetailsContent() {
                         ₹{totalPending.toFixed(0)}
                     </div>
                 </Card>
+                <Card className="p-4 bg-white border-slate-200 shadow-sm text-center">
+                    <div className="text-sm text-slate-500 font-medium">Actual Profit</div>
+                    <div className="text-2xl font-bold text-emerald-600 mt-1">
+                        ₹{products.reduce((acc, p) => acc + ((p.total_sold_amount ?? 0) - ((p.total_sold ?? 0) * p.price)), 0).toFixed(0)}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1">
+                        Exp: ₹{products.reduce((acc, p) => acc + (((p.selling_price ?? 0) - p.price) * (p.total_purchased_quantity ?? 0)), 0).toFixed(0)}
+                    </div>
+                </Card>
             </div>
 
             {/* Products Section */}
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-slate-900">Supplied Products</h2>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr,1.4fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
+                    <div className="grid grid-cols-[1.2fr,2fr,1fr,0.8fr,0.8fr,1.2fr,1.2fr] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-black uppercase tracking-wider text-center">
                         <div>Purchased Date</div>
                         <div>Product</div>
                         <div>SKU</div>
                         <div>Stock</div>
                         <div>Price</div>
                         <div>Stock Value</div>
+                        <div>Act Profit</div>
                     </div>
 
                     <div className="divide-y divide-slate-100">
@@ -213,10 +223,14 @@ function SupplierDetailsContent() {
                             const isExpanded = selectedProduct?.id === product.id;
                             const summary = paymentSummaries[product.id];
 
+                            // Calculate metrics
+                            const actualProfit = (product.total_sold_amount ?? 0) - ((product.total_sold ?? 0) * product.price);
+                            const expectedProfit = ((product.selling_price ?? 0) - product.price) * (product.total_purchased_quantity ?? 0);
+
                             return (
                                 <div key={product.id}>
                                     <div
-                                        className={`grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr,1.4fr] gap-4 p-4 items-center transition-colors cursor-pointer ${isExpanded ? 'bg-sky-50' : 'hover:bg-slate-50'}`}
+                                        className={`grid grid-cols-[1.2fr,2fr,1fr,0.8fr,0.8fr,1.2fr,1.2fr] gap-4 p-4 items-center transition-colors cursor-pointer ${isExpanded ? 'bg-sky-50' : 'hover:bg-slate-50'}`}
                                         onClick={() => setSelectedProduct(isExpanded ? null : product)}
                                     >
                                         <div className="text-slate-500 text-sm text-center">
@@ -230,35 +244,43 @@ function SupplierDetailsContent() {
                                             {product.sku}
                                         </div>
                                         <div className="text-center font-medium text-slate-900">
-                                            {product.stock_quantity}
+                                            {product.total_purchased_quantity ?? 0}
                                         </div>
                                         <div className="text-center text-slate-500">
                                             ₹{product.price.toFixed(0)}
                                         </div>
+                                        <div className="text-center">
+                                            <div className="text-sm font-semibold text-slate-900">
+                                                ₹{((product.total_purchased_quantity ?? 0) * product.price).toFixed(0)}
+                                            </div>
+                                            <div className="text-[11px] mt-0.5">
+                                                {(() => {
+                                                    if (!summary) {
+                                                        return <span className="text-slate-400">-</span>;
+                                                    }
+                                                    if (summary.pending_amount > 0) {
+                                                        return (
+                                                            <span className="text-red-600 font-semibold">
+                                                                Pending: ₹{summary.pending_amount.toFixed(0)}
+                                                            </span>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <span className="text-emerald-600 font-semibold">
+                                                            Cleared
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </div>
                                         <div className="text-right pr-4">
                                             <div className="flex items-center justify-end gap-3">
-                                                <div className="text-center">
-                                                    <div className="text-sm font-semibold text-slate-900">
-                                                        ₹{product.total_purchased_cost ? product.total_purchased_cost.toFixed(0) : (product.price * (product.initial_stock ?? 0)).toFixed(0)}
+                                                <div className="text-center min-w-[80px]">
+                                                    <div className="text-sm font-bold text-emerald-600">
+                                                        ₹{actualProfit.toFixed(0)}
                                                     </div>
-                                                    <div className="text-[11px] mt-0.5">
-                                                        {(() => {
-                                                            if (!summary) {
-                                                                return <span className="text-slate-400">-</span>;
-                                                            }
-                                                            if (summary.pending_amount > 0) {
-                                                                return (
-                                                                    <span className="text-red-600 font-semibold">
-                                                                        Pending: ₹{summary.pending_amount.toFixed(0)}
-                                                                    </span>
-                                                                );
-                                                            }
-                                                            return (
-                                                                <span className="text-emerald-600 font-semibold">
-                                                                    Cleared
-                                                                </span>
-                                                            );
-                                                        })()}
+                                                    <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                                        Exp: ₹{expectedProfit.toFixed(0)}
                                                     </div>
                                                 </div>
                                                 {isExpanded ? (

@@ -37,16 +37,17 @@ export function RegionSalesChart({ data, loading, limit = 5 }: RegionSalesChartP
       <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2 mb-3">
           <MapPin size={16} className="text-sky-500" />
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Sales by Region</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Sales by Town</h3>
         </div>
         <div className="h-[140px] flex items-center justify-center text-slate-400 text-sm">
-          No regional data for selected period
+          No town data for selected period
         </div>
       </div>
     );
   }
 
-  const filteredData = data.filter(d => d.state !== 'Unknown' || data.length === 1);
+  // Use town field instead of state. Filter out 'Unknown' towns.
+  const filteredData = data.filter(d => d.town && d.town !== 'Unknown');
   const chartData = filteredData.slice(0, limit);
   const maxRevenue = Math.max(...chartData.map(r => r.revenue));
 
@@ -54,16 +55,16 @@ export function RegionSalesChart({ data, loading, limit = 5 }: RegionSalesChartP
     <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
       <div className="flex items-center gap-2 mb-3">
         <MapPin size={16} className="text-sky-500" />
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Sales by Region</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Sales by Town</h3>
       </div>
       <div className="space-y-2">
         {chartData.map((region, index) => {
           const width = (region.revenue / maxRevenue) * 100;
           return (
-            <div key={region.state} className="group">
+            <div key={region.town || region.state} className="group">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs text-slate-600 dark:text-slate-300 truncate max-w-[50%]">
-                  {region.state}
+                  {region.town || region.state}
                 </span>
                 <span className="text-xs font-semibold text-slate-900 dark:text-white">
                   {formatCurrency(region.revenue)}
@@ -82,3 +83,4 @@ export function RegionSalesChart({ data, loading, limit = 5 }: RegionSalesChartP
     </div>
   );
 }
+

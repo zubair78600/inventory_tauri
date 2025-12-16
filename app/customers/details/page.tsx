@@ -61,8 +61,25 @@ function CustomerDetailsContent() {
         setExpandedInvoiceId(invoiceId);
         setItemsLoading(true);
         try {
-            const invoice = await invoiceCommands.getById(invoiceId);
-            setInvoiceItems(invoice.items);
+            const data = await invoiceCommands.getById(invoiceId);
+
+            // Calculate weighted discount logic for display
+            const items = data.items;
+            const totalGross = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+            const globalDiscount = data.invoice.discount_amount || 0;
+            const hasPerItemDiscount = items.some(i => (i.discount_amount || 0) > 0);
+
+            const processedItems = items.map(item => {
+                let discount = item.discount_amount || 0;
+                if (!hasPerItemDiscount && globalDiscount > 0 && totalGross > 0) {
+                    const originalGross = item.quantity * item.unit_price;
+                    const weight = originalGross / totalGross;
+                    discount = weight * globalDiscount;
+                }
+                return { ...item, discount_amount: discount };
+            });
+
+            setInvoiceItems(processedItems);
         } catch (err) {
             console.error(err);
         } finally {
@@ -274,10 +291,10 @@ function CustomerDetailsContent() {
                                                                 {item.product_name}
                                                             </div>
                                                             <div className="text-slate-500">
-                                                                {item.quantity} x ₹{item.unit_price.toFixed(0)}
+                                                                {item.quantity} x ₹{((item.quantity * item.unit_price - (item.discount_amount || 0)) / item.quantity).toFixed(1)}
                                                             </div>
                                                             <div className="text-right font-medium text-slate-900">
-                                                                ₹{(item.quantity * item.unit_price).toFixed(0)}
+                                                                ₹{(item.quantity * item.unit_price - (item.discount_amount || 0)).toFixed(1)}
                                                             </div>
                                                         </div>
                                                     ))}

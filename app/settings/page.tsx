@@ -65,7 +65,7 @@ export default function SettingsPage() {
     setMounted(true);
   }, []);
 
-  const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'invoice' | 'api' | 'users' | 'security' | 'themes'>('deleted-data');
+  const [activeTab, setActiveTab] = useState<'deleted-data' | 'general' | 'invoice' | 'api' | 'users' | 'security' | 'themes' | 'ai'>('deleted-data');
 
   // Security State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -150,12 +150,45 @@ export default function SettingsPage() {
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [biometricError, setBiometricError] = useState<string | null>(null);
 
-  // Default Location
   const [defaultLocation, setDefaultLocation] = useState<LocationValue>({
     state: '',
     district: '',
     town: ''
   });
+
+  // AI Settings State
+  const AI_ENABLED_KEY = 'ai_enabled';
+  const AI_MASTER_PASSWORD = '1014209932';
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [showAiPasswordPrompt, setShowAiPasswordPrompt] = useState(false);
+  const [aiPasswordInput, setAiPasswordInput] = useState('');
+  const [aiPasswordError, setAiPasswordError] = useState<string | null>(null);
+
+  // Load AI enabled state
+  useEffect(() => {
+    const stored = localStorage.getItem(AI_ENABLED_KEY);
+    setAiEnabled(stored === 'true');
+  }, []);
+
+  const handleAiToggle = () => {
+    // Show password prompt
+    setShowAiPasswordPrompt(true);
+    setAiPasswordInput('');
+    setAiPasswordError(null);
+  };
+
+  const handleAiPasswordSubmit = () => {
+    if (aiPasswordInput === AI_MASTER_PASSWORD) {
+      const newState = !aiEnabled;
+      setAiEnabled(newState);
+      localStorage.setItem(AI_ENABLED_KEY, String(newState));
+      setShowAiPasswordPrompt(false);
+      setAiPasswordInput('');
+      setAiPasswordError(null);
+    } else {
+      setAiPasswordError('Incorrect password');
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'deleted-data') {
@@ -800,6 +833,17 @@ export default function SettingsPage() {
           >
             Themes
           </button>
+          {isMasterAdmin && (
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'ai'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-300'
+                }`}
+            >
+              AI
+            </button>
+          )}
         </nav>
       </div>
 
@@ -1078,6 +1122,13 @@ export default function SettingsPage() {
       {/* General Tab */}
       {activeTab === 'general' && (
         <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">Initial Setup & Maintenance</h2>
+            <div className="space-y-4">
+
+            </div>
+          </div>
+
           {/* Current Place Defaults */}
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">Current Place</h2>
@@ -1372,6 +1423,83 @@ export default function SettingsPage() {
             <div className="flex items-center gap-4">
               <span className="text-sm font-medium">Theme Preference:</span>
               <ModeToggle />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Tab - Admin Only */}
+      {activeTab === 'ai' && isMasterAdmin && (
+        <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">AI Assistant Settings</h2>
+            <p className="text-sm text-slate-600 mb-6">
+              Enable or disable the AI assistant feature. When disabled, the AI button is hidden and the LLM does not run.
+            </p>
+
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+              <div>
+                <p className="font-medium">AI Assistant</p>
+                <p className="text-sm text-slate-500">
+                  {aiEnabled ? 'Enabled - AI button is visible and LLM runs in background' : 'Disabled - AI button is hidden'}
+                </p>
+              </div>
+              <button
+                onClick={handleAiToggle}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${aiEnabled ? 'bg-primary' : 'bg-slate-300'
+                  }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                />
+              </button>
+            </div>
+
+            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>Note:</strong> Changing AI status requires a special password. AI is disabled by default on fresh installs.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Password Prompt Modal */}
+      {showAiPasswordPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-bold mb-2">AI Settings Password</h2>
+            <p className="text-sm text-slate-500 mb-4">
+              Enter the master password to {aiEnabled ? 'disable' : 'enable'} AI features.
+            </p>
+            <input
+              type="password"
+              placeholder="Enter password"
+              className="form-input w-full mb-2"
+              value={aiPasswordInput}
+              onChange={e => setAiPasswordInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAiPasswordSubmit()}
+              autoFocus
+            />
+            {aiPasswordError && (
+              <p className="text-sm text-red-500 mb-2">{aiPasswordError}</p>
+            )}
+            <div className="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowAiPasswordPrompt(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleAiPasswordSubmit}
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>

@@ -27,6 +27,7 @@ export interface Product {
   initial_stock_sold?: number;
   total_purchased_cost?: number;
   total_purchased_quantity?: number;
+  total_sold_amount?: number;
 }
 
 export interface User {
@@ -258,6 +259,7 @@ export interface PaymentMethodBreakdown {
 export interface RegionSales {
   state: string;
   district: string | null;
+  town: string | null;
   revenue: number;
   order_count: number;
 }
@@ -367,6 +369,7 @@ export interface Invoice {
   town: string | null;
   item_count?: number;
   quantity?: number; // Quantity of specific product (context-dependent)
+  product_amount?: number; // Amount for specific product after discount (context-dependent)
 }
 
 export interface ProductSalesSummary {
@@ -389,6 +392,7 @@ export interface InvoiceItemWithProduct {
   product_sku: string;
   quantity: number;
   unit_price: number;
+  discount_amount: number; // Per-item weighted discount
 }
 
 export type InvoiceItem = InvoiceItemWithProduct;
@@ -434,6 +438,7 @@ export interface CreateInvoiceItemInput {
   product_id: number;
   quantity: number;
   unit_price: number;
+  discount_amount?: number; // Per-item weighted discount
 }
 
 export interface CreateInvoiceInput {
@@ -1444,14 +1449,10 @@ export const imageCommands = {
 
   /**
    * Search Google Images for product photos
-   * @param query - Search query (e.g., product name)
-   * @param limit - Max results (1-10, default 10)
-   * @returns Array of image search results
+   * @param query - Search query
+   * @param limit - Max results
    */
-  searchGoogleImages: async (
-    query: string,
-    limit: number = 10
-  ): Promise<GoogleImageResult[]> => {
+  searchGoogleImages: async (query: string, limit: number): Promise<GoogleImageResult[]> => {
     return await invoke<GoogleImageResult[]>('search_google_images', {
       query,
       limit,
@@ -1460,24 +1461,23 @@ export const imageCommands = {
 
   /**
    * Get the pictures directory path
-   * @returns The full path to the pictures-Inventry folder
    */
   getPicturesDirectory: async (): Promise<string> => {
     return await invoke<string>('get_pictures_directory');
   },
 
   /**
-   * Save a cropped image (creates generic backup of original if needed)
+   * Migrate existing images to new structure
    */
-  saveCroppedImage: async (productId: number, fileData: number[], extension: string): Promise<string> => {
-    return await invoke<string>('save_cropped_image', { productId, fileData, fileExtension: extension });
+  migrateImages: async (): Promise<string> => {
+    return await invoke<string>('migrate_images');
   },
 
   /**
-   * Get the original image path if it exists, otherwise the current image path
+   * Save a cropped image
    */
-  getOriginalImagePath: async (productId: number): Promise<string | null> => {
-    return await invoke<string | null>('get_original_image_path', { productId });
+  saveCroppedImage: async (productId: number, fileData: number[], extension: string): Promise<string> => {
+    return await invoke<string>('save_cropped_image', { productId, fileData, fileExtension: extension });
   },
 
   // Supplier Image Commands
@@ -1498,9 +1498,6 @@ export const imageCommands = {
   getCustomerImagePath: async (customerId: number, thumbnail: boolean = false): Promise<string | null> => {
     return await invoke<string | null>('get_customer_image_path', { customerId, thumbnail });
   },
-  /**
-   * Delete a customer image
-   */
   deleteCustomerImage: async (customerId: number): Promise<void> => {
     return await invoke<void>('delete_customer_image', { customerId });
   },

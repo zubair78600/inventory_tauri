@@ -392,6 +392,7 @@ pub fn delete_customer(id: i32, deleted_by: Option<String>, db: State<Database>)
                 customer_phone: None,
                 item_count: None,
                 quantity: None,
+                product_amount: None,
             })
         }).map_err(|e| e.to_string())?;
 

@@ -744,9 +744,9 @@ export default function Inventory() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center">
-                      {product.selling_price ? (
+                      {product.total_sold_amount ? (
                         <span className="font-medium text-slate-700">
-                          ₹{((product.total_sold ?? 0) * product.selling_price).toFixed(0)}
+                          ₹{product.total_sold_amount.toFixed(0)}
                         </span>
                       ) : (
                         <span className="text-slate-400">-</span>

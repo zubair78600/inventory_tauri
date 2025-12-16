@@ -61,77 +61,88 @@ export default function Dashboard() {
   const { data: salesAnalytics, isLoading: salesLoading } = useQuery<SalesAnalytics>({
     queryKey: ['sales-analytics', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getSalesAnalytics(dateRange.startDate, dateRange.endDate),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Revenue Trend
   const { data: revenueTrend, isLoading: trendLoading } = useQuery<RevenueTrendPoint[]>({
     queryKey: ['revenue-trend', dateRange.startDate, dateRange.endDate, granularity],
     queryFn: () => analyticsCommands.getRevenueTrend(dateRange.startDate, dateRange.endDate, granularity),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Top Products
   const { data: topProducts, isLoading: productsLoading } = useQuery<TopProduct[]>({
     queryKey: ['top-products', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getTopProducts(dateRange.startDate, dateRange.endDate, 10),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Payment Methods
   const { data: paymentMethods, isLoading: paymentsLoading } = useQuery<PaymentMethodBreakdown[]>({
     queryKey: ['payment-methods', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getSalesByPaymentMethod(dateRange.startDate, dateRange.endDate),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Region Sales
   const { data: regionSales, isLoading: regionLoading } = useQuery<RegionSales[]>({
     queryKey: ['region-sales', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getSalesByRegion(dateRange.startDate, dateRange.endDate),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Customer Analytics
   const { data: customerAnalytics, isLoading: customersLoading } = useQuery<CustomerAnalytics>({
     queryKey: ['customer-analytics', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getCustomerAnalytics(dateRange.startDate, dateRange.endDate),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Top Customers
   const { data: topCustomers, isLoading: topCustomersLoading } = useQuery<TopCustomer[]>({
     queryKey: ['top-customers', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getTopCustomers(dateRange.startDate, dateRange.endDate, 10),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Inventory Health
   const { data: inventoryHealth, isLoading: inventoryLoading } = useQuery<InventoryHealth>({
     queryKey: ['inventory-health'],
     queryFn: () => analyticsCommands.getInventoryHealth(),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Low Stock Alerts
   const { data: lowStockAlerts, isLoading: lowStockLoading } = useQuery<LowStockAlert[]>({
     queryKey: ['low-stock-alerts'],
     queryFn: () => analyticsCommands.getLowStockAlerts(),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Purchase Analytics
   const { data: purchaseAnalytics, isLoading: purchaseLoading } = useQuery<PurchaseAnalytics>({
     queryKey: ['purchase-analytics', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getPurchaseAnalytics(dateRange.startDate, dateRange.endDate),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   // Cashflow Trend
   const { data: cashflowTrend, isLoading: cashflowLoading } = useQuery<CashflowPoint[]>({
     queryKey: ['cashflow-trend', dateRange.startDate, dateRange.endDate, granularity],
     queryFn: () => analyticsCommands.getCashflowTrend(dateRange.startDate, dateRange.endDate, granularity),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 5000,
   });
 
   return (

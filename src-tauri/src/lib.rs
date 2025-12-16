@@ -178,8 +178,7 @@ pub fn run() {
       commands::delete_product_image,
       commands::search_google_images,
       commands::get_pictures_directory,
-      commands::save_cropped_image,
-      commands::get_original_image_path,
+      commands::migrate_images,
       // Supplier & Customer Image commands
       commands::save_supplier_image,
       commands::get_supplier_image_path,

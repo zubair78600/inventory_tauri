@@ -604,6 +604,20 @@ impl Database {
             conn.execute("ALTER TABLE invoices ADD COLUMN credit_amount REAL DEFAULT 0", [])?;
         }
 
+        // Migration: Add discount_amount column to invoice_items (for per-item weighted discount)
+        let invoice_items_discount_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('invoice_items') WHERE name = 'discount_amount'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !invoice_items_discount_exists {
+            log::info!("Migrating: Adding discount_amount column to invoice_items table");
+            conn.execute("ALTER TABLE invoice_items ADD COLUMN discount_amount REAL DEFAULT 0", [])?;
+        }
+
         Ok(())
     }
 }
