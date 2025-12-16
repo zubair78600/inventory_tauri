@@ -39,6 +39,7 @@ pub struct Supplier {
     pub state: Option<String>,
     pub district: Option<String>,
     pub town: Option<String>,
+    pub image_path: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

@@ -80,7 +80,7 @@ pub fn get_suppliers(
     let mut suppliers = Vec::new();
     let total_count: i64;
 
-    let base_query = "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers";
+    let base_query = "SELECT id, name, contact_info, address, email, comments, state, district, town, image_path, created_at, updated_at FROM suppliers";
     let count_query = "SELECT COUNT(*) FROM suppliers";
 
     if let Some(search_term) = search {
@@ -110,8 +110,9 @@ pub fn get_suppliers(
                     state: row.get(6)?,
                     district: row.get(7)?,
                     town: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
+                    image_path: row.get(9)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -141,8 +142,9 @@ pub fn get_suppliers(
                     state: row.get(6)?,
                     district: row.get(7)?,
                     town: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
+                    image_path: row.get(9)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -168,7 +170,7 @@ pub fn get_supplier(id: i32, db: State<Database>) -> Result<Supplier, String> {
 
     let supplier = conn
         .query_row(
-            "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers WHERE id = ?1",
+            "SELECT id, name, contact_info, address, email, comments, state, district, town, image_path, created_at, updated_at FROM suppliers WHERE id = ?1",
             [id],
             |row| {
                 Ok(Supplier {
@@ -181,8 +183,9 @@ pub fn get_supplier(id: i32, db: State<Database>) -> Result<Supplier, String> {
                     state: row.get(6)?,
                     district: row.get(7)?,
                     town: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
+                    image_path: row.get(9)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             },
         )
@@ -208,7 +211,7 @@ pub fn create_supplier(input: CreateSupplierInput, db: State<Database>) -> Resul
 
     // Fetch the created supplier to get timestamps
     let supplier = conn.query_row(
-        "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers WHERE id = ?1",
+        "SELECT id, name, contact_info, address, email, comments, state, district, town, image_path, created_at, updated_at FROM suppliers WHERE id = ?1",
         [id],
         |row| {
             Ok(Supplier {
@@ -221,8 +224,9 @@ pub fn create_supplier(input: CreateSupplierInput, db: State<Database>) -> Resul
                 state: row.get(6)?,
                 district: row.get(7)?,
                 town: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                image_path: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         },
     ).map_err(|e| format!("Failed to fetch created supplier: {}", e))?;
@@ -241,7 +245,7 @@ pub fn update_supplier(input: UpdateSupplierInput, modified_by: Option<String>, 
     // Get old values first
     let old_supplier: Supplier = conn
         .query_row(
-            "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers WHERE id = ?1",
+            "SELECT id, name, contact_info, address, email, comments, state, district, town, image_path, created_at, updated_at FROM suppliers WHERE id = ?1",
             [input.id],
             |row| {
                 Ok(Supplier {
@@ -254,8 +258,9 @@ pub fn update_supplier(input: UpdateSupplierInput, modified_by: Option<String>, 
                     state: row.get(6)?,
                     district: row.get(7)?,
                     town: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
+                    image_path: row.get(9)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             },
         )
@@ -312,7 +317,7 @@ pub fn update_supplier(input: UpdateSupplierInput, modified_by: Option<String>, 
 
     // Fetch updated supplier to get new timestamp
     let supplier = conn.query_row(
-        "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers WHERE id = ?1",
+        "SELECT id, name, contact_info, address, email, comments, state, district, town, image_path, created_at, updated_at FROM suppliers WHERE id = ?1",
         [input.id],
         |row| {
             Ok(Supplier {
@@ -325,8 +330,9 @@ pub fn update_supplier(input: UpdateSupplierInput, modified_by: Option<String>, 
                 state: row.get(6)?,
                 district: row.get(7)?,
                 town: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                image_path: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         },
     ).map_err(|e| format!("Failed to fetch updated supplier: {}", e))?;
@@ -344,7 +350,7 @@ pub fn delete_supplier(id: i32, deleted_by: Option<String>, db: State<Database>)
 
     // Get supplier data before deletion for audit trail
     let supplier = conn.query_row(
-        "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at FROM suppliers WHERE id = ?1",
+        "SELECT id, name, contact_info, address, email, comments, state, district, town, image_path, created_at, updated_at FROM suppliers WHERE id = ?1",
         [id],
         |row| {
             Ok(Supplier {
@@ -357,8 +363,9 @@ pub fn delete_supplier(id: i32, deleted_by: Option<String>, db: State<Database>)
                 state: row.get(6)?,
                 district: row.get(7)?,
                 town: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                image_path: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         },
     )

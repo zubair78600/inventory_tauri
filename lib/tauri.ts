@@ -1053,6 +1053,7 @@ export interface SearchSupplier {
   comments: string | null;
   state: string | null;
   place: string | null;
+  image_path: string | null;
 }
 
 export interface SearchInvoice {
