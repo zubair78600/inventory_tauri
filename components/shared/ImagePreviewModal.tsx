@@ -89,7 +89,7 @@ export function EntityImagePreviewModal({
 
     setLoading(true);
     try {
-      const path = await imageCommands.getOriginalImagePath(entityId);
+      const path = await imageCommands.getProductImagePath(entityId, false);
       if (path) {
         // Fetch as blob to prevent canvas tainting (CORS issues with asset://)
         const assetUrl = convertFileSrc(path);
