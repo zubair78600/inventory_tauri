@@ -69,30 +69,30 @@ export function CustomerCard({ data }: { data: CustomerData }) {
                 </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-4 divide-x divide-slate-100 dark:divide-slate-800 border-b border-slate-100 dark:border-slate-800">
-                <div className="p-4 text-center">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Spent</div>
-                    <div className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+            {/* Stats Grid - Responsive: 2 cols on small, 4 on larger */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100 dark:divide-slate-800 border-b border-slate-100 dark:border-slate-800">
+                <div className="p-3 sm:p-4 text-center">
+                    <div className="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide">Total Spent</div>
+                    <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5 truncate">
                         ₹{data.total_spent?.toLocaleString() ?? '0'}
                     </div>
                 </div>
-                <div className="p-4 text-center">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Invoices</div>
-                    <div className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                <div className="p-3 sm:p-4 text-center">
+                    <div className="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide">Invoices</div>
+                    <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                         {data.total_invoices ?? 0}
                     </div>
                 </div>
-                <div className="p-4 text-center">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Last Billed</div>
-                    <div className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                <div className="p-3 sm:p-4 text-center">
+                    <div className="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide">Last Billed</div>
+                    <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5 truncate">
                         {data.last_billed ? new Date(data.last_billed).toLocaleDateString() : 'Never'}
                     </div>
                 </div>
-                <div className="p-4 text-center">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Current Credit</div>
+                <div className="p-3 sm:p-4 text-center">
+                    <div className="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide">Current Credit</div>
                     {data.credit_given !== undefined ? (
-                        <div className="mt-1 space-y-0.5 text-xs">
+                        <div className="mt-1 space-y-0.5 text-[10px] sm:text-xs">
                             <div className="flex justify-between">
                                 <span className="text-slate-500">Given:</span>
                                 <span className="font-bold text-amber-500">₹{data.credit_given?.toLocaleString() ?? '0'}</span>
@@ -107,7 +107,7 @@ export function CustomerCard({ data }: { data: CustomerData }) {
                             </div>
                         </div>
                     ) : (
-                        <div className="text-lg font-bold text-amber-600 dark:text-amber-500 mt-0.5">
+                        <div className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-500 mt-0.5">
                             ₹{data.current_credit?.toLocaleString() ?? '0'}
                         </div>
                     )}

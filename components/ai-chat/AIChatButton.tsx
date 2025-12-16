@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
 import { AIChatDialog } from './AIChatDialog';
 import { Button } from '@/components/ui/button';
 import { aiChatApi } from '@/lib/ai-chat';
@@ -12,6 +12,62 @@ let sidecarStarted = false;
 
 // LocalStorage key for AI enabled state
 const AI_ENABLED_KEY = 'ai_enabled';
+
+function BlinkingBot({ className }: { className?: string }) {
+    const [isBlinking, setIsBlinking] = useState(false);
+
+    useEffect(() => {
+        const blinkLoop = () => {
+            setIsBlinking(true);
+            setTimeout(() => {
+                setIsBlinking(false);
+                // Schedule next blink
+                const nextBlink = Math.random() * 3000 + 2000; // 2-5 seconds
+                setTimeout(blinkLoop, nextBlink);
+            }, 100); // Blink duration
+        };
+
+        const timeout = setTimeout(blinkLoop, 2000);
+        return () => clearTimeout(timeout);
+    }, []);
+
+    // Standard Lucide Bot icon path structure
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={className}
+        >
+            {/* Antenna */}
+            <path d="M12 8V4H8" />
+            {/* Head */}
+            <rect width="16" height="12" x="4" y="8" rx="2" />
+            {/* Ears */}
+            <path d="M2 14h2" />
+            <path d="M20 14h2" />
+
+            {/* Eyes - Animated */}
+            <motion.path
+                d="M9 13h2"
+                initial={false}
+                animate={{ scaleY: isBlinking ? 0.1 : 1 }}
+                style={{ originX: "10px", originY: "13px" }}
+            />
+            <motion.path
+                d="M15 13h2"
+                initial={false}
+                animate={{ scaleY: isBlinking ? 0.1 : 1 }}
+                style={{ originX: "16px", originY: "13px" }}
+            />
+        </svg>
+    );
+}
+
 
 export function AIChatButton() {
     const [open, setOpen] = useState(false);
@@ -130,7 +186,7 @@ export function AIChatButton() {
                                 {isStarting ? (
                                     <Loader2 className="h-7 w-7 animate-spin" />
                                 ) : (
-                                    <Bot className="h-7 w-7 fill-white/10" />
+                                    <BlinkingBot className="h-7 w-7 fill-white/10" />
                                 )}
                             </motion.div>
 
