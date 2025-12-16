@@ -1543,7 +1543,32 @@ export default function SettingsPage() {
                 </select>
               </div>
 
-              {/* Permissions could go here for granular control */}
+              {/* Page Access Permissions - only show for non-admin role */}
+              {newUser.role !== 'admin' && (
+                <div>
+                  <label className="form-label">Page Access</label>
+                  <div className="grid grid-cols-2 gap-2 mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                    {PERMISSIONS.map((perm) => (
+                      <label key={perm.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 p-1.5 rounded transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={newUser.permissions.includes(perm.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewUser({ ...newUser, permissions: [...newUser.permissions, perm.id] });
+                            } else {
+                              setNewUser({ ...newUser, permissions: newUser.permissions.filter(p => p !== perm.id) });
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-slate-700 dark:text-slate-300">{perm.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Select which pages this user can access</p>
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-4">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowAddUser(false)}>Cancel</button>
