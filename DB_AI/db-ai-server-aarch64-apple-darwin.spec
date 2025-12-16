@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = ['uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on', 'chromadb', 'chromadb.telemetry.product.posthog', 'chromadb.db.impl.sqlite', 'sqlite3', 'core', 'core.vanna_setup', 'core.sql_executor', 'core.cache', 'core.llm_backend', 'config', 'scripts', 'scripts.download_model']
+hiddenimports = ['uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on', 'chromadb', 'chromadb.telemetry.product.posthog', 'chromadb.db.impl.sqlite', 'sqlite3']
 tmp_ret = collect_all('chromadb')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('vanna')
@@ -14,7 +14,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['main.py'],
-    pathex=['.'],
+    pathex=[],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

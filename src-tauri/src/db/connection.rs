@@ -408,6 +408,22 @@ impl Database {
         if !supplier_payments_po_exists {
             log::info!("Migrating: Adding po_id column to supplier_payments table");
             conn.execute("ALTER TABLE supplier_payments ADD COLUMN po_id INTEGER REFERENCES purchase_orders(id)", [])?;
+            // Add index for the new column
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_supplier_payments_po ON supplier_payments(po_id)", [])?;
+        }
+
+        // Migration: Add po_id column to supplier_payments (for linking payments to purchase orders)
+        let supplier_payments_po_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('supplier_payments') WHERE name = 'po_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !supplier_payments_po_exists {
+            log::info!("Migrating: Adding po_id column to supplier_payments table");
+            conn.execute("ALTER TABLE supplier_payments ADD COLUMN po_id INTEGER REFERENCES purchase_orders(id)", [])?;
         }
 
         // Migration: Run Purchase Order and FIFO Inventory System migration

@@ -739,22 +739,14 @@ export default function Inventory() {
                     <TableCell className="font-semibold text-center">{product.name}</TableCell>
                     <TableCell className="text-center">{product.sku}</TableCell>
                     <TableCell className="text-center">
-                      {product.selling_price ? (
-                        <span className="font-medium text-slate-700">
-                          ₹{((product.initial_stock ?? product.stock_quantity) * product.selling_price).toFixed(0)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
+                      <span className="font-medium text-slate-700">
+                        ₹{product.total_purchased_cost ? product.total_purchased_cost.toFixed(0) : (product.price * (product.initial_stock ?? 0)).toFixed(0)}
+                      </span>
                     </TableCell>
                     <TableCell className="text-center">
                       {product.selling_price ? (
                         <span className="font-medium text-slate-700">
-                          ₹{Math.max(
-                            0,
-                            ((product.initial_stock ?? product.stock_quantity) - product.stock_quantity) *
-                            product.selling_price
-                          ).toFixed(0)}
+                          ₹{((product.total_sold ?? 0) * product.selling_price).toFixed(0)}
                         </span>
                       ) : (
                         <span className="text-slate-400">-</span>
@@ -764,7 +756,7 @@ export default function Inventory() {
                       <div className="flex items-center justify-center gap-3 text-sm">
                         <span className="text-slate-700 font-medium">
                           <span className="text-xs text-slate-400">Stock:</span>{' '}
-                          {product.initial_stock ?? product.stock_quantity}
+                          {product.total_purchased_quantity ?? product.stock_quantity}
                         </span>
                         <span className="text-slate-300">|</span>
                         <span className="text-slate-600">

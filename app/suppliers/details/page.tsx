@@ -89,7 +89,7 @@ function SupplierDetailsContent() {
 
     const totalStock = products.reduce((acc, p) => acc + p.stock_quantity, 0);
     const totalValue = products.reduce(
-        (acc, p) => acc + p.price * (p.initial_stock ?? p.stock_quantity),
+        (acc, p) => acc + p.price * p.stock_quantity,
         0,
     );
     const totalPending = Object.values(paymentSummaries).reduce((sum, summary) => {
@@ -205,7 +205,7 @@ function SupplierDetailsContent() {
                         <div>SKU</div>
                         <div>Stock</div>
                         <div>Price</div>
-                        <div>Total Purchased</div>
+                        <div>Stock Value</div>
                     </div>
 
                     <div className="divide-y divide-slate-100">
@@ -230,7 +230,7 @@ function SupplierDetailsContent() {
                                             {product.sku}
                                         </div>
                                         <div className="text-center font-medium text-slate-900">
-                                            {product.initial_stock ?? product.stock_quantity}
+                                            {product.stock_quantity}
                                         </div>
                                         <div className="text-center text-slate-500">
                                             ₹{product.price.toFixed(0)}
@@ -239,7 +239,7 @@ function SupplierDetailsContent() {
                                             <div className="flex items-center justify-end gap-3">
                                                 <div className="text-center">
                                                     <div className="text-sm font-semibold text-slate-900">
-                                                        ₹{summary ? summary.total_payable.toFixed(0) : ((product.initial_stock ?? product.stock_quantity) * product.price).toFixed(0)}
+                                                        ₹{product.total_purchased_cost ? product.total_purchased_cost.toFixed(0) : (product.price * (product.initial_stock ?? 0)).toFixed(0)}
                                                     </div>
                                                     <div className="text-[11px] mt-0.5">
                                                         {(() => {
