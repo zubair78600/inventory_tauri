@@ -256,12 +256,40 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         }
     };
 
-    // Check server status
+    // Check server status and focus input
     useEffect(() => {
         if (open && sidecarDownloaded) {
             setTimeout(() => inputRef.current?.focus(), 500);
         }
     }, [open, sidecarDownloaded]);
+
+    // Periodic health check - auto-reconnect if disconnected
+    useEffect(() => {
+        if (!open || !sidecarDownloaded) return;
+
+        const healthCheckInterval = setInterval(async () => {
+            try {
+                const { healthy } = await aiChatApi.healthCheck();
+                if (healthy && !isServerReady) {
+                    // Server came back online
+                    setIsServerReady(true);
+                    const setupStatus = await aiChatApi.getStatus();
+                    setStatus(setupStatus);
+                } else if (!healthy && isServerReady) {
+                    // Server went offline - try to restart
+                    setIsServerReady(false);
+                    console.log('Server disconnected, attempting auto-reconnect...');
+                    // Don't auto-restart here, just update UI state
+                }
+            } catch {
+                if (isServerReady) {
+                    setIsServerReady(false);
+                }
+            }
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(healthCheckInterval);
+    }, [open, sidecarDownloaded, isServerReady]);
 
     // Auto-scroll
     useEffect(() => {
@@ -308,9 +336,9 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         try {
             await aiChatApi.startSidecar();
 
-            // Poll for server readiness (up to 15 seconds)
+            // Poll for server readiness (up to 45 seconds - model loading takes ~30s)
             let retries = 0;
-            const maxRetries = 15;
+            const maxRetries = 45;
             while (retries < maxRetries) {
                 try {
                     const { healthy } = await aiChatApi.healthCheck();
@@ -333,7 +361,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                 return;
             }
 
-            // Dev mode fallback
+            // Dev mode fallback - check if server is already running externally
             console.log('Dev mode: checking manual server...');
             const { healthy } = await aiChatApi.healthCheck();
             if (healthy) {

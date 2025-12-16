@@ -38,5 +38,21 @@
     {
         "question": "Show stock that hasn't moved in 30 days",
         "sql": "SELECT p.name, p.stock_quantity, MAX(it.transaction_date) as last_movement FROM products p LEFT JOIN inventory_transactions it ON p.id = it.product_id WHERE p.stock_quantity > 0 GROUP BY p.id HAVING last_movement < DATE('now', '-30 days') OR last_movement IS NULL"
+    },
+    {
+        "question": "Customer who bought kisses",
+        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, i.created_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%kisses%' ORDER BY i.created_at DESC"
+    },
+    {
+        "question": "Kisses sales with customers",
+        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, i.created_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%kisses%' ORDER BY i.created_at DESC"
+    },
+    {
+        "question": "Show customers who bought milk",
+        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, i.created_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%milk%' ORDER BY i.created_at DESC"
+    },
+    {
+        "question": "List chocolate by customers",
+        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, i.created_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%chocolate%' ORDER BY i.created_at DESC"
     }
 ]
