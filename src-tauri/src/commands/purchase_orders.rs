@@ -402,7 +402,7 @@ pub fn get_purchase_order_by_id(
     // Get supplier
     let supplier: Supplier = conn
         .query_row(
-            "SELECT id, name, contact_info, address, email, comments, state, district, town, created_at, updated_at
+            "SELECT id, name, contact_info, address, email, comments, state, district, town, image_path, created_at, updated_at
              FROM suppliers WHERE id = ?",
             params![po.supplier_id],
             |row| {
@@ -416,8 +416,9 @@ pub fn get_purchase_order_by_id(
                     state: row.get(6)?,
                     district: row.get(7)?,
                     town: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
+                    image_path: row.get(9)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             },
         )

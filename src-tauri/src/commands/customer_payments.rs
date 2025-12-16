@@ -224,11 +224,13 @@ pub fn get_customer_credit_history(
             let credit_amount: f64 = row.get(5)?;
             let payments_sum: f64 = row.get(6)?;
 
-            // Total paid = initial_paid + all subsequent payments
-            let total_paid = initial_paid + payments_sum;
+            // Total paid is simply the sum of all payments (since initial_paid is inserted into customer_payments)
+            let total_paid = payments_sum;
 
-            // Balance remaining = credit_amount - payments_sum (only the payments after initial)
-            let balance_remaining = (credit_amount - payments_sum).max(0.0);
+            // Balance remaining = Bill Amount - Total Paid
+            // Or alternatively: credit_amount - (payments_sum - initial_paid)
+            // Using bill_amount - payments_sum is cleaner assuming payments_sum includes everything
+            let balance_remaining = (bill_amount - payments_sum).max(0.0);
 
             // Status
             let status = if balance_remaining <= 0.0 {
@@ -295,6 +297,7 @@ pub fn get_customer_credit_summary(
         .unwrap_or(0.0);
 
     // Total payments made (from customer_payments table)
+    // This INCLUDES the initial_paid records because create_invoice inserts them
     let total_payments: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(cp.amount), 0)
@@ -306,8 +309,15 @@ pub fn get_customer_credit_summary(
         )
         .unwrap_or(0.0);
 
-    let total_paid = total_initial_paid + total_payments;
-    let pending_amount = (total_credit_amount - total_payments).max(0.0);
+    // Total paid is just total_payments (since it includes initial)
+    let total_paid = total_payments;
+    
+    // Pending amount calculation:
+    // We want: Sum(Remaining Debt)
+    // Remaining Debt per invoice = Credit Amount - (Payments - Initial)
+    // Sum(Remaining) = Sum(Credit) - (Sum(Payments) - Sum(Initial))
+    //                = Sum(Credit) - Sum(Payments) + Sum(Initial)
+    let pending_amount = (total_credit_amount - (total_payments - total_initial_paid)).max(0.0);
 
     Ok(CustomerCreditSummary {
         total_credit_amount,
