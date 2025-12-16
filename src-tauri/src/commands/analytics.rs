@@ -1095,6 +1095,9 @@ pub fn get_low_stock_alerts(db: State<Database>) -> Result<Vec<LowStockAlert>, S
 }
 
 /// Get purchase analytics
+/// Total Purchases = Sum of "Stock Amount" from inventory page = SUM(initial_stock * price) + SUM(received PO items cost)
+/// Amount Paid = Sum of all supplier payments
+/// Pending = Total Purchases - Amount Paid
 #[tauri::command]
 pub fn get_purchase_analytics(
     start_date: String,
@@ -1105,29 +1108,50 @@ pub fn get_purchase_analytics(
 
     let conn = db.get_conn()?;
 
-    let (total_purchases, po_count): (f64, i32) = conn
-        .query_row(
-            "SELECT
-                COALESCE(SUM(total_amount), 0.0),
-                COUNT(*)
-             FROM purchase_orders
-             WHERE date(order_date) >= date(?1) AND date(order_date) <= date(?2)",
-            [&start_date, &end_date],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .unwrap_or((0.0, 0));
+    // Total Purchases = Sum of "Stock Amount" from inventory page
+    // This matches the total_purchased_cost calculation in products.rs:
+    // COALESCE(initial_stock * price, 0) + COALESCE(SUM(received PO items cost), 0)
 
-    let total_paid: f64 = conn
+    // Part 1: Initial stock value for all products
+    let initial_stock_total: f64 = conn
         .query_row(
-            "SELECT COALESCE(SUM(sp.amount), 0.0)
-             FROM supplier_payments sp
-             JOIN purchase_orders po ON sp.supplier_id = po.supplier_id
-             WHERE date(sp.paid_at) >= date(?1) AND date(sp.paid_at) <= date(?2)",
-            [&start_date, &end_date],
+            "SELECT COALESCE(SUM(COALESCE(initial_stock, 0) * price), 0.0) FROM products",
+            [],
             |row| row.get(0),
         )
         .unwrap_or(0.0);
 
+    // Part 2: Sum of all received PO items cost (Purchase Order Item * Unit Cost)
+    let po_received_cost: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(poi.quantity * poi.unit_cost), 0.0)
+             FROM purchase_order_items poi
+             JOIN purchase_orders po ON poi.po_id = po.id
+             WHERE po.status = 'received'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+
+    // Total Purchases = initial stock value + received PO items cost
+    let total_purchases = initial_stock_total + po_received_cost;
+
+    // Amount Paid = Sum of all supplier payments
+    let total_paid: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(amount), 0.0) FROM supplier_payments",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+
+    // Pending = Total Purchases - Amount Paid
+    let pending_payments = (total_purchases - total_paid).max(0.0);
+
+    log::info!("Dashboard: TotalPurchases={} (initial={}, po={}), TotalPaid={}, Pending={}",
+               total_purchases, initial_stock_total, po_received_cost, total_paid, pending_payments);
+
+    // Active suppliers is still filtered by date range
     let active_suppliers: i32 = conn
         .query_row(
             "SELECT COUNT(DISTINCT supplier_id) FROM purchase_orders
@@ -1137,10 +1161,20 @@ pub fn get_purchase_analytics(
         )
         .unwrap_or(0);
 
+    // PO count also filtered by date range
+    let po_count: i32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM purchase_orders
+             WHERE date(order_date) >= date(?1) AND date(order_date) <= date(?2)",
+            [&start_date, &end_date],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
     Ok(PurchaseAnalytics {
         total_purchases,
         total_paid,
-        pending_payments: total_purchases - total_paid,
+        pending_payments,
         active_suppliers,
         purchase_order_count: po_count,
     })

@@ -48,11 +48,29 @@ pub fn get_products(
     let mut products = Vec::new();
     let total_count: i64;
 
-    // Modified query to include total_sold
+    // Modified query to include total_sold, total_purchased_cost, and total_purchased_quantity
     let base_query = "
         SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
                p.supplier_id, p.created_at, p.updated_at, p.image_path, p.category,
-               COALESCE(SUM(ii.quantity), 0) as total_sold
+               COALESCE(SUM(ii.quantity), 0) as total_sold,
+               (
+                   COALESCE(p.initial_stock * p.price, 0) + 
+                   COALESCE((
+                       SELECT SUM(poi.total_cost) 
+                       FROM purchase_order_items poi 
+                       JOIN purchase_orders po ON poi.po_id = po.id
+                       WHERE poi.product_id = p.id AND po.status = 'received'
+                   ), 0)
+               ) as total_purchased_cost,
+               (
+                   COALESCE(p.initial_stock, 0) + 
+                   COALESCE((
+                       SELECT SUM(poi.quantity) 
+                       FROM purchase_order_items poi 
+                       JOIN purchase_orders po ON poi.po_id = po.id
+                       WHERE poi.product_id = p.id AND po.status = 'received'
+                   ), 0)
+               ) as total_purchased_quantity
         FROM products p
         LEFT JOIN invoice_items ii ON p.id = ii.product_id
     ";
@@ -98,6 +116,8 @@ pub fn get_products(
                         if sold > 0 { Some(sold) } else { None } 
                     },
                     initial_stock_sold: None,
+                    total_purchased_cost: row.get(13)?,
+                    total_purchased_quantity: row.get(14)?,
                     quantity_sold: None,
                     sold_revenue: None,
                 })
@@ -137,6 +157,8 @@ pub fn get_products(
                         if sold > 0 { Some(sold) } else { None }
                     },
                     initial_stock_sold: None,
+                    total_purchased_cost: row.get(13)?,
+                    total_purchased_quantity: row.get(14)?,
                     quantity_sold: None,
                     sold_revenue: None,
                 })
@@ -210,6 +232,8 @@ pub fn get_product(id: i32, db: State<Database>) -> Result<Product, String> {
                     initial_stock_sold,
                     quantity_sold: None,
                     sold_revenue: None,
+                    total_purchased_cost: None,
+                    total_purchased_quantity: None,
                 })
             },
         )
@@ -246,6 +270,18 @@ pub fn get_products_by_supplier(
                         COALESCE((SELECT quantity_remaining FROM inventory_batches WHERE product_id = p.id AND po_item_id IS NULL LIMIT 1), 0)
                     ELSE 0 END
                 ) as stock_quantity,
+                (
+                    COALESCE((
+                        SELECT SUM(poi.total_cost)
+                        FROM purchase_order_items poi
+                        JOIN purchase_orders po ON poi.po_id = po.id
+                        WHERE poi.product_id = p.id AND po.supplier_id = ?1 AND po.status = 'received'
+                    ), 0)
+                    +
+                    CASE WHEN p.supplier_id = ?1 THEN
+                        COALESCE(p.initial_stock * p.price, 0)
+                    ELSE 0 END
+                ) as total_purchased_cost,
                 p.supplier_id, p.created_at, p.updated_at, p.image_path, p.category 
              FROM products p 
              WHERE p.supplier_id = ?1
@@ -269,15 +305,17 @@ pub fn get_products_by_supplier(
                 selling_price: row.get(4)?,
                 initial_stock: row.get(5)?,
                 stock_quantity: row.get(6)?,
-                supplier_id: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
-                image_path: row.get(10)?,
-                category: row.get(11)?,
+                supplier_id: row.get(8)?, // Shifted due to new column
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
+                image_path: row.get(11)?,
+                category: row.get(12)?,
                 total_sold: None,
                 initial_stock_sold: None,
                 quantity_sold: None,
                 sold_revenue: None,
+                total_purchased_cost: row.get(7)?,
+                total_purchased_quantity: None,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -524,6 +562,8 @@ pub fn delete_product(id: i32, deleted_by: Option<String>, db: State<Database>) 
                 initial_stock_sold: None,
                 quantity_sold: None,
                 sold_revenue: None,
+                total_purchased_cost: None,
+                total_purchased_quantity: None,
             })
         },
     )
@@ -648,6 +688,8 @@ pub fn get_top_selling_products(page: i32, limit: i32, category: Option<String>,
             initial_stock_sold: None,
             quantity_sold: None,
             sold_revenue: None,
+            total_purchased_cost: None,
+            total_purchased_quantity: None,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -708,6 +750,8 @@ pub fn get_products_by_ids(ids: Vec<i32>, db: State<Database>) -> Result<Vec<Pro
             initial_stock_sold: None,
             quantity_sold: None,
             sold_revenue: None,
+            total_purchased_cost: None,
+            total_purchased_quantity: None,
         })
     }).map_err(|e| e.to_string())?;
 

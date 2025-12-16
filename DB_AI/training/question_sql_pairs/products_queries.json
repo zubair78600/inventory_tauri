@@ -58,5 +58,241 @@
     {
         "question": "Show products without a supplier",
         "sql": "SELECT name, sku FROM products WHERE supplier_id IS NULL"
+    },
+    {
+        "question": "Product cadbury",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) as initial_stock, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "Product dairy milk",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) as initial_stock, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') GROUP BY p.id"
+    },
+    {
+        "question": "Product kitkat",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) as initial_stock, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') GROUP BY p.id"
+    },
+    {
+        "question": "Show product cadbury dairy milk",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) as initial_stock, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%cadbury dairy milk%') GROUP BY p.id"
+    },
+    {
+        "question": "Product cadbury current stock",
+        "sql": "SELECT p.name, p.sku, p.stock_quantity as current_stock FROM products p WHERE LOWER(p.name) LIKE LOWER('%cadbury%')"
+    },
+    {
+        "question": "What is the current stock for cadbury?",
+        "sql": "SELECT p.name, p.stock_quantity as current_stock FROM products p WHERE LOWER(p.name) LIKE LOWER('%cadbury%')"
+    },
+    {
+        "question": "Current stock of dairy milk",
+        "sql": "SELECT p.name, p.stock_quantity as current_stock FROM products p WHERE LOWER(p.name) LIKE LOWER('%dairy milk%')"
+    },
+    {
+        "question": "How much kitkat in stock?",
+        "sql": "SELECT p.name, p.stock_quantity as current_stock FROM products p WHERE LOWER(p.name) LIKE LOWER('%kitkat%')"
+    },
+    {
+        "question": "Product cadbury stock purchased",
+        "sql": "SELECT p.name, COALESCE(p.initial_stock, 0) as initial_stock, COALESCE(SUM(poi.quantity), 0) as purchased_via_po, COALESCE(p.initial_stock, 0) + COALESCE(SUM(poi.quantity), 0) as total_stock_purchased FROM products p LEFT JOIN purchase_order_items poi ON p.id = poi.product_id LEFT JOIN purchase_orders po ON poi.po_id = po.id AND po.status = 'received' WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "Total stock purchased for dairy milk",
+        "sql": "SELECT p.name, COALESCE(p.initial_stock, 0) as initial_stock, COALESCE(SUM(poi.quantity), 0) as purchased_via_po, COALESCE(p.initial_stock, 0) + COALESCE(SUM(poi.quantity), 0) as total_stock_purchased FROM products p LEFT JOIN purchase_order_items poi ON p.id = poi.product_id LEFT JOIN purchase_orders po ON poi.po_id = po.id AND po.status = 'received' WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') GROUP BY p.id"
+    },
+    {
+        "question": "How much kitkat was purchased?",
+        "sql": "SELECT p.name, COALESCE(p.initial_stock, 0) as initial_stock, COALESCE(SUM(poi.quantity), 0) as purchased_via_po, COALESCE(p.initial_stock, 0) + COALESCE(SUM(poi.quantity), 0) as total_stock_purchased FROM products p LEFT JOIN purchase_order_items poi ON p.id = poi.product_id LEFT JOIN purchase_orders po ON poi.po_id = po.id AND po.status = 'received' WHERE LOWER(p.name) LIKE LOWER('%kitkat%') GROUP BY p.id"
+    },
+    {
+        "question": "Product cadbury total sales count",
+        "sql": "SELECT p.name, COUNT(DISTINCT i.id) as total_sales_count, COALESCE(SUM(ii.quantity), 0) as total_quantity_sold FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "How many times was dairy milk sold?",
+        "sql": "SELECT p.name, COUNT(DISTINCT i.id) as total_sales_count, COALESCE(SUM(ii.quantity), 0) as total_quantity_sold FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') GROUP BY p.id"
+    },
+    {
+        "question": "Kitkat sales count",
+        "sql": "SELECT p.name, COUNT(DISTINCT i.id) as total_sales_count, COALESCE(SUM(ii.quantity), 0) as total_quantity_sold FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') GROUP BY p.id"
+    },
+    {
+        "question": "Product cadbury total amount sold",
+        "sql": "SELECT p.name, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold, COALESCE(SUM(ii.quantity), 0) as total_quantity_sold FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "Total revenue from dairy milk",
+        "sql": "SELECT p.name, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold, COALESCE(SUM(ii.quantity), 0) as total_quantity_sold FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') GROUP BY p.id"
+    },
+    {
+        "question": "How much kitkat was sold in rupees?",
+        "sql": "SELECT p.name, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold, COALESCE(SUM(ii.quantity), 0) as total_quantity_sold FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') GROUP BY p.id"
+    },
+    {
+        "question": "Product cadbury selling price",
+        "sql": "SELECT p.name, p.price as cost_price, p.selling_price, (p.selling_price - p.price) as profit_margin FROM products p WHERE LOWER(p.name) LIKE LOWER('%cadbury%')"
+    },
+    {
+        "question": "What is the selling price of dairy milk?",
+        "sql": "SELECT p.name, p.price as cost_price, p.selling_price, (p.selling_price - p.price) as profit_margin FROM products p WHERE LOWER(p.name) LIKE LOWER('%dairy milk%')"
+    },
+    {
+        "question": "Kitkat price",
+        "sql": "SELECT p.name, p.price as cost_price, p.selling_price, (p.selling_price - p.price) as profit_margin FROM products p WHERE LOWER(p.name) LIKE LOWER('%kitkat%')"
+    },
+    {
+        "question": "Product cadbury details",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) + COALESCE((SELECT SUM(poi.quantity) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) as total_stock_purchased, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COUNT(DISTINCT i.id) as sales_invoice_count, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "Dairy milk full data",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) + COALESCE((SELECT SUM(poi.quantity) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) as total_stock_purchased, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COUNT(DISTINCT i.id) as sales_invoice_count, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') GROUP BY p.id"
+    },
+    {
+        "question": "Show me kitkat info",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) + COALESCE((SELECT SUM(poi.quantity) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) as total_stock_purchased, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COUNT(DISTINCT i.id) as sales_invoice_count, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') GROUP BY p.id"
+    },
+    {
+        "question": "Product cadbury purchase history",
+        "sql": "SELECT p.name as product, po.po_number, po.order_date, poi.quantity, poi.unit_cost, poi.total_cost, s.name as supplier, po.status FROM products p JOIN purchase_order_items poi ON p.id = poi.product_id JOIN purchase_orders po ON poi.po_id = po.id JOIN suppliers s ON po.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') ORDER BY po.order_date DESC"
+    },
+    {
+        "question": "When did we buy dairy milk?",
+        "sql": "SELECT p.name as product, po.po_number, po.order_date, poi.quantity, poi.unit_cost, poi.total_cost, s.name as supplier, po.status FROM products p JOIN purchase_order_items poi ON p.id = poi.product_id JOIN purchase_orders po ON poi.po_id = po.id JOIN suppliers s ON po.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') ORDER BY po.order_date DESC"
+    },
+    {
+        "question": "Kitkat purchase orders",
+        "sql": "SELECT p.name as product, po.po_number, po.order_date, poi.quantity, poi.unit_cost, poi.total_cost, s.name as supplier, po.status FROM products p JOIN purchase_order_items poi ON p.id = poi.product_id JOIN purchase_orders po ON poi.po_id = po.id JOIN suppliers s ON po.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') ORDER BY po.order_date DESC"
+    },
+    {
+        "question": "Product cadbury sales history",
+        "sql": "SELECT p.name as product, i.invoice_number, i.created_at as sale_date, ii.quantity, ii.unit_price, (ii.quantity * ii.unit_price) as line_total, c.name as customer FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id LEFT JOIN customers c ON i.customer_id = c.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') ORDER BY i.created_at DESC"
+    },
+    {
+        "question": "Dairy milk sales list",
+        "sql": "SELECT p.name as product, i.invoice_number, i.created_at as sale_date, ii.quantity, ii.unit_price, (ii.quantity * ii.unit_price) as line_total, c.name as customer FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id LEFT JOIN customers c ON i.customer_id = c.id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') ORDER BY i.created_at DESC"
+    },
+    {
+        "question": "Kitkat invoices",
+        "sql": "SELECT p.name as product, i.invoice_number, i.created_at as sale_date, ii.quantity, ii.unit_price, (ii.quantity * ii.unit_price) as line_total, c.name as customer FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id LEFT JOIN customers c ON i.customer_id = c.id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') ORDER BY i.created_at DESC"
+    },
+    {
+        "question": "Who bought cadbury?",
+        "sql": "SELECT DISTINCT c.name as customer, c.phone, COUNT(DISTINCT i.id) as purchase_count, SUM(ii.quantity) as total_quantity FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY c.id ORDER BY total_quantity DESC"
+    },
+    {
+        "question": "Customers who bought dairy milk",
+        "sql": "SELECT DISTINCT c.name as customer, c.phone, COUNT(DISTINCT i.id) as purchase_count, SUM(ii.quantity) as total_quantity FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') GROUP BY c.id ORDER BY total_quantity DESC"
+    },
+    {
+        "question": "Who purchased kitkat?",
+        "sql": "SELECT DISTINCT c.name as customer, c.phone, COUNT(DISTINCT i.id) as purchase_count, SUM(ii.quantity) as total_quantity FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') GROUP BY c.id ORDER BY total_quantity DESC"
+    },
+    {
+        "question": "Product cadbury supplier",
+        "sql": "SELECT p.name as product, s.name as supplier, s.contact_info, s.email, s.address FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%')"
+    },
+    {
+        "question": "Who supplies dairy milk?",
+        "sql": "SELECT p.name as product, s.name as supplier, s.contact_info, s.email, s.address FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%')"
+    },
+    {
+        "question": "Kitkat supplier details",
+        "sql": "SELECT p.name as product, s.name as supplier, s.contact_info, s.email, s.address FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%kitkat%')"
+    },
+    {
+        "question": "Product cadbury payment history",
+        "sql": "SELECT p.name as product, sp.amount, sp.payment_method, sp.paid_at, sp.note, s.name as supplier FROM products p JOIN supplier_payments sp ON p.id = sp.product_id JOIN suppliers s ON sp.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') ORDER BY sp.paid_at DESC"
+    },
+    {
+        "question": "How much paid for dairy milk?",
+        "sql": "SELECT p.name, COALESCE(SUM(sp.amount), 0) as total_paid, COALESCE((SELECT SUM(poi.total_cost) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) as total_purchased, COALESCE((SELECT SUM(poi.total_cost) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) - COALESCE(SUM(sp.amount), 0) as pending_payment FROM products p LEFT JOIN supplier_payments sp ON p.id = sp.product_id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') GROUP BY p.id"
+    },
+    {
+        "question": "Kitkat payment status",
+        "sql": "SELECT p.name, COALESCE(SUM(sp.amount), 0) as total_paid, COALESCE((SELECT SUM(poi.total_cost) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) as total_purchased, COALESCE((SELECT SUM(poi.total_cost) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) - COALESCE(SUM(sp.amount), 0) as pending_payment FROM products p LEFT JOIN supplier_payments sp ON p.id = sp.product_id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') GROUP BY p.id"
+    },
+    {
+        "question": "Product cadbury sales this month",
+        "sql": "SELECT p.name, SUM(ii.quantity) as quantity_sold, SUM(ii.quantity * ii.unit_price) as revenue FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') AND strftime('%Y-%m', i.created_at) = strftime('%Y-%m', 'now') GROUP BY p.id"
+    },
+    {
+        "question": "Dairy milk sales today",
+        "sql": "SELECT p.name, SUM(ii.quantity) as quantity_sold, SUM(ii.quantity * ii.unit_price) as revenue FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%') AND DATE(i.created_at) = DATE('now') GROUP BY p.id"
+    },
+    {
+        "question": "Kitkat sales this week",
+        "sql": "SELECT p.name, SUM(ii.quantity) as quantity_sold, SUM(ii.quantity * ii.unit_price) as revenue FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') AND i.created_at >= DATE('now', '-7 days') GROUP BY p.id"
+    },
+    {
+        "question": "Product cadbury profit",
+        "sql": "SELECT p.name, p.price as cost_price, p.selling_price, (p.selling_price - p.price) as profit_per_unit, COALESCE(SUM(ii.quantity), 0) * (p.selling_price - p.price) as total_profit FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "Dairy milk profit margin",
+        "sql": "SELECT p.name, p.price as cost_price, p.selling_price, (p.selling_price - p.price) as profit_per_unit, ((p.selling_price - p.price) / p.price * 100) as margin_percent FROM products p WHERE LOWER(p.name) LIKE LOWER('%dairy milk%')"
+    },
+    {
+        "question": "Kitkat revenue",
+        "sql": "SELECT p.name, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue, COALESCE(SUM(ii.quantity), 0) as units_sold FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%kitkat%') GROUP BY p.id"
+    },
+    {
+        "question": "Product cadbury inventory value",
+        "sql": "SELECT p.name, p.stock_quantity, p.price as cost_price, p.selling_price, (p.stock_quantity * p.price) as stock_cost_value, (p.stock_quantity * p.selling_price) as stock_selling_value FROM products p WHERE LOWER(p.name) LIKE LOWER('%cadbury%')"
+    },
+    {
+        "question": "Find product dairy milk",
+        "sql": "SELECT p.*, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%dairy milk%')"
+    },
+    {
+        "question": "Search product kitkat",
+        "sql": "SELECT p.id, p.name, p.sku, p.stock_quantity, p.selling_price, p.category FROM products p WHERE LOWER(p.name) LIKE LOWER('%kitkat%') OR LOWER(p.sku) LIKE LOWER('%kitkat%')"
+    },
+    {
+        "question": "Product name cadbury",
+        "sql": "SELECT p.*, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%')"
+    },
+    {
+        "question": "Cadbury list",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) as initial_stock, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "Cadbury data",
+        "sql": "SELECT p.id, p.name, p.sku, p.price as cost_price, p.selling_price, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) + COALESCE((SELECT SUM(poi.quantity) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) as total_stock_purchased, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COUNT(DISTINCT i.id) as sales_invoice_count, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold, p.category, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "Cadbury stock",
+        "sql": "SELECT p.name, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) as initial_stock FROM products p WHERE LOWER(p.name) LIKE LOWER('%cadbury%')"
+    },
+    {
+        "question": "Cadbury sales",
+        "sql": "SELECT p.name, COALESCE(SUM(ii.quantity), 0) as quantity_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue, COUNT(DISTINCT i.id) as invoice_count FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id WHERE LOWER(p.name) LIKE LOWER('%cadbury%') GROUP BY p.id"
+    },
+    {
+        "question": "All products with sales data",
+        "sql": "SELECT p.name, p.stock_quantity as current_stock, COALESCE(SUM(ii.quantity), 0) as total_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue, COUNT(DISTINCT i.id) as invoice_count FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id LEFT JOIN invoices i ON ii.invoice_id = i.id GROUP BY p.id ORDER BY total_revenue DESC"
+    },
+    {
+        "question": "Products with purchase and sales summary",
+        "sql": "SELECT p.name, p.stock_quantity as current_stock, COALESCE(p.initial_stock, 0) + COALESCE((SELECT SUM(poi.quantity) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE poi.product_id = p.id AND po.status = 'received'), 0) as total_purchased, COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii WHERE ii.product_id = p.id), 0) as total_sold, COALESCE((SELECT SUM(ii.quantity * ii.unit_price) FROM invoice_items ii WHERE ii.product_id = p.id), 0) as total_revenue FROM products p ORDER BY total_revenue DESC"
+    },
+    {
+        "question": "Top selling products",
+        "sql": "SELECT p.name, COALESCE(SUM(ii.quantity), 0) as total_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY total_sold DESC LIMIT 10"
+    },
+    {
+        "question": "Best selling products by revenue",
+        "sql": "SELECT p.name, COALESCE(SUM(ii.quantity), 0) as total_sold, COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY total_revenue DESC LIMIT 10"
+    },
+    {
+        "question": "Products with most stock",
+        "sql": "SELECT name, stock_quantity, selling_price, (stock_quantity * selling_price) as stock_value FROM products ORDER BY stock_quantity DESC LIMIT 10"
+    },
+    {
+        "question": "Products never sold",
+        "sql": "SELECT p.name, p.stock_quantity, p.created_at FROM products p LEFT JOIN invoice_items ii ON p.id = ii.product_id WHERE ii.id IS NULL ORDER BY p.created_at"
+    },
+    {
+        "question": "Products without purchase orders",
+        "sql": "SELECT p.name, p.stock_quantity, COALESCE(p.initial_stock, 0) as initial_stock FROM products p LEFT JOIN purchase_order_items poi ON p.id = poi.product_id WHERE poi.id IS NULL AND COALESCE(p.initial_stock, 0) > 0"
     }
 ]

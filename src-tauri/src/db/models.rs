@@ -21,6 +21,10 @@ pub struct Product {
     pub total_sold: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initial_stock_sold: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_purchased_cost: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_purchased_quantity: Option<i64>,
 }
 
 /// Supplier model matching Prisma schema

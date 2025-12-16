@@ -25,6 +25,8 @@ export interface Product {
   category: string | null;
   total_sold?: number;
   initial_stock_sold?: number;
+  total_purchased_cost?: number;
+  total_purchased_quantity?: number;
 }
 
 export interface User {

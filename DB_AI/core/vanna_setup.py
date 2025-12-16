@@ -301,8 +301,40 @@ class VannaAI:
         # CUSTOMER QUERIES
         # =================
         
-        # Customer credit queries (specific request for credit info)
-        if 'customer credit' in question_lower or 'credit for customer' in question_lower:
+        # Bypass hardcoded logic for "who bought" or specific product sales queries
+        # This allows the trained LLM to handle "customer who bought X" queries
+        is_purchase_query = (
+            'bought' in question_lower or 
+            'sales with' in question_lower or 
+            'customers for' in question_lower or
+            'who purchased' in question_lower or
+            'by customers' in question_lower or
+            # Check for product keywords combined with customer context
+            ('kisses' in question_lower and 'customer' in question_lower) or
+            ('product' in question_lower and 'customer' in question_lower)
+        )
+        logger.info(f"DEBUG: is_purchase_query = {is_purchase_query}, question = '{question_lower}'")
+        
+        if is_purchase_query:
+            logger.info("Detected product purchase query pattern, bypassing hardcoded logic to use LLM")
+            context = self.vector_store.get_relevant_context(question, n_results=3)
+            logger.info(f"DEBUG: Retrieved context for purchase query: {context[:300] if context else 'EMPTY'}...")
+            sql = self.llm.generate(question, context=context)
+            logger.info(f"DEBUG: LLM generated SQL: {sql}")
+            
+            # Basic cleanup (full cleanup is at end of function but we return early)
+            sql = sql.strip()
+            if "```" in sql:
+                parts = sql.split("```")
+                if len(parts) > 1:
+                    s = parts[1]
+                    if s.lower().startswith("sql"): s = s[3:]
+                    sql = s.strip()
+            if sql.lower().startswith("sql:"):
+                sql = sql[4:].strip()
+            
+            return sql
+        elif 'customer credit' in question_lower or 'credit for customer' in question_lower:
             # Check for phone in credit query
             if phone_match:
                 phone = phone_match.group(1)
@@ -500,6 +532,201 @@ class VannaAI:
             logger.info(f"Detected supplier name query, using hardcoded SQL: {sql}")
             return sql
         
+        # =================
+        # PRODUCT QUERIES
+        # =================
+
+        # Product queries (name, details, info, stock, or just "product X")
+        if (question_lower.startswith('product ') or
+            question_lower.startswith('products ') or
+            any(keyword in question_lower for keyword in ['product name', 'product details', 'product info', 'product stock', 'find product', 'search product']) or
+            # Match patterns like "cadbury stock", "kitkat sales", "dairy milk data"
+            any(keyword in question_lower for keyword in [' stock', ' sales', ' data', ' list', ' info', ' details', ' price', ' profit', ' revenue'])):
+
+            # Check if this is actually a product query by excluding customer/supplier/invoice patterns
+            is_product_query = True
+            if any(kw in question_lower for kw in ['customer', 'supplier', 'invoice', 'payment method', 'who is']):
+                is_product_query = False
+
+            if is_product_query:
+                # Extract product name
+                product_name = None
+
+                # Pattern 1: "product X ..." format
+                name_match = re.search(r'(?:product name|product details for|product info for|product stock for|find product|search product|products|product)\s+(.+?)(?:\s+current stock|\s+stock purchased|\s+total sales|\s+sales count|\s+amount sold|\s+selling price|\s+details|\s+info|\s+sales|\s+purchases?|\s+history|\s+supplier|\s+customers?|\s+profit|\s+revenue|\s+data|\s+list)?$', question_lower)
+
+                if name_match:
+                    product_name = name_match.group(1).strip()
+                else:
+                    # Pattern 2: "X stock", "X sales", "X data" format
+                    alt_match = re.search(r'^(.+?)\s+(?:stock|sales|data|list|info|details|price|profit|revenue|current stock|stock purchased|total sales|sales count|amount sold|selling price|purchase history|sales history|supplier|customers?|payment)', question_lower)
+                    if alt_match:
+                        product_name = alt_match.group(1).strip()
+
+                if product_name:
+                    # Remove trailing keywords that might have been captured
+                    for kw in ['current', 'stock', 'purchased', 'total', 'sales', 'count', 'amount', 'sold', 'selling', 'price', 'details', 'info', 'data', 'list', 'the', 'for', 'of']:
+                        product_name = re.sub(rf'\s+{kw}$', '', product_name, flags=re.IGNORECASE)
+                        product_name = re.sub(rf'^{kw}\s+', '', product_name, flags=re.IGNORECASE)
+
+                    product_name = product_name.strip()
+
+                    if product_name and len(product_name) > 1:
+                        # Handle specific sub-queries
+                        if 'current stock' in question_lower or ('stock' in question_lower and 'purchased' not in question_lower and 'history' not in question_lower):
+                            sql = f"""SELECT p.name, p.sku, p.stock_quantity as current_stock
+                                FROM products p
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')"""
+                            logger.info(f"Detected product current stock query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'stock purchased' in question_lower or 'total purchased' in question_lower or 'was purchased' in question_lower:
+                            sql = f"""SELECT p.name, p.initial_stock,
+                                COALESCE(SUM(poi.quantity), 0) as purchased_via_po,
+                                p.initial_stock + COALESCE(SUM(poi.quantity), 0) as total_stock_purchased
+                                FROM products p
+                                LEFT JOIN purchase_order_items poi ON p.id = poi.product_id
+                                LEFT JOIN purchase_orders po ON poi.po_id = po.id AND po.status = 'received'
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                GROUP BY p.id"""
+                            logger.info(f"Detected product stock purchased query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'total sales count' in question_lower or 'sales count' in question_lower or 'how many times' in question_lower:
+                            sql = f"""SELECT p.name,
+                                COUNT(DISTINCT i.id) as total_sales_count,
+                                COALESCE(SUM(ii.quantity), 0) as total_quantity_sold
+                                FROM products p
+                                LEFT JOIN invoice_items ii ON p.id = ii.product_id
+                                LEFT JOIN invoices i ON ii.invoice_id = i.id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                GROUP BY p.id"""
+                            logger.info(f"Detected product sales count query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'total amount sold' in question_lower or 'amount sold' in question_lower or 'total sold' in question_lower or 'revenue' in question_lower:
+                            sql = f"""SELECT p.name,
+                                COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold,
+                                COALESCE(SUM(ii.quantity), 0) as total_quantity_sold
+                                FROM products p
+                                LEFT JOIN invoice_items ii ON p.id = ii.product_id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                GROUP BY p.id"""
+                            logger.info(f"Detected product amount sold query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'selling price' in question_lower or 'price' in question_lower:
+                            sql = f"""SELECT p.name, p.price as cost_price, p.selling_price,
+                                (p.selling_price - p.price) as profit_margin
+                                FROM products p
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')"""
+                            logger.info(f"Detected product price query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'purchase history' in question_lower or 'purchases' in question_lower or 'purchase orders' in question_lower or 'when did we buy' in question_lower:
+                            sql = f"""SELECT p.name as product, po.po_number, po.order_date,
+                                poi.quantity, poi.unit_cost, poi.total_cost,
+                                s.name as supplier, po.status
+                                FROM products p
+                                JOIN purchase_order_items poi ON p.id = poi.product_id
+                                JOIN purchase_orders po ON poi.po_id = po.id
+                                JOIN suppliers s ON po.supplier_id = s.id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                ORDER BY po.order_date DESC"""
+                            logger.info(f"Detected product purchase history query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'sales history' in question_lower or 'sales list' in question_lower or 'invoices' in question_lower:
+                            sql = f"""SELECT p.name as product, i.invoice_number, i.created_at as sale_date,
+                                ii.quantity, ii.unit_price, (ii.quantity * ii.unit_price) as line_total,
+                                c.name as customer
+                                FROM products p
+                                JOIN invoice_items ii ON p.id = ii.product_id
+                                JOIN invoices i ON ii.invoice_id = i.id
+                                LEFT JOIN customers c ON i.customer_id = c.id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                ORDER BY i.created_at DESC"""
+                            logger.info(f"Detected product sales history query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'supplier' in question_lower or 'who supplies' in question_lower:
+                            sql = f"""SELECT p.name as product, s.name as supplier,
+                                s.contact_info, s.email
+                                FROM products p
+                                LEFT JOIN suppliers s ON p.supplier_id = s.id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')"""
+                            logger.info(f"Detected product supplier query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'customer' in question_lower or 'who bought' in question_lower or 'who purchased' in question_lower:
+                            sql = f"""SELECT DISTINCT c.name as customer, c.phone,
+                                COUNT(DISTINCT i.id) as purchase_count,
+                                SUM(ii.quantity) as total_quantity
+                                FROM products p
+                                JOIN invoice_items ii ON p.id = ii.product_id
+                                JOIN invoices i ON ii.invoice_id = i.id
+                                JOIN customers c ON i.customer_id = c.id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                GROUP BY c.id
+                                ORDER BY total_quantity DESC"""
+                            logger.info(f"Detected product customers query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'payment' in question_lower or 'paid for' in question_lower:
+                            sql = f"""SELECT p.name as product, sp.amount, sp.payment_method,
+                                sp.paid_at, sp.note, s.name as supplier
+                                FROM products p
+                                JOIN supplier_payments sp ON p.id = sp.product_id
+                                JOIN suppliers s ON sp.supplier_id = s.id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                ORDER BY sp.paid_at DESC"""
+                            logger.info(f"Detected product payment query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'profit' in question_lower or 'margin' in question_lower:
+                            sql = f"""SELECT p.name, p.price as cost_price, p.selling_price,
+                                (p.selling_price - p.price) as profit_per_unit,
+                                COALESCE(p.quantity_sold, 0) * (p.selling_price - p.price) as total_profit
+                                FROM products p
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')"""
+                            logger.info(f"Detected product profit query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        elif 'sales' in question_lower and ('this month' in question_lower or 'today' in question_lower or 'this week' in question_lower):
+                            date_filter = self.get_date_filter(question, 'i.created_at')
+                            sql = f"""SELECT p.name, SUM(ii.quantity) as quantity_sold,
+                                SUM(ii.quantity * ii.unit_price) as revenue
+                                FROM products p
+                                JOIN invoice_items ii ON p.id = ii.product_id
+                                JOIN invoices i ON ii.invoice_id = i.id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                AND {date_filter}
+                                GROUP BY p.id"""
+                            logger.info(f"Detected product date-filtered sales query for '{product_name}', using hardcoded SQL")
+                            return sql
+
+                        else:
+                            # Default comprehensive product query
+                            sql = f"""SELECT p.id, p.name, p.sku,
+                                p.price as cost_price, p.selling_price,
+                                p.stock_quantity as current_stock,
+                                COALESCE(p.initial_stock, 0) + COALESCE((SELECT SUM(poi.quantity) FROM purchase_order_items poi
+                                    JOIN purchase_orders po ON poi.po_id = po.id
+                                    WHERE poi.product_id = p.id AND po.status = 'received'), 0) as total_stock_purchased,
+                                COALESCE(SUM(ii.quantity), 0) as quantity_sold,
+                                COUNT(DISTINCT i.id) as sales_invoice_count,
+                                COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_amount_sold,
+                                p.category,
+                                s.name as supplier_name
+                                FROM products p
+                                LEFT JOIN suppliers s ON p.supplier_id = s.id
+                                LEFT JOIN invoice_items ii ON p.id = ii.product_id
+                                LEFT JOIN invoices i ON ii.invoice_id = i.id
+                                WHERE LOWER(p.name) LIKE LOWER('%{product_name}%')
+                                GROUP BY p.id"""
+                            logger.info(f"Detected general product query for '{product_name}', using comprehensive hardcoded SQL")
+                            return sql
+
         # Get relevant training examples from vector store
         context = self.vector_store.get_relevant_context(question, n_results=2)
         if context:
