@@ -10,15 +10,28 @@ import { aiChatApi } from '@/lib/ai-chat';
 // Global state to track if sidecar has been started this session
 let sidecarStarted = false;
 
+// LocalStorage key for AI enabled state
+const AI_ENABLED_KEY = 'ai_enabled';
+
 export function AIChatButton() {
     const [open, setOpen] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [isReady, setIsReady] = useState(false);
     const [isStarting, setIsStarting] = useState(false);
+    const [aiEnabled, setAiEnabled] = useState<boolean | null>(null); // null = loading
     const startAttempted = useRef(false);
 
-    // Start sidecar on component mount (app startup) - only once per session
+    // Check AI enabled status from localStorage
     useEffect(() => {
+        const stored = localStorage.getItem(AI_ENABLED_KEY);
+        // Default to false (off) if not set - new installs will have AI off
+        setAiEnabled(stored === 'true');
+    }, []);
+
+    // Start sidecar on component mount (app startup) - only once per session
+    // But ONLY if AI is enabled
+    useEffect(() => {
+        if (aiEnabled !== true) return; // Don't start if disabled or still loading
         if (startAttempted.current || sidecarStarted) return;
         startAttempted.current = true;
 
@@ -65,10 +78,12 @@ export function AIChatButton() {
         };
 
         initSidecar();
-    }, []);
+    }, [aiEnabled]);
 
     // Periodic health check to update ready status
     useEffect(() => {
+        if (aiEnabled !== true) return; // Don't poll if AI disabled
+
         const interval = setInterval(async () => {
             try {
                 const { healthy } = await aiChatApi.healthCheck();
@@ -79,7 +94,12 @@ export function AIChatButton() {
         }, 10000); // Check every 10 seconds
 
         return () => clearInterval(interval);
-    }, []);
+    }, [aiEnabled]);
+
+    // Don't render anything if AI is disabled or still loading
+    if (aiEnabled !== true) {
+        return null;
+    }
 
     return (
         <>
@@ -115,9 +135,8 @@ export function AIChatButton() {
                             </motion.div>
 
                             {/* Status indicator - green dot when ready */}
-                            <div className={`absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white transition-colors ${
-                                isReady ? 'bg-emerald-400' : isStarting ? 'bg-amber-400 animate-pulse' : 'bg-slate-400'
-                            }`} />
+                            <div className={`absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white transition-colors ${isReady ? 'bg-emerald-400' : isStarting ? 'bg-amber-400 animate-pulse' : 'bg-slate-400'
+                                }`} />
 
                             {/* Sparkles - only show when ready */}
                             {isReady && (
@@ -146,3 +165,4 @@ export function AIChatButton() {
         </>
     );
 }
+

@@ -506,7 +506,7 @@ function InventoryDetailsContent() {
                                     {invoice.quantity || '-'}
                                 </div>
                                 <div className="text-center font-medium text-slate-900">
-                                    ₹{invoice.total_amount.toFixed(0)}
+                                    ₹{(invoice.product_amount ?? invoice.total_amount).toFixed(0)}
                                 </div>
                                 <div className="text-center text-slate-500 capitalize">
                                     {invoice.payment_method || '-'}
@@ -523,7 +523,7 @@ function InventoryDetailsContent() {
                     <div className="grid grid-cols-[1.2fr,2fr,1fr,1fr,1fr] gap-4 p-4 bg-slate-100 border-t border-slate-200 text-sm font-bold text-slate-900 items-center rounded-b-xl">
                         <div className="col-span-2 text-right pr-4 text-slate-500 text-xs uppercase tracking-wider">Total</div>
                         <div className="text-center">{invoices.reduce((s, i) => s + (i.quantity || 0), 0)}</div>
-                        <div className="text-center">₹{invoices.reduce((s, i) => s + i.total_amount, 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-center">₹{invoices.reduce((s, i) => s + (i.product_amount ?? i.total_amount), 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
                         <div></div>
                     </div>
                 </div>

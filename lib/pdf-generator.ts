@@ -52,7 +52,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 const formatCurrency = (amount: number) => {
-    return `Rs. ${amount.toFixed(2)}`;
+    return `Rs. ${amount.toFixed(1)}`;
 };
 
 export const numberToWords = (num: number): string => {
@@ -349,20 +349,45 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
         doc.text('Walk-in Customer', 7, startY + 6);
     }
 
-    // Items Table
+    // Items Table - Apply Global Discount Weightage or Per-Item Discount
     const tableColumn = ["Item", "SKU", "Qty", "Price", "Total"];
-    const tableRows = items.map(item => [
-        item.product_name,
-        item.product_sku || '-',
-        item.quantity,
-        formatCurrency(item.unit_price),
-        formatCurrency(item.quantity * item.unit_price)
-    ]);
 
-    // Calculate Totals for Footer
+    // Calculate total gross amount to determine weightage if global discount exists
+    const totalGross = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    const globalDiscount = invoice.discount_amount || 0;
+    const hasPerItemDiscount = items.some(i => (i.discount_amount || 0) > 0);
+
+    const tableRows = items.map(item => {
+        const originalGross = item.quantity * item.unit_price;
+        let itemDiscount = item.discount_amount || 0;
+
+        // If no per-item discount found but global discount exists, distribute weighted by value
+        if (!hasPerItemDiscount && globalDiscount > 0 && totalGross > 0) {
+            const weight = originalGross / totalGross;
+            itemDiscount = weight * globalDiscount;
+        }
+
+        const finalTotal = originalGross - itemDiscount;
+
+        // Calculate discounted unit price for display
+        const discountedUnitPrice = item.quantity > 0 ? finalTotal / item.quantity : item.unit_price;
+
+        // Show detailed prices
+        const priceDisplay = formatCurrency(discountedUnitPrice);
+        const totalDisplay = formatCurrency(finalTotal);
+
+        return [
+            item.product_name,
+            item.product_sku || '-',
+            item.quantity,
+            priceDisplay,
+            totalDisplay
+        ];
+    });
+
+    // Calculate Totals for Footer (using final amounts to match visual sum)
     const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
-    // Removed totalUnitPrice as per user request
-    const grandTotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    const netSubtotal = invoice.total_amount - (invoice.tax_amount || 0);
 
     autoTable(doc, {
         startY: startY + 27,
@@ -373,7 +398,7 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
             "",
             totalQty.toString(),
             "", // Empty for Price column
-            formatCurrency(grandTotal)
+            formatCurrency(netSubtotal) // Match sum of items (Subtotal)
         ]],
         theme: 'grid',
         margin: { left: 7, right: 7 }, // 5mm border + 2mm inner padding
@@ -389,32 +414,32 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
         }
     });
 
-    // Amount in Words - 10px (≈3.5mm) gap after table
+    // Amount in Words - 10px (~3.5mm) gap after table
     const finalY = doc.lastAutoTable.finalY + 3.5;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
 
-    const amountInWords = numberToWords(grandTotal);
+    const amountInWords = numberToWords(Math.round(invoice.total_amount));
     doc.text(`Amount in Words: ${amountInWords}`, 7, finalY);
 
     // Totals Section (Right Aligned)
-    // Adjust Y slightly if needed or keep existing alignment logic relative to finalY
-    // Existing logic uses finalY + 10 for Subtotal, let's keep it but ensure no overlap
-    // Actually existing logic used: const finalY = doc.lastAutoTable.finalY + 10;
-    // We reused finalY variable name above, let's correspond.
-
     const summaryX = pageWidth - 70;
     const valueX = pageWidth - 7;
 
     doc.text(`Subtotal:`, summaryX, finalY);
-    doc.text(formatCurrency(invoice.total_amount - invoice.tax_amount + invoice.discount_amount), valueX, finalY, { align: 'right' });
+    doc.text(formatCurrency(netSubtotal), valueX, finalY, { align: 'right' });
 
-    doc.text(`Discount:`, summaryX, finalY + 6);
-    doc.text(`-${formatCurrency(invoice.discount_amount)}`, valueX, finalY + 6, { align: 'right' });
+    if (invoice.discount_amount && invoice.discount_amount > 0) {
+        doc.text(`Total Discount:`, summaryX, finalY + 6);
+        doc.text(`(Included) -${formatCurrency(invoice.discount_amount)}`, valueX, finalY + 6, { align: 'right' });
+    } else {
+        doc.text(`Discount:`, summaryX, finalY + 6);
+        doc.text(`-`, valueX, finalY + 6, { align: 'right' });
+    }
 
     doc.text(`Tax:`, summaryX, finalY + 12);
-    doc.text(formatCurrency(invoice.tax_amount), valueX, finalY + 12, { align: 'right' });
+    doc.text(formatCurrency(invoice.tax_amount || 0), valueX, finalY + 12, { align: 'right' });
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);

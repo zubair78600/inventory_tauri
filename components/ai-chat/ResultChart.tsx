@@ -120,7 +120,7 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
 
     if (chartConfig.type === 'pie') {
         return (
-            <ResponsiveContainer width="100%" height={height}>
+            <ResponsiveContainer width="100%" height={height} minWidth={0} minHeight={0} debounce={50}>
                 <PieChart>
                     <Pie
                         data={chartConfig.data}
@@ -152,7 +152,7 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
 
     if (chartConfig.type === 'line') {
         return (
-            <ResponsiveContainer width="100%" height={height}>
+            <ResponsiveContainer width="100%" height={height} minWidth={0} minHeight={0} debounce={50}>
                 <LineChart data={chartConfig.data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis
@@ -190,7 +190,7 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
 
     // Default: Bar chart
     return (
-        <ResponsiveContainer width="100%" height={height}>
+        <ResponsiveContainer width="100%" height={height} minWidth={0} minHeight={0} debounce={50}>
             <BarChart data={chartConfig.data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis

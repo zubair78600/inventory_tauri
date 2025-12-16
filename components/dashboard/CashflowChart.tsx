@@ -83,15 +83,15 @@ export function CashflowChart({ data, loading }: CashflowChartProps) {
             <span className="text-slate-500">{formatCurrency(totalPurchases)}</span>
           </span>
           <span className={`font-medium px-1.5 py-0.5 rounded text-[10px] ${netCashflow >= 0
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-              : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+            : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
             }`}>
             Net: {formatCurrency(netCashflow)}
           </span>
         </div>
       </div>
       <div style={{ height: 300 }} className="w-full min-w-0">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
           <ComposedChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
             <XAxis

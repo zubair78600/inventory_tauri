@@ -25,6 +25,8 @@ pub struct Product {
     pub total_purchased_cost: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_purchased_quantity: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_sold_amount: Option<f64>, // Actual revenue after discounts
 }
 
 /// Supplier model matching Prisma schema
@@ -86,6 +88,7 @@ pub struct Invoice {
     pub customer_phone: Option<String>,
     pub item_count: Option<i32>,
     pub quantity: Option<i32>, // Quantity of specific product (context-dependent)
+    pub product_amount: Option<f64>, // Amount for specific product after discount (context-dependent)
 }
 
 /// InvoiceItem model matching Prisma schema
@@ -108,6 +111,7 @@ pub struct InvoiceItemWithProduct {
     pub quantity: i32,
     pub unit_price: f64,
     pub total: f64,
+    pub discount_amount: f64, // Per-item weighted discount
 }
 
 /// Supplier payment tracking for amounts paid to suppliers

@@ -74,6 +74,7 @@ pub struct PaymentMethodBreakdown {
 pub struct RegionSales {
     pub state: String,
     pub district: Option<String>,
+    pub town: Option<String>,
     pub revenue: f64,
     pub order_count: i32,
 }
@@ -776,7 +777,7 @@ pub fn get_sales_by_payment_method(
     Ok(results)
 }
 
-/// Get sales by region (state)
+/// Get sales by region (grouped by town)
 #[tauri::command]
 pub fn get_sales_by_region(
     start_date: String,
@@ -792,11 +793,13 @@ pub fn get_sales_by_region(
             "SELECT
                 COALESCE(state, 'Unknown') as state,
                 district,
+                COALESCE(town, 'Unknown') as town,
                 COALESCE(SUM(total_amount), 0.0) as revenue,
                 COUNT(*) as order_count
              FROM invoices
              WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
-             GROUP BY state
+               AND town IS NOT NULL AND town != ''
+             GROUP BY town
              ORDER BY revenue DESC"
         )
         .map_err(|e| e.to_string())?;
@@ -806,8 +809,9 @@ pub fn get_sales_by_region(
             Ok(RegionSales {
                 state: row.get(0)?,
                 district: row.get(1)?,
-                revenue: row.get(2)?,
-                order_count: row.get(3)?,
+                town: row.get(2)?,
+                revenue: row.get(3)?,
+                order_count: row.get(4)?,
             })
         })
         .map_err(|e| e.to_string())?

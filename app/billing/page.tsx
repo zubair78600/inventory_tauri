@@ -15,6 +15,7 @@ type CartItem = {
   product_id: number;
   name: string;
   unit_price: number;
+  cost_price: number; // For profit-weighted discount calculation
   quantity: number;
   max_stock: number;
 };
@@ -311,6 +312,7 @@ export default function Billing() {
           product_id: product.id,
           name: product.name,
           unit_price: product.selling_price || product.price,
+          cost_price: product.price, // Store cost price for profit-weighted discount
           quantity: 1,
           max_stock: product.stock_quantity,
         },
@@ -344,6 +346,37 @@ export default function Billing() {
     return subtotal + taxAmount - discount;
   };
 
+  // Calculate profit-weighted discount for each item
+  // Formula: Product Discount = (Product Profit / Total Profit) × Total Discount
+  const calculateWeightedDiscounts = () => {
+    if (discount <= 0 || cart.length === 0) return [];
+
+    const itemsWithProfit = cart.map(item => ({
+      product_id: item.product_id,
+      profit: Math.max(0, (item.unit_price - item.cost_price) * item.quantity)
+    }));
+
+    const totalProfit = itemsWithProfit.reduce((sum, item) => sum + item.profit, 0);
+
+    // Edge case: if all items have zero/negative profit, distribute equally
+    if (totalProfit <= 0) {
+      const equalDiscount = discount / cart.length;
+      return cart.map(item => ({ product_id: item.product_id, discount: equalDiscount }));
+    }
+
+    // Calculate weighted discount for each product
+    return itemsWithProfit.map(item => ({
+      product_id: item.product_id,
+      discount: (item.profit / totalProfit) * discount
+    }));
+  };
+
+  // Get discount for a specific item (for UI display)
+  const getItemDiscount = (productId: number): number => {
+    const discounts = calculateWeightedDiscounts();
+    return discounts.find(d => d.product_id === productId)?.discount || 0;
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0) return alert('Cart is empty');
     if (!customerName) return alert('Customer Name is required');
@@ -369,13 +402,20 @@ export default function Billing() {
         finalCustomerId = newCustomer.id;
       }
 
+      // Calculate weighted discounts for each item
+      const weightedDiscounts = calculateWeightedDiscounts();
+
       const invoiceInput = {
         customer_id: finalCustomerId,
-        items: cart.map((item) => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-        })),
+        items: cart.map((item) => {
+          const itemDiscount = weightedDiscounts.find(d => d.product_id === item.product_id)?.discount || 0;
+          return {
+            product_id: item.product_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            discount_amount: itemDiscount, // Per-item weighted discount
+          };
+        }),
         tax_amount: taxAmount,
         discount_amount: discount,
         payment_method: paymentMethod,
@@ -508,37 +548,61 @@ export default function Billing() {
                 className={`divide-y divide-slate-200 dark:divide-slate-700/70 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800/70 overflow-hidden ${cart.length > 3 ? 'max-h-48 overflow-y-auto' : ''
                   }`}
               >
-                {cart.map((item) => (
-                  <div
-                    key={item.product_id}
-                    className="grid grid-cols-[1.2fr,0.6fr,0.9fr,0.9fr,0.5fr] md:grid-cols-[1.4fr,0.7fr,1fr,1fr,0.6fr] items-center gap-2 px-4 py-3 text-sm md:text-base"
-                  >
-                    <span className="font-semibold text-slate-900 dark:text-slate-50 break-words pl-2">
-                      {item.name}
-                    </span>
-                    <input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateQuantity(item.product_id, parseInt(e.target.value, 10))
-                      }
-                      className="w-14 md:w-16 justify-self-center form-input text-center"
-                    />
-                    <span className="text-slate-700 dark:text-slate-200 text-center">
-                      ₹{item.unit_price.toFixed(0)}
-                    </span>
-                    <span className="font-semibold text-slate-900 dark:text-slate-50 text-center">
-                      ₹{(item.unit_price * item.quantity).toFixed(0)}
-                    </span>
-                    <button
-                      className="text-danger text-xl justify-self-center font-semibold leading-none"
-                      aria-label="Remove item"
-                      onClick={() => removeFromCart(item.product_id)}
+                {cart.map((item) => {
+                  const itemDiscount = getItemDiscount(item.product_id);
+                  const originalTotal = item.unit_price * item.quantity;
+                  const finalTotal = originalTotal - itemDiscount;
+                  const discountedUnitPrice = item.quantity > 0 ? finalTotal / item.quantity : 0;
+                  const hasDiscount = discount > 0 && itemDiscount > 0;
+
+                  return (
+                    <div
+                      key={item.product_id}
+                      className="grid grid-cols-[1.2fr,0.6fr,0.9fr,0.9fr,0.5fr] md:grid-cols-[1.4fr,0.7fr,1fr,1fr,0.6fr] items-center gap-2 px-4 py-3 text-sm md:text-base"
                     >
-                      ×
-                    </button>
-                  </div>
-                ))}
+                      <span className="font-semibold text-slate-900 dark:text-slate-50 break-words pl-2">
+                        {item.name}
+                      </span>
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) =>
+                          updateQuantity(item.product_id, parseInt(e.target.value, 10))
+                        }
+                        className="w-14 md:w-16 justify-self-center form-input text-center"
+                      />
+                      {/* Price column with strikethrough when discounted */}
+                      <span className="text-center">
+                        {hasDiscount ? (
+                          <span className="flex flex-col items-center">
+                            <span className="line-through text-slate-400 text-xs">₹{item.unit_price.toFixed(0)}</span>
+                            <span className="text-green-600 font-medium">₹{discountedUnitPrice.toFixed(2)}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-700 dark:text-slate-200">₹{item.unit_price.toFixed(0)}</span>
+                        )}
+                      </span>
+                      {/* Total column with strikethrough when discounted */}
+                      <span className="text-center">
+                        {hasDiscount ? (
+                          <span className="flex flex-col items-center">
+                            <span className="line-through text-slate-400 text-xs">₹{originalTotal.toFixed(0)}</span>
+                            <span className="text-green-600 font-semibold">₹{finalTotal.toFixed(2)}</span>
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-slate-900 dark:text-slate-50">₹{originalTotal.toFixed(0)}</span>
+                        )}
+                      </span>
+                      <button
+                        className="text-danger text-xl justify-self-center font-semibold leading-none"
+                        aria-label="Remove item"
+                        onClick={() => removeFromCart(item.product_id)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
                 {cart.length === 0 && (
                   <div className="px-4 py-6 text-center text-muted-foreground text-sm">
                     Cart is empty

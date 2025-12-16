@@ -43,6 +43,7 @@ export type Product = {
   image_path: string | null;
   category: string | null;
   total_sold?: number;
+  total_sold_amount?: number; // Actual revenue after discounts
 };
 
 export type Customer = {

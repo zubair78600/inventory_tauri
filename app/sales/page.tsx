@@ -25,6 +25,7 @@ type InvoiceItem = {
   sku?: string;
   quantity: number;
   unit_price: number;
+  discount_amount?: number;
   total: number;
 };
 
@@ -148,17 +149,35 @@ export default function Sales() {
         } catch (e) { console.error("Failed to fetch customer", e); }
       }
 
-      return {
-        customer,
-        items: data.items.map((item) => ({
+      // Calculate weighted discounts if needed
+      const items = data.items;
+      const totalGross = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+      const globalDiscount = data.invoice.discount_amount || 0;
+      const hasPerItemDiscount = items.some(i => (i.discount_amount || 0) > 0);
+
+      const mappedItems = items.map((item) => {
+        let discount = item.discount_amount || 0;
+        if (!hasPerItemDiscount && globalDiscount > 0 && totalGross > 0) {
+          const originalGross = item.quantity * item.unit_price;
+          const weight = originalGross / totalGross;
+          discount = weight * globalDiscount;
+        }
+
+        return {
           id: item.id,
           product_id: item.product_id,
           product_name: item.product_name,
           sku: item.product_sku,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          total: item.quantity * item.unit_price,
-        })),
+          discount_amount: discount,
+          total: item.quantity * item.unit_price - discount,
+        };
+      });
+
+      return {
+        customer,
+        items: mappedItems,
       };
     },
     enabled: !!selected?.id,
@@ -306,7 +325,7 @@ export default function Sales() {
                   </div>
 
                   <div className="text-right">
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">Rs. {sale.total_amount.toFixed(0)}</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">Rs. {sale.total_amount.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">
                       {sale.item_count ? `${sale.item_count} items` : ''}
                     </p>
@@ -508,10 +527,10 @@ export default function Sales() {
                               <td className="px-4 py-3 text-slate-500 text-center">{item.sku || '-'}</td>
                               <td className="px-4 py-3 text-center">{item.quantity}</td>
                               <td className="px-4 py-3 text-center">
-                                Rs. {item.unit_price.toFixed(2)}
+                                Rs. {((item.unit_price * item.quantity - (item.discount_amount || 0)) / item.quantity).toFixed(1)}
                               </td>
                               <td className="px-4 py-3 text-center font-semibold">
-                                Rs. {item.total.toFixed(2)}
+                                Rs. {item.total.toFixed(1)}
                               </td>
                             </tr>
                           ))}
@@ -521,7 +540,7 @@ export default function Sales() {
                             <td className="px-4 py-3 text-center"></td>
                             <td className="px-4 py-3 text-center">{totalQty}</td>
                             <td className="px-4 py-3 text-center"></td>
-                            <td className="px-4 py-3 text-center">Rs. {selected.total_amount.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-center">Rs. {selected.total_amount.toFixed(1)}</td>
                           </tr>
                         </>
                       )}
@@ -545,21 +564,21 @@ export default function Sales() {
                     <div className="flex justify-between text-sm text-slate-800">
                       <span className="font-medium">Subtotal:</span>
                       <span>
-                        Rs. {(selected.total_amount - (selected.tax_amount || 0) + (selected.discount_amount || 0)).toFixed(2)}
+                        Rs. {(selected.total_amount - (selected.tax_amount || 0) + (selected.discount_amount || 0)).toFixed(1)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm text-slate-800">
                       <span className="font-medium">Discount:</span>
-                      <span>-Rs. {(selected.discount_amount || 0).toFixed(2)}</span>
+                      <span>-Rs. {(selected.discount_amount || 0).toFixed(1)}</span>
                     </div>
                     <div className="flex justify-between text-sm text-slate-800">
                       <span className="font-medium">Tax:</span>
-                      <span>Rs. {(selected.tax_amount || 0).toFixed(2)}</span>
+                      <span>Rs. {(selected.tax_amount || 0).toFixed(1)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 mt-2">
                       <span className="text-xl font-bold text-slate-900">Total:</span>
                       <span className="text-xl font-bold text-slate-900">
-                        Rs. {selected.total_amount.toFixed(2)}
+                        Rs. {selected.total_amount.toFixed(1)}
                       </span>
                     </div>
                   </div>
@@ -640,7 +659,7 @@ export default function Sales() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">Invoice Items</h3>
                 <span className="text-xs text-slate-500">
-                  {editItems.length} item(s) • Rs. {editItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0).toFixed(2)}
+                  {editItems.length} item(s) • Rs. {editItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0).toFixed(1)}
                 </span>
               </div>
 
@@ -656,7 +675,7 @@ export default function Sales() {
                     <div key={idx} className="flex items-center justify-between p-3">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{productName}</p>
-                        <p className="text-xs text-slate-500">Rs. {item.unit_price.toFixed(2)} each</p>
+                        <p className="text-xs text-slate-500">Rs. {item.unit_price.toFixed(1)} each</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => updateItemQuantity(item.product_id, -1)}>
@@ -670,7 +689,7 @@ export default function Sales() {
                           <X className="w-4 h-4" />
                         </Button>
                       </div>
-                      <p className="w-20 text-right font-medium text-sm">Rs. {(item.quantity * item.unit_price).toFixed(2)}</p>
+                      <p className="w-20 text-right font-medium text-sm">Rs. {(item.quantity * item.unit_price).toFixed(1)}</p>
                     </div>
                   );
                 })}
@@ -696,7 +715,7 @@ export default function Sales() {
                           <p className="font-medium text-sm">{p.name}</p>
                           <p className="text-xs text-slate-500">{p.sku} • Stock: {p.stock_quantity}</p>
                         </div>
-                        <p className="text-sm font-medium">Rs. {(p.selling_price ?? p.price).toFixed(2)}</p>
+                        <p className="text-sm font-medium">Rs. {(p.selling_price ?? p.price).toFixed(1)}</p>
                       </button>
                     ))}
                   </div>
@@ -708,7 +727,7 @@ export default function Sales() {
             <div className="flex items-center justify-between pt-4 border-t">
               <span className="font-semibold">Total</span>
               <span className="text-xl font-bold text-sky-600">
-                Rs. {editItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0).toFixed(2)}
+                Rs. {editItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0).toFixed(1)}
               </span>
             </div>
           </div>

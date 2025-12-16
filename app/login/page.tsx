@@ -15,6 +15,7 @@ import {
     getBiometricErrorMessage,
     type BiometricCapability,
 } from '@/lib/biometric';
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground';
 
 export default function LoginPage() {
     const [username, setUsername] = useState('');
@@ -132,8 +133,11 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
-            <Card className="w-full max-w-md p-8 space-y-6 shadow-xl">
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4 relative overflow-hidden">
+            {/* Animated Background */}
+            <AnimatedBackground />
+
+            <Card className="w-full max-w-md p-8 space-y-6 shadow-xl relative z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
                 <div className="text-center space-y-2">
                     <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-4">
                         <Lock size={24} />

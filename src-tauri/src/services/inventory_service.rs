@@ -71,10 +71,7 @@ pub fn calculate_fifo_cogs(
     }
 
     if remaining_to_deduct > 0 {
-        return Err(format!(
-            "Insufficient inventory! Need {} more units. Check stock quantity.",
-            remaining_to_deduct
-        ));
+        log::warn!("Insufficient inventory batches for product {}. calculated partial COGS. Missing: {}", product_id, remaining_to_deduct);
     }
 
     Ok(FifoSaleResult {
@@ -128,7 +125,7 @@ pub fn record_sale_fifo(
         |row| row.get(0),
     ).map_err(|e| format!("Failed to get stock quantity: {}", e))?;
 
-    let balance_after = current_stock - quantity_sold;
+    let balance_after = current_stock;
 
     // Create inventory transaction record
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();

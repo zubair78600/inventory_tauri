@@ -67,16 +67,17 @@ export function InventoryHealthChart({ data, loading }: InventoryHealthChartProp
         <Package size={16} className="text-sky-500" />
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Inventory Health</h3>
       </div>
-      <div className="flex items-center gap-4">
-        <div className="w-20 h-20 flex-shrink-0 relative">
-          <ResponsiveContainer width="100%" height="100%">
+      {/* Vertical layout: Chart on top, data below */}
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-32 h-32 relative">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
             <PieChart>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius={25}
-                outerRadius={38}
+                innerRadius={36}
+                outerRadius={56}
                 paddingAngle={2}
                 dataKey="value"
               >
@@ -87,10 +88,10 @@ export function InventoryHealthChart({ data, loading }: InventoryHealthChartProp
             </PieChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-bold text-slate-900 dark:text-white">{healthPercent}%</span>
+            <span className="text-base font-bold text-slate-900 dark:text-white">{healthPercent}%</span>
           </div>
         </div>
-        <div className="flex-1 space-y-1.5">
+        <div className="w-full space-y-1.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.healthy }} />

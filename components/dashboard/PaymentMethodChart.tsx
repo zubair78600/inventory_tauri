@@ -76,16 +76,17 @@ export function PaymentMethodChart({ data, loading, className }: PaymentMethodCh
         <CreditCard size={16} className="text-purple-500" />
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Payment Methods</h3>
       </div>
-      <div className="flex items-center gap-4">
-        <div className="w-24 h-24 flex-shrink-0">
-          <ResponsiveContainer width="100%" height="100%">
+      {/* Vertical layout: Chart on top, data below */}
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-36 h-36">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
             <PieChart>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius={28}
-                outerRadius={42}
+                innerRadius={40}
+                outerRadius={62}
                 paddingAngle={2}
                 dataKey="total_amount"
                 nameKey="name"
@@ -98,16 +99,18 @@ export function PaymentMethodChart({ data, loading, className }: PaymentMethodCh
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="flex-1 space-y-1.5">
+        <div className="w-full space-y-1.5">
           {chartData.slice(0, 4).map((item, index) => (
-            <div key={item.name} className="flex items-center gap-2">
-              <div
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: COLORS[index % COLORS.length] }}
-              />
-              <span className="text-xs text-slate-600 dark:text-slate-300 truncate flex-1">
-                {item.name}
-              </span>
+            <div key={item.name} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                />
+                <span className="text-xs text-slate-600 dark:text-slate-300">
+                  {item.name}
+                </span>
+              </div>
               <span className="text-xs font-medium text-slate-900 dark:text-white">
                 {((item.total_amount / total) * 100).toFixed(0)}%
               </span>
