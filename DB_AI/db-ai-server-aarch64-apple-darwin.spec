@@ -1,20 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
+import os
 
-datas = []
-binaries = []
-hiddenimports = ['uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on', 'chromadb', 'chromadb.telemetry.product.posthog', 'chromadb.db.impl.sqlite', 'sqlite3']
-tmp_ret = collect_all('chromadb')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('vanna')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('llama_cpp')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+datas = [('/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/llama_cpp/lib/*', 'llama_cpp/lib'), ('core', 'core'), ('scripts', 'scripts'), ('vectordb', 'vectordb'), ('training', 'training')]
+binaries = [('/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/llama_cpp/lib/libggml.dylib', '.'), ('/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/llama_cpp/lib/libmtmd.dylib', '.'), ('/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/llama_cpp/lib/libggml-base.dylib', '.'), ('/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/llama_cpp/lib/libggml-blas.dylib', '.'), ('/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/llama_cpp/lib/libllama.dylib', '.'), ('/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/llama_cpp/lib/libggml-cpu.dylib', '.'), ('/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/llama_cpp/lib/libggml-metal.dylib', '.')]
+hiddenimports = ['uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on', 'chromadb', 'chromadb.telemetry.product.posthog', 'chromadb.db.impl.sqlite', 'sqlite3', 'llama_cpp', 'vanna', 'core', 'scripts']
 
+# Collect dependencies for complex packages
+for pkg in ['chromadb', 'vanna']:
+    tmp_ret = collect_all(pkg)
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['main.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

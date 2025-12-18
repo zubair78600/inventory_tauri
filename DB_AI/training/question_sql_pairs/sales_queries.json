@@ -1,86 +1,30 @@
 [
     {
         "question": "Show today's sales",
-        "sql": "SELECT * FROM invoices WHERE DATE(created_at) = DATE('now') ORDER BY created_at DESC"
+        "sql": "SELECT * FROM invoices WHERE date(created_at, '+5 hours', '30 minutes') = date('now', '+5 hours', '30 minutes') ORDER BY created_at DESC"
     },
     {
         "question": "What is today's total revenue?",
-        "sql": "SELECT SUM(total_amount) as total_revenue FROM invoices WHERE DATE(created_at) = DATE('now')"
-    },
-    {
-        "question": "Show sales for this week",
-        "sql": "SELECT * FROM invoices WHERE created_at >= DATE('now', '-7 days') ORDER BY created_at DESC"
+        "sql": "SELECT SUM(total_amount) as total_revenue FROM invoices WHERE date(created_at, '+5 hours', '30 minutes') = date('now', '+5 hours', '30 minutes')"
     },
     {
         "question": "What is the total revenue this month?",
-        "sql": "SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
-    },
-    {
-        "question": "Total revenue this month",
-        "sql": "SELECT SUM(total_amount) as total_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
-    },
-    {
-        "question": "This month revenue",
-        "sql": "SELECT SUM(total_amount) as revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
-    },
-    {
-        "question": "Monthly revenue",
-        "sql": "SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
-    },
-    {
-        "question": "How much revenue did we make this month?",
-        "sql": "SELECT SUM(total_amount) as total_revenue, COUNT(*) as order_count FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+        "sql": "SELECT SUM(total_amount) as monthly_revenue FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes')"
     },
     {
         "question": "Show last 10 invoices",
-        "sql": "SELECT invoice_number, total_amount, created_at FROM invoices ORDER BY created_at DESC LIMIT 10"
+        "sql": "SELECT invoice_number, total_amount, datetime(created_at, '+5 hours', '30 minutes') as billed_at FROM invoices ORDER BY created_at DESC LIMIT 10"
     },
     {
         "question": "What are the sales by payment method?",
         "sql": "SELECT payment_method, COUNT(*) as count, SUM(total_amount) as total FROM invoices GROUP BY payment_method ORDER BY total DESC"
     },
     {
-        "question": "Show cash sales for today",
-        "sql": "SELECT * FROM invoices WHERE payment_method = 'Cash' AND DATE(created_at) = DATE('now')"
-    },
-    {
-        "question": "What is the average order value?",
-        "sql": "SELECT AVG(total_amount) as average_order_value FROM invoices"
-    },
-    {
-        "question": "Show highest value invoices",
-        "sql": "SELECT invoice_number, total_amount, created_at FROM invoices ORDER BY total_amount DESC LIMIT 10"
-    },
-    {
-        "question": "How many invoices were created today?",
-        "sql": "SELECT COUNT(*) as invoice_count FROM invoices WHERE DATE(created_at) = DATE('now')"
-    },
-    {
         "question": "Show total GST collected this month",
-        "sql": "SELECT SUM(tax_amount) as total_gst, SUM(cgst_amount) as cgst, SUM(sgst_amount) as sgst, SUM(igst_amount) as igst FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
-    },
-    {
-        "question": "Show sales with discounts",
-        "sql": "SELECT invoice_number, total_amount, discount_amount FROM invoices WHERE discount_amount > 0 ORDER BY discount_amount DESC"
-    },
-    {
-        "question": "What was sold in invoice X?",
-        "sql": "SELECT ii.product_name, ii.quantity, ii.unit_price, (ii.quantity * ii.unit_price) as line_total FROM invoice_items ii JOIN invoices i ON ii.invoice_id = i.id WHERE i.invoice_number = 'X'"
+        "sql": "SELECT SUM(tax_amount) as total_gst, SUM(cgst_amount) as cgst, SUM(sgst_amount) as sgst, SUM(igst_amount) as igst FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes')"
     },
     {
         "question": "Show monthly sales trend",
         "sql": "SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as invoice_count, SUM(total_amount) as revenue FROM invoices GROUP BY month ORDER BY month DESC LIMIT 12"
-    },
-    {
-        "question": "What is the credit sales total?",
-        "sql": "SELECT SUM(total_amount) as credit_sales FROM invoices WHERE payment_method = 'Credit'"
-    },
-    {
-        "question": "How many orders this month?",
-        "sql": "SELECT COUNT(*) as order_count FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
-    },
-    {
-        "question": "Total sales this month",
-        "sql": "SELECT SUM(total_amount) as total_sales, COUNT(*) as total_orders FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
     }
 ]

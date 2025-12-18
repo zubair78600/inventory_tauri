@@ -59,6 +59,35 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
             }
         });
 
+        // Priority metrics to show in charts
+        const PRIORITY_METRICS = [
+            'TOTAL SPENT', 'TOTAL REVENUE', 'TOTAL AMOUNT', 'REVENUE', 'AMOUNT',
+            'TOTAL INVOICES', 'PRODUCTS BOUGHT', 'TOTAL PRODUCTS', 'TOTAL STOCK',
+            'total_spent', 'total_revenue', 'total_amount', 'total_invoices', 'total_items'
+        ];
+
+        // Sort numericKeys to put priority metrics first
+        numericKeys.sort((a, b) => {
+            const aIndex = PRIORITY_METRICS.findIndex(m => a.toUpperCase() === m.toUpperCase());
+            const bIndex = PRIORITY_METRICS.findIndex(m => b.toUpperCase() === m.toUpperCase());
+
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+            if (aIndex !== -1) return -1;
+            if (bIndex !== -1) return 1;
+
+            // Put things that look like phone numbers or IDs at the end
+            const aUpper = a.toUpperCase();
+            const bUpper = b.toUpperCase();
+            const badKeywords = ['ID', 'PHONE', 'CONTACT', 'MOBILE', 'ZIP', 'PIN'];
+            const aIsBad = badKeywords.some(k => aUpper.includes(k));
+            const bIsBad = badKeywords.some(k => bUpper.includes(k));
+
+            if (aIsBad && !bIsBad) return 1;
+            if (!aIsBad && bIsBad) return -1;
+
+            return 0;
+        });
+
         // Determine best chart type based on data structure
         const rowCount = data.length;
         const hasLabels = labelKeys.length > 0;
@@ -70,7 +99,7 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
                 name: key.replace(/_/g, ' '),
                 value: toNumber(data[0][key])
             }));
-            return { type: 'bar-horizontal', data: chartData, dataKey: 'value', labelKey: 'name' };
+            return { type: 'bar-horizontal', data: chartData, dataKey: 'value', labelKey: 'name', dataKeyName: 'Value' };
         }
 
         // For few rows with labels, use pie chart if only one numeric column
@@ -81,7 +110,7 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
                 name: String(row[labelKey] || 'Unknown'),
                 value: toNumber(row[valueKey])
             }));
-            return { type: 'pie', data: chartData, dataKey: 'value', labelKey: 'name' };
+            return { type: 'pie', data: chartData, dataKey: 'value', labelKey: 'name', dataKeyName: valueKey.replace(/_/g, ' ') };
         }
 
         // For time series or many rows, use bar/line chart
@@ -89,10 +118,10 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
             const labelKey = labelKeys[0];
             const valueKey = numericKeys[0];
             const chartData = data.slice(0, 10).map(row => ({
-                name: String(row[labelKey] || '').substring(0, 12),
+                name: String(row[labelKey] || '').substring(0, 15),
                 value: toNumber(row[valueKey])
             }));
-            return { type: rowCount > 5 ? 'line' : 'bar', data: chartData, dataKey: 'value', labelKey: 'name' };
+            return { type: rowCount > 5 ? 'line' : 'bar', data: chartData, dataKey: 'value', labelKey: 'name', dataKeyName: valueKey.replace(/_/g, ' ') };
         }
 
         // Default: show first numeric column as bar
@@ -102,7 +131,7 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
                 name: `#${i + 1}`,
                 value: toNumber(row[valueKey])
             }));
-            return { type: 'bar', data: chartData, dataKey: 'value', labelKey: 'name' };
+            return { type: 'bar', data: chartData, dataKey: 'value', labelKey: 'name', dataKeyName: valueKey.replace(/_/g, ' ') };
         }
 
         return null;
@@ -138,6 +167,7 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
                         ))}
                     </Pie>
                     <Tooltip
+                        formatter={(value: number) => [value.toLocaleString(), (chartConfig as any).dataKeyName || 'Value']}
                         contentStyle={{
                             fontSize: '10px',
                             borderRadius: '8px',
@@ -146,6 +176,44 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
                         }}
                     />
                 </PieChart>
+            </ResponsiveContainer>
+        );
+    }
+
+    if (chartConfig.type === 'bar-horizontal') {
+        return (
+            <ResponsiveContainer width="100%" height={height} minWidth={0} minHeight={0} debounce={50}>
+                <BarChart layout="vertical" data={chartConfig.data} margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                    <XAxis
+                        type="number"
+                        tick={{ fontSize: 9 }}
+                        axisLine={{ stroke: '#e5e7eb' }}
+                        tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+                    />
+                    <YAxis
+                        dataKey="name"
+                        type="category"
+                        tick={{ fontSize: 9 }}
+                        width={80}
+                        axisLine={{ stroke: '#e5e7eb' }}
+                    />
+                    <Tooltip
+                        formatter={(value: number) => [value.toLocaleString(), (chartConfig as any).dataKeyName || 'Value']}
+                        contentStyle={{
+                            fontSize: '10px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                        }}
+                    />
+                    <Bar
+                        dataKey="value"
+                        fill="#6366f1"
+                        radius={[0, 4, 4, 0]}
+                        maxBarSize={30}
+                    />
+                </BarChart>
             </ResponsiveContainer>
         );
     }
@@ -165,9 +233,11 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
                         tick={{ fontSize: 9 }}
                         tickLine={false}
                         axisLine={{ stroke: '#e5e7eb' }}
-                        width={40}
+                        width={50}
+                        tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
                     />
                     <Tooltip
+                        formatter={(value: number) => [value.toLocaleString(), (chartConfig as any).dataKeyName || 'Value']}
                         contentStyle={{
                             fontSize: '10px',
                             borderRadius: '8px',
@@ -203,9 +273,11 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
                     tick={{ fontSize: 9 }}
                     tickLine={false}
                     axisLine={{ stroke: '#e5e7eb' }}
-                    width={40}
+                    width={50}
+                    tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
                 />
                 <Tooltip
+                    formatter={(value: number) => [value.toLocaleString(), (chartConfig as any).dataKeyName || 'Value']}
                     contentStyle={{
                         fontSize: '10px',
                         borderRadius: '8px',

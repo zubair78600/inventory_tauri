@@ -1,6 +1,42 @@
 [
     {
+        "question": "customer today",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE date(i.created_at, '+5 hours', '30 minutes') = date('now', '+5 hours', '30 minutes') GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+    },
+    {
+        "question": "customer this month",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE strftime('%Y-%m', i.created_at) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes') GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+    },
+    {
+        "question": "customers last month",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE strftime('%Y-%m', i.created_at) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes', '-1 month') GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+    },
+    {
+        "question": "customers 2 months",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE i.created_at >= date('now', 'start of month', '-1 month', '+5 hours', '30 minutes') GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+    },
+    {
+        "question": "customers 2 complete months",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE i.created_at >= date('now', 'start of month', '-2 months', '+5 hours', '30 minutes') AND i.created_at < date('now', 'start of month', '+5 hours', '30 minutes') GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+    },
+    {
+        "question": "customers in last 2 weeks",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE i.created_at >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-14 days') GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+    },
+    {
+        "question": "customers 2 complete weeks",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE i.created_at >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-21 days') AND i.created_at < date('now', '+5 hours', '30 minutes', 'weekday 0', '-7 days') GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+    },
+    {
+        "question": "customer this week",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE i.created_at >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-7 days') GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+    },
+    {
         "question": "List all customers",
+        "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id GROUP BY c.id ORDER BY \"NAME\""
+    },
+    {
+        "question": "customer supplier list",
         "sql": "SELECT c.name AS \"NAME\", c.phone AS \"CONTACT INFO\", c.address AS \"ADDRESS\", c.email AS \"EMAIL\", date(MAX(i.created_at), '+5 hours', '30 minutes') AS \"INVOICE DATE\", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS \"LAST BILLED\", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS \"PRODUCTS BOUGHT\", SUM(i.total_amount) AS \"TOTAL SPENT\", COUNT(i.id) AS \"TOTAL INVOICES\" FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id GROUP BY c.id ORDER BY \"NAME\""
     },
     {
