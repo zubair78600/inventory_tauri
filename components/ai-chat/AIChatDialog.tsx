@@ -904,15 +904,28 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
     const hasChartableData = message.results && message.results.length > 0 && !message.error;
 
     // Check if this is a card-type result (customer/supplier)
-    const firstResult = message.results?.[0] as Record<string, unknown> | undefined;
+    const firstResult = message.results?.[0] as Record<string, any> | undefined;
     const isCardResult = Boolean(
         message.results &&
         message.results.length === 1 &&
-        firstResult?.name &&
-        (firstResult?.total_products !== undefined ||
-            firstResult?.total_invoices !== undefined ||
-            firstResult?.total_spent !== undefined)
+        (firstResult?.name || firstResult?.NAME) &&
+        (
+            firstResult?.total_products !== undefined || firstResult?.TOTAL_PRODUCTS !== undefined ||
+            firstResult?.total_invoices !== undefined || firstResult?.TOTAL_INVOICES !== undefined ||
+            firstResult?.total_spent !== undefined || firstResult?.TOTAL_SPENT !== undefined
+        )
     );
+
+    // Normalize data for specialized cards
+    const normalizedData = firstResult ? {
+        ...firstResult,
+        name: firstResult.name || firstResult.NAME,
+        phone: firstResult.phone || firstResult["CONTACT INFO"],
+        total_spent: firstResult.total_spent || firstResult["TOTAL SPENT"],
+        total_invoices: firstResult.total_invoices || firstResult["TOTAL INVOICES"],
+        last_billed: firstResult.last_billed || firstResult["LAST BILLED"],
+        total_products: firstResult.total_products || firstResult["TOTAL PRODUCTS"] || firstResult["PRODUCTS BOUGHT"] || firstResult["TOTAL ITEMS"],
+    } : null;
 
     return (
         <motion.div
@@ -950,12 +963,12 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                     </p>
 
                     {/* Card Results (Customer/Supplier) - Show directly without collapse */}
-                    {isCardResult && firstResult && (
+                    {isCardResult && normalizedData && (
                         <div className="mt-4">
-                            {firstResult.total_products !== undefined ? (
-                                <SupplierCard data={firstResult as any} />
+                            {normalizedData.total_products !== undefined ? (
+                                <SupplierCard data={normalizedData as any} />
                             ) : (
-                                <CustomerCard data={firstResult as any} />
+                                <CustomerCard data={normalizedData as any} />
                             )}
                         </div>
                     )}
@@ -998,9 +1011,8 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                             {/* 2. Raw Data Table - Collapsible */}
                             {(() => {
                                 const allKeys = Object.keys(message.results[0]);
-                                const maxColumns = isCompact
-                                    ? 5
-                                    : Math.min(10, Math.max(6, Math.ceil(allKeys.length * 0.5)));
+                                // Increase max columns to show all mandatory data (NAME, PHONE, ADDR, EMAIL, DATE, BILLED, DAYS, SPENT, INVOICES)
+                                const maxColumns = isCompact ? 12 : 20;
                                 const displayKeys = allKeys.length > maxColumns
                                     ? allKeys.slice(0, maxColumns)
                                     : allKeys;

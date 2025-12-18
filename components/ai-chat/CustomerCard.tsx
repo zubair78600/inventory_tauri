@@ -15,6 +15,7 @@ interface CustomerData {
     town?: string;
     total_spent?: number;
     total_invoices?: number;
+    total_products?: number;
     last_billed?: string;
     current_credit?: number;
     credit_given?: number;
@@ -141,6 +142,12 @@ export function CustomerCard({ data }: { data: CustomerData }) {
                                 <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-800 last:border-0">
                                     <span className="text-slate-500">Last Billed</span>
                                     <span className="font-medium">{new Date(data.last_billed).toLocaleDateString()}</span>
+                                </div>
+                            )}
+                            {data.total_products !== undefined && (
+                                <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-800 last:border-0">
+                                    <span className="text-slate-500">Total Products Bought</span>
+                                    <span className="font-medium">{data.total_products} items</span>
                                 </div>
                             )}
                             {data.state && (

@@ -32,48 +32,67 @@ class LlamaCppLLM:
         system_content = """You are a SQL expert for an inventory management SQLite database.
 Generate ONLY valid SQLite SQL. Return ONLY the query, no markdown, no explanations.
 
-CRITICAL: This is SQLite, NOT MySQL! Use SQLite date functions:
-- For current month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
-- For today: DATE(created_at) = DATE('now')  
-- For this week: created_at >= DATE('now', '-7 days')
-- NEVER use MONTH(), YEAR(), CURDATE() - these are MySQL functions!
+CRITICAL: This is SQLite, NOT MySQL! Use SQLite date functions with IST (+5:30) conversion:
+- IST Current Time: datetime('now', '+5 hours', '30 minutes')
+- IST Date: date('now', '+5 hours', '30 minutes')
+- For formatted Last Billed: datetime(i.created_at, '+5 hours', '30 minutes')
+- For Days Ago: CAST(julianday('now') - julianday(i.created_at) AS INTEGER)
+
+Date Logic:
+- For current/this month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes')
+- For today: date(created_at) = date('now', '+5 hours', '30 minutes')
+- For this week: created_at >= date('now', 'weekday 0', '-7 days', '+5 hours', '30 minutes')
+- NEVER use MONTH(), YEAR(), CURDATE()!
 
 For name searches, ALWAYS use case-insensitive LIKE:
 - WHERE LOWER(name) LIKE LOWER('%search_term%')
 
-DATABASE SCHEMA:
+MANDATORY DATA FORMAT (COLUMNS):
+When user asks for customer data/extraction/list/info:
+1. NAME (c.name)
+2. CONTACT INFO (c.phone)
+3. ADDRESS (c.address)
+4. EMAIL (c.email)
+5. INVOICE DATE (date(i.created_at, '+5 hours', '30 minutes'))
+6. LAST BILLED (datetime(i.created_at, '+5 hours', '30 minutes'))
+7. PRODUCTS BOUGHT (COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0))
+8. TOTAL SPENT (SUM(i.total_amount))
+9. TOTAL INVOICES (COUNT(i.id))
 
+Always ORDER BY "TOTAL SPENT" DESC.
+
+Date Logic:
+- For Week X: strftime('%W', created_at) = 'X' (e.g. Week 50 is strftime('%W', created_at) = '50')
+- For Day X: strftime('%w', created_at) = 'N' (0=Sun, 3=Wed)
+- For Month: strftime('%m', created_at) = 'MM'
+- For Year: strftime('%Y', created_at) = 'YYYY'
+- For IST: Use datetime(created_at, '+5 hours', '30 minutes')
+
+DATABASE SCHEMA:
 -- Products: id, name, sku, price, selling_price, stock_quantity, supplier_id, category
 CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, sku TEXT UNIQUE, price REAL, selling_price REAL, stock_quantity INTEGER, supplier_id INTEGER, category TEXT);
-
 -- Suppliers: id, name, contact_info, email, address, state, district, town
 CREATE TABLE suppliers (id INTEGER PRIMARY KEY, name TEXT, contact_info TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT);
-
 -- Customers: id, name, phone, email, address, state, district, town, created_at
 CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, email TEXT, address TEXT, state TEXT, district TEXT, town TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-
 -- Invoices (Sales): id, invoice_number, customer_id, total_amount, payment_method, status, created_at
 CREATE TABLE invoices (id INTEGER PRIMARY KEY, invoice_number TEXT UNIQUE, customer_id INTEGER, total_amount REAL, payment_method TEXT, status TEXT, created_at TEXT);
 
--- Invoice Items: id, invoice_id, product_id, quantity, unit_price
-CREATE TABLE invoice_items (id INTEGER PRIMARY KEY, invoice_id INTEGER, product_id INTEGER, quantity INTEGER, unit_price REAL);
-
--- Purchase Orders: id, po_number, supplier_id, total_amount, status, order_date
-CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT UNIQUE, supplier_id INTEGER, total_amount REAL, status TEXT, order_date TEXT);
-
--- Purchase Order Items: id, po_id, product_id, quantity, unit_cost, total_cost
-CREATE TABLE purchase_order_items (id INTEGER PRIMARY KEY, po_id INTEGER, product_id INTEGER, quantity INTEGER, unit_cost REAL, total_cost REAL);
-
-MANDATORY QUERY TEMPLATES (USE THESE EXACTLY):
-When user asks for customer by name, customer info, customer details, or customer name:
-SELECT c.*, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id WHERE LOWER(c.name) LIKE LOWER('%CUSTOMERNAME%') GROUP BY c.id
+MANDATORY QUERY TEMPLATE (FOLLOW THIS EXACTLY):
+SELECT c.name AS "NAME", c.phone AS "CONTACT INFO", c.address AS "ADDRESS", c.email AS "EMAIL", date(MAX(i.created_at), '+5 hours', '30 minutes') AS "INVOICE DATE", datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS "LAST BILLED", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS "PRODUCTS BOUGHT", SUM(i.total_amount) AS "TOTAL SPENT", COUNT(i.id) AS "TOTAL INVOICES" FROM customers c JOIN invoices i ON c.id = i.customer_id WHERE [DATE_CONDITION] GROUP BY c.id ORDER BY "TOTAL SPENT" DESC
 
 RULES:
-1. Column 'name' is just 'name', NOT 'product_name' or 'customer_name'
-2. Use strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') for THIS MONTH
-3. Use DATE(created_at) = DATE('now') for TODAY
-4. Always start with SELECT
-5. For customer/supplier searches by name, use LOWER() for case-insensitive matching"""
+1. Always use date(..., '+5 hours', '30 minutes') for "INVOICE DATE"
+2. Always use datetime(..., '+5 hours', '30 minutes') for "LAST BILLED"
+3. Always include "PRODUCTS BOUGHT" column using the subquery approach shown above
+4. Always ORDER BY "TOTAL SPENT" DESC
+5. Always use JOIN invoices i ON c.id = i.customer_id
+7. [DATE_CONDITION] must use IST conversion for 'now' (e.g. date('now', '+5 hours', '30 minutes'))
+8. DATE SEMANTICS:
+   - "Last month" / "Last week": Exactly the previous full period (e.g. strftime('%Y-%m', ...) = strftime('%Y-%m', 'now', ..., '-1 month'))
+   - "2 months" / "2 weeks": Range including current and X-1 previous periods (e.g. i.created_at >= date('now', 'start of month', '-1 month', ...))
+   - "2 complete months" / "2 complete weeks": Range of X previous periods, EXCLUDING the current one (e.g. i.created_at < start_of_current AND i.created_at >= start_of_X_back)
+"""
 
         if context:
             system_content += f"\n\nRELEVANT EXAMPLES:\n{context}"
@@ -229,15 +248,42 @@ class VannaAI:
              # SQLite %W is 00-53. Ensure 2 digits.
              return f"strftime('%W', {column}) = '{int(week_num):02d}'"
 
-        # 3. Relative Ranges ("Last X months", "Past X years")
-        # "From 1 year" -> Treated as "Last 1 year"
-        relative_match = re.search(r'(?:last|past|from)\s+(\d+)\s+(year|month|week|day)s?', q)
+        # 3. Relative Ranges ("Last X months", "Past X years", "Last month")
+        is_complete = "complete" in q
+        relative_match = re.search(r'(?:last|past|from)\s+(\d+)?\s*(year|month|week|day)s?', q)
         if relative_match:
-            amount = relative_match.group(1)
-            unit = relative_match.group(2) # year, month, week, day
-            if unit == 'week': unit = 'day'; amount = str(int(amount) * 7) # SQLite doesn't strictly support '-X weeks' in all versions, days is safer
+            amount_str = relative_match.group(1)
+            unit = relative_match.group(2)
             
-            return f"DATE({column}) >= DATE('now', '-{amount} {unit}s')"
+            # Case 1: "last month" or "last week" (singular and specific)
+            # User said "last month" or "last week" - exactly the previous period, excluding current.
+            if not amount_str and (unit == 'month' or unit == 'week'):
+                if unit == 'month':
+                    return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes', '-1 month')"
+                else: # week
+                    # Start of last week (Sunday to Saturday)
+                    return f"DATE({column}) >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-14 days') AND DATE({column}) < date('now', '+5 hours', '30 minutes', 'weekday 0', '-7 days')"
+
+            amount = int(amount_str or "1")
+            
+            if is_complete:
+                # X complete periods - exclude current period
+                # If "2 complete months", means previous 2 full months
+                if unit == 'month':
+                    return f"DATE({column}) >= date('now', 'start of month', '-{amount} months', '+5 hours', '30 minutes') AND DATE({column}) < date('now', 'start of month', '+5 hours', '30 minutes')"
+                elif unit == 'week':
+                    return f"DATE({column}) >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-{7 * (amount + 1)} days') AND DATE({column}) < date('now', '+5 hours', '30 minutes', 'weekday 0', '-7 days')"
+                else:
+                    return f"DATE({column}) >= DATE('now', '-{amount + 1} {unit}s', '+5 hours', '30 minutes') AND DATE({column}) < DATE('now', '-1 {unit}s', '+5 hours', '30 minutes')"
+            else:
+                # X periods - include current period
+                # 2 weeks means (last week + current week)
+                if unit == 'month':
+                    return f"DATE({column}) >= date('now', 'start of month', '-{amount - 1} months', '+5 hours', '30 minutes')"
+                elif unit == 'week':
+                    return f"DATE({column}) >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-{amount * 7} days')"
+                else:
+                    return f"DATE({column}) >= DATE('now', '-{amount} {unit}s', '+5 hours', '30 minutes')"
 
         # 4. Specific Months ("November", "Nov")
         # Map month names to numbers
@@ -264,23 +310,47 @@ class VannaAI:
                 # gets ALL novembers. User asked for "November month".
                 return f"strftime('%m', {column}) = '{month_num}'"
 
-        # 5. Shortcuts (Today, Yesterday, etc) - Keep existing logic
+        # 5. Specific Years ("2025")
+        year_match = re.search(r'\b(20\d{2})\b', q)
+        if year_match:
+            return f"strftime('%Y', {column}) = '{year_match.group(1)}'"
+
+        # 6. Specific Days ("Wednesday", "Mon", etc)
+        days = {
+            'sunday': '0', 'sun': '0',
+            'monday': '1', 'mon': '1',
+            'tuesday': '2', 'tue': '2',
+            'wednesday': '3', 'wed': '3',
+            'thursday': '4', 'thu': '4',
+            'friday': '5', 'fri': '5',
+            'saturday': '6', 'sat': '6'
+        }
+        for day_name, day_num in days.items():
+            if f" {day_name} " in f" {q} ":
+                return f"strftime('%w', {column}) = '{day_num}'"
+
+        # 7. Shortcuts (Today, Yesterday, etc) - Updated for IST
+        ist_now_date = "date('now', '+5 hours', '30 minutes')"
+        ist_now_month = "strftime('%Y-%m', 'now', '+5 hours', '30 minutes')"
+        ist_now_year = "strftime('%Y', 'now', '+5 hours', '30 minutes')"
+
         if 'today' in q:
-            return f"DATE({column}) = DATE('now')"
+            return f"date({column}) = {ist_now_date}"
         if 'yesterday' in q:
-            return f"DATE({column}) = DATE('now', '-1 day')"
+            return f"date({column}) = date('now', '-1 day', '+5 hours', '30 minutes')"
         if 'this week' in q:
-            return f"strftime('%Y-%W', {column}) = strftime('%Y-%W', 'now')"
-        if 'last week' in q: # This is "previous week", distinct from "last 7 days" regex above
-            return f"strftime('%Y-%W', {column}) = strftime('%Y-%W', 'now', '-7 days')"
-        if 'this month' in q:
-            return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now')"
-        if 'last month' in q: # Previous calendar month
-            return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now', '-1 month')"
+            # weekday 0 is Sunday. 
+            return f"{column} >= date('now', 'weekday 0', '-7 days', '+5 hours', '30 minutes')"
+        if 'last week' in q: 
+            return f"{column} >= date('now', 'weekday 0', '-14 days', '+5 hours', '30 minutes') AND {column} < date('now', 'weekday 0', '-7 days', '+5 hours', '30 minutes')"
+        if 'this month' in q or 'current month' in q:
+            return f"strftime('%Y-%m', {column}) = {ist_now_month}"
+        if 'last month' in q: 
+            return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now', '-1 month', '+5 hours', '30 minutes')"
         if 'this year' in q:
-            return f"strftime('%Y', {column}) = strftime('%Y', 'now')"
+            return f"strftime('%Y', {column}) = {ist_now_year}"
         if 'last year' in q:
-            return f"strftime('%Y', {column}) = strftime('%Y', 'now', '-1 year')"
+            return f"strftime('%Y', {column}) = strftime('%Y', 'now', '-1 year', '+5 hours', '30 minutes')"
             
         return ""
 
@@ -339,9 +409,10 @@ class VannaAI:
             if phone_match:
                 phone = phone_match.group(1)
                 sql = f"""SELECT c.*, 
-                    COUNT(DISTINCT i.id) as total_invoices, 
-                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
-                    MAX(i.created_at) as last_billed,
+                    COUNT(DISTINCT i.id) as "TOTAL INVOICES", 
+                    COALESCE(SUM(i.total_amount), 0) as "TOTAL SPENT", 
+                    MAX(i.created_at) as "LAST BILLED",
+                    COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) as "PRODUCTS BOUGHT",
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
                     COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
@@ -356,9 +427,10 @@ class VannaAI:
             if email_match:
                 email = email_match.group(0)
                 sql = f"""SELECT c.*, 
-                    COUNT(DISTINCT i.id) as total_invoices, 
-                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
-                    MAX(i.created_at) as last_billed,
+                    COUNT(DISTINCT i.id) as "TOTAL INVOICES", 
+                    COALESCE(SUM(i.total_amount), 0) as "TOTAL SPENT", 
+                    MAX(i.created_at) as "LAST BILLED",
+                    COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) as "PRODUCTS BOUGHT",
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
                     COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
@@ -374,9 +446,9 @@ class VannaAI:
             customer_name = name_match.group(1).strip() if name_match else question.split()[-1]
             
             sql = f"""SELECT c.*, 
-                COUNT(DISTINCT i.id) as total_invoices, 
-                COALESCE(SUM(i.total_amount), 0) as total_spent, 
-                MAX(i.created_at) as last_billed,
+                COUNT(DISTINCT i.id) as "TOTAL INVOICES", 
+                COALESCE(SUM(i.total_amount), 0) as "TOTAL SPENT", 
+                MAX(i.created_at) as "LAST BILLED",
                 COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
                 COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
                 COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
@@ -396,9 +468,10 @@ class VannaAI:
             if phone_match:
                 phone = phone_match.group(1)
                 sql = f"""SELECT c.*, 
-                    COUNT(DISTINCT i.id) as total_invoices, 
-                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
-                    MAX(i.created_at) as last_billed,
+                    COUNT(DISTINCT i.id) as "TOTAL INVOICES", 
+                    COALESCE(SUM(i.total_amount), 0) as "TOTAL SPENT", 
+                    MAX(i.created_at) as "LAST BILLED",
+                    COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) as "PRODUCTS BOUGHT",
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
                     COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
@@ -413,9 +486,10 @@ class VannaAI:
             if email_match:
                 email = email_match.group(0)
                 sql = f"""SELECT c.*, 
-                    COUNT(DISTINCT i.id) as total_invoices, 
-                    COALESCE(SUM(i.total_amount), 0) as total_spent, 
-                    MAX(i.created_at) as last_billed,
+                    COUNT(DISTINCT i.id) as "TOTAL INVOICES", 
+                    COALESCE(SUM(i.total_amount), 0) as "TOTAL SPENT", 
+                    MAX(i.created_at) as "LAST BILLED",
+                    COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) as "PRODUCTS BOUGHT",
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
                     COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
@@ -431,32 +505,66 @@ class VannaAI:
             name_match = re.search(r'(?:customer name|customer details for|customer info for|who is customer|customers|customer|name)\s+(.+)', question_lower)
             customer_name = name_match.group(1).strip() if name_match else question.split()[-1]
             
-            # Handle "customer list" or "customer all" explicitly
-            if customer_name.lower() in ['list', 'all', 'data', 'details', 'detail', 'info']:
-                base_sql = "SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COUNT(DISTINCT i.id) as total_invoices, COALESCE(SUM(i.total_amount), 0) as total_spent, MAX(i.created_at) as last_billed FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id"
-                
-                # Apply date filter if present
-                date_filter = self.get_date_filter(question, 'c.created_at')
-                if date_filter:
-                    base_sql += f" WHERE {date_filter}"
-                
-                sql = base_sql + " GROUP BY c.id"
-                logger.info(f"Detected customer list query (filtered: {bool(date_filter)}), using hardcoded SQL: {sql}")
-                return sql
+            # CHECK: Is the "name" actually a date phrase?
+            date_phrases = [
+                'today', 'yesterday', 'this week', 'last week', 'this month', 'last month', 
+                'this year', 'last year', 'current month', 'wednesday', 'monday', 'tuesday', 
+                'thursday', 'friday', 'saturday', 'sunday', '2024', '2025'
+            ]
+            is_date_phrase = any(dp == customer_name.lower() or f"{dp} " in f"{customer_name.lower()} " or f" {dp}" in f" {customer_name.lower()}" for dp in date_phrases)
             
-            sql = f"""SELECT c.*, 
-                COUNT(DISTINCT i.id) as total_invoices, 
-                COALESCE(SUM(i.total_amount), 0) as total_spent, 
-                MAX(i.created_at) as last_billed,
-                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
-                COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
-                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
-                FROM customers c 
-                LEFT JOIN invoices i ON c.id = i.customer_id 
-                WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%') 
-                GROUP BY c.id"""
-            logger.info(f"Detected customer name query, using hardcoded SQL: {sql}")
-            return sql
+            # Check for "week X" pattern
+            if not is_date_phrase:
+                is_date_phrase = bool(re.search(r'week\s+\d+', customer_name.lower()))
+            # Check for relative days/weeks/months "last X days", "last 2 weeks", "2 months", etc.
+            if not is_date_phrase:
+                is_date_phrase = bool(re.search(r'(?:last|past|in the last|in the past|this|next)?\s*(\d+)?\s*(day|week|month|year)s?', customer_name.lower()))
+            
+            # Check for "complete" keyword in date phrases
+            if not is_date_phrase:
+                is_date_phrase = "complete" in customer_name.lower() and any(u in customer_name.lower() for u in ['week', 'month', 'year'])
+            
+            if is_date_phrase:
+                # If it looks like a date phrase, use the hardcoded template for precision
+                base_sql = 'SELECT c.name AS "NAME", c.phone AS "CONTACT INFO", c.address AS "ADDRESS", c.email AS "EMAIL", date(MAX(i.created_at), \'+5 hours\', \'30 minutes\') AS "INVOICE DATE", datetime(MAX(i.created_at), \'+5 hours\', \'30 minutes\') AS "LAST BILLED", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS "PRODUCTS BOUGHT", SUM(i.total_amount) AS "TOTAL SPENT", COUNT(i.id) AS "TOTAL INVOICES" FROM customers c JOIN invoices i ON c.id = i.customer_id'
+                
+                date_filter = self.get_date_filter(question, 'i.created_at')
+                if date_filter:
+                    sql = base_sql + f" WHERE {date_filter} GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+                    logger.info(f"Detected date-phrase customer query, using hardcoded SQL: {sql}")
+                    return sql
+                
+                logger.info(f"Customer name '{customer_name}' looks like a date phrase but filter extraction failed, falling through to LLM/RAG")
+                # Fall through to LLM if extraction failed for some reason
+                pass 
+            else:
+                # Handle "customer list" or "customer all" explicitly
+                list_keywords = ['list', 'all', 'data', 'details', 'detail', 'info', 'supplier list', 'suppliers list', 'supplier data']
+                if any(k == customer_name.lower() or f"{k} " in f"{customer_name.lower()} " or f" {k}" in f" {customer_name.lower()}" for k in list_keywords):
+                    base_sql = "SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) as \"PRODUCTS BOUGHT\", COUNT(DISTINCT i.id) as \"TOTAL INVOICES\", COALESCE(SUM(i.total_amount) , 0) as \"TOTAL SPENT\", MAX(i.created_at) as \"LAST BILLED\" FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id"
+                    
+                    # Apply date filter if present
+                    date_filter = self.get_date_filter(question, 'i.created_at')
+                    if date_filter:
+                        base_sql += f" WHERE {date_filter}"
+                    
+                    sql = base_sql + " GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+                    logger.info(f"Detected customer list query (filtered: {bool(date_filter)}), using hardcoded SQL: {sql}")
+                    return sql
+                
+                sql = f"""SELECT c.*, 
+                    COUNT(DISTINCT i.id) as "TOTAL INVOICES", 
+                    COALESCE(SUM(i.total_amount), 0) as "TOTAL SPENT", 
+                    MAX(i.created_at) as "LAST BILLED",
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
+                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
+                    FROM customers c 
+                    LEFT JOIN invoices i ON c.id = i.customer_id 
+                    WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%') 
+                    GROUP BY c.id"""
+                logger.info(f"Detected customer name query, using hardcoded SQL: {sql}")
+                return sql
         
         # =================
         # REVENUE QUERIES
@@ -467,13 +575,13 @@ class VannaAI:
             
             date_filter = self.get_date_filter(question, 'created_at')
             if date_filter:
-                sql = f"SELECT SUM(total_amount) as total_revenue FROM invoices WHERE {date_filter}"
+                sql = f"SELECT SUM(total_amount) as \"TOTAL REVENUE\" FROM invoices WHERE {date_filter}"
                 logger.info(f"Detected date-filtered revenue query, using hardcoded SQL: {sql}")
                 return sql
             
             # If specifically asking for "total revenue" or "total sales" without date, usually means all time
             if 'total' in question_lower:
-                sql = "SELECT SUM(total_amount) as total_revenue FROM invoices"
+                sql = "SELECT SUM(total_amount) as \"TOTAL REVENUE\" FROM invoices"
                 logger.info(f"Detected total revenue query, using hardcoded SQL: {sql}")
                 return sql
         

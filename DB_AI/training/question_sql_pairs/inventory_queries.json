@@ -8,51 +8,11 @@
         "sql": "SELECT SUM(stock_quantity * price) as total_stock_value FROM products"
     },
     {
-        "question": "Show inventory batches for a product",
-        "sql": "SELECT ib.id, ib.quantity_remaining, ib.unit_cost, ib.purchase_date FROM inventory_batches ib WHERE ib.product_id = 1 ORDER BY ib.purchase_date ASC"
-    },
-    {
-        "question": "What is the weighted average cost of products?",
-        "sql": "SELECT p.name, SUM(ib.quantity_remaining * ib.unit_cost) / NULLIF(SUM(ib.quantity_remaining), 0) as weighted_avg_cost FROM products p LEFT JOIN inventory_batches ib ON p.id = ib.product_id WHERE ib.quantity_remaining > 0 GROUP BY p.id"
-    },
-    {
-        "question": "Show recent inventory transactions",
-        "sql": "SELECT p.name, it.transaction_type, it.quantity_change, it.balance_after, it.transaction_date FROM inventory_transactions it JOIN products p ON it.product_id = p.id ORDER BY it.transaction_date DESC LIMIT 20"
-    },
-    {
-        "question": "Show stock movements for a product",
-        "sql": "SELECT transaction_type, quantity_change, balance_after, transaction_date, notes FROM inventory_transactions WHERE product_id = 1 ORDER BY transaction_date DESC"
-    },
-    {
-        "question": "What products were received today?",
-        "sql": "SELECT p.name, it.quantity_change, it.transaction_date FROM inventory_transactions it JOIN products p ON it.product_id = p.id WHERE it.transaction_type = 'purchase' AND DATE(it.transaction_date) = DATE('now')"
-    },
-    {
-        "question": "Show pending purchase orders",
-        "sql": "SELECT po.po_number, s.name as supplier, po.total_amount, po.order_date, po.status FROM purchase_orders po JOIN suppliers s ON po.supplier_id = s.id WHERE po.status IN ('pending', 'ordered') ORDER BY po.order_date DESC"
-    },
-    {
-        "question": "What is the oldest batch for each product?",
-        "sql": "SELECT p.name, MIN(ib.purchase_date) as oldest_batch FROM products p JOIN inventory_batches ib ON p.id = ib.product_id WHERE ib.quantity_remaining > 0 GROUP BY p.id ORDER BY oldest_batch"
-    },
-    {
-        "question": "Show stock that hasn't moved in 30 days",
-        "sql": "SELECT p.name, p.stock_quantity, MAX(it.transaction_date) as last_movement FROM products p LEFT JOIN inventory_transactions it ON p.id = it.product_id WHERE p.stock_quantity > 0 GROUP BY p.id HAVING last_movement < DATE('now', '-30 days') OR last_movement IS NULL"
+        "question": "Show recently added stock",
+        "sql": "SELECT p.name, it.quantity_change, datetime(it.transaction_date, '+5 hours', '30 minutes') as received_at FROM inventory_transactions it JOIN products p ON it.product_id = p.id WHERE it.transaction_type = 'purchase' ORDER BY it.transaction_date DESC LIMIT 10"
     },
     {
         "question": "Customer who bought kisses",
-        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, i.created_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%kisses%' ORDER BY i.created_at DESC"
-    },
-    {
-        "question": "Kisses sales with customers",
-        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, i.created_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%kisses%' ORDER BY i.created_at DESC"
-    },
-    {
-        "question": "Show customers who bought milk",
-        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, i.created_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%milk%' ORDER BY i.created_at DESC"
-    },
-    {
-        "question": "List chocolate by customers",
-        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, i.created_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%chocolate%' ORDER BY i.created_at DESC"
+        "sql": "SELECT c.name as customer, i.invoice_number, ii.quantity, p.name as product, datetime(i.created_at, '+5 hours', '30 minutes') as billed_at FROM invoice_items ii JOIN products p ON ii.product_id = p.id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.name LIKE '%kisses%' ORDER BY i.created_at DESC"
     }
 ]
