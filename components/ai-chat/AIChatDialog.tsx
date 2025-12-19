@@ -900,8 +900,9 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
     const [showChart, setShowChart] = useState(false);
     const [showRawData, setShowRawData] = useState(true);
 
+    const hasResults = Boolean(message.results && message.results.length > 0);
     // Check if results can be visualized as chart
-    const hasChartableData = message.results && message.results.length > 0 && !message.error;
+    const hasChartableData = hasResults && !message.error;
 
     // Check if this is a card-type result (customer/supplier)
     const firstResult = message.results?.[0] as Record<string, any> | undefined;
@@ -910,11 +911,29 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
         message.results.length === 1 &&
         (firstResult?.name || firstResult?.NAME) &&
         (
-            firstResult?.total_products !== undefined || firstResult?.TOTAL_PRODUCTS !== undefined ||
-            firstResult?.total_invoices !== undefined || firstResult?.TOTAL_INVOICES !== undefined ||
-            firstResult?.total_spent !== undefined || firstResult?.TOTAL_SPENT !== undefined
+            firstResult?.total_products !== undefined || firstResult?.TOTAL_PRODUCTS !== undefined || firstResult?.["TOTAL PRODUCTS"] !== undefined ||
+            firstResult?.total_invoices !== undefined || firstResult?.TOTAL_INVOICES !== undefined || firstResult?.["TOTAL INVOICES"] !== undefined ||
+            firstResult?.total_spent !== undefined || firstResult?.TOTAL_SPENT !== undefined || firstResult?.["TOTAL SPENT"] !== undefined
         )
     );
+
+    const isDataResult = hasResults && !isCardResult;
+    // Strict table sizes: 400px minimized, 750px maximized
+    const assistantWidthClass = isDataResult
+        ? (isCompact ? "w-[400px] max-w-[400px]" : "w-[750px] max-w-[750px]")
+        : (isCompact ? "max-w-[50%] min-w-[200px]" : "max-w-[50%] min-w-[300px]");
+    const defaultRowLimit = isCompact ? 12 : 20;
+    const rowIncrement = isCompact ? 12 : 20;
+    const [rowLimit, setRowLimit] = useState(defaultRowLimit);
+
+    useEffect(() => {
+        setRowLimit(defaultRowLimit);
+    }, [defaultRowLimit, message.id]);
+
+    const totalRows = message.results?.length ?? 0;
+    const visibleRows = message.results ? message.results.slice(0, rowLimit) : [];
+    const canShowMoreRows = totalRows > rowLimit;
+    const canShowLessRows = rowLimit > defaultRowLimit;
 
     // Normalize data for specialized cards
     const normalizedData = firstResult ? {
@@ -925,6 +944,11 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
         total_invoices: firstResult.total_invoices || firstResult["TOTAL INVOICES"],
         last_billed: firstResult.last_billed || firstResult["LAST BILLED"],
         total_products: firstResult.total_products || firstResult["TOTAL PRODUCTS"] || firstResult["PRODUCTS BOUGHT"] || firstResult["TOTAL ITEMS"],
+        total_stock: firstResult.total_stock,
+        // Credit fields for customer cards
+        credit_given: firstResult.credit_given,
+        credit_repaid: firstResult.credit_repaid,
+        current_credit: firstResult.current_credit,
     } : null;
 
     return (
@@ -937,7 +961,10 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
             <div className={cn(
                 "min-w-0 overflow-hidden flex gap-3",
                 isUser ? 'flex-row-reverse' : 'flex-row',
-                isCompact ? "w-[50%] min-w-[280px]" : "w-[50%] min-w-[400px]"
+                // User messages shrink to content, AI messages take ~50% width
+                isUser
+                    ? "max-w-[70%]"
+                    : assistantWidthClass
             )}>
                 {/* Avatar */}
                 <div className={cn(
@@ -948,12 +975,11 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                 </div>
 
                 <div
-                    style={{ backgroundColor: isUser ? '#4f46e5' : undefined }}
                     className={cn(
-                        "relative px-5 py-3.5 shadow-md text-sm min-w-0",
+                        "relative px-5 py-3.5 shadow-sm text-sm min-w-0 rounded-2xl",
                         isUser
-                            ? "text-white rounded-3xl"
-                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-3xl flex-1"
+                            ? "bg-indigo-600 text-white"
+                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 flex-1"
                     )}>
                     <p className={cn(
                         "leading-relaxed whitespace-pre-wrap break-words",
@@ -965,7 +991,7 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                     {/* Card Results (Customer/Supplier) - Show directly without collapse */}
                     {isCardResult && normalizedData && (
                         <div className="mt-4">
-                            {normalizedData.total_products !== undefined ? (
+                            {normalizedData.total_stock !== undefined ? (
                                 <SupplierCard data={normalizedData as any} />
                             ) : (
                                 <CustomerCard data={normalizedData as any} />
@@ -1011,12 +1037,11 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                             {/* 2. Raw Data Table - Collapsible */}
                             {(() => {
                                 const allKeys = Object.keys(message.results[0]);
-                                // Increase max columns to show all mandatory data (NAME, PHONE, ADDR, EMAIL, DATE, BILLED, DAYS, SPENT, INVOICES)
-                                const maxColumns = isCompact ? 12 : 20;
-                                const displayKeys = allKeys.length > maxColumns
-                                    ? allKeys.slice(0, maxColumns)
-                                    : allKeys;
-                                const hasMoreColumns = allKeys.length > maxColumns;
+                                // Show all columns - table has horizontal scroll for overflow
+                                const displayKeys = allKeys;
+                                const hasMoreColumns = false;
+                                const remainingRows = totalRows - rowLimit;
+                                const nextRowCount = Math.min(rowIncrement, remainingRows);
 
                                 return (
                                     <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
@@ -1040,17 +1065,23 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                                                     className="overflow-hidden"
                                                 >
                                                     <div className="border-t border-black/5">
-                                                        <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
+                                                        <div
+                                                            className={cn(
+                                                                "chat-table-scroll w-full overflow-x-auto overflow-y-auto",
+                                                                isCompact ? "max-h-60" : "max-h-80"
+                                                            )}
+                                                            style={{ maxWidth: '100%' }}
+                                                        >
                                                             <table className={cn(
-                                                                "w-full",
-                                                                isCompact ? "text-[9px]" : "text-[10px]"
+                                                                "w-full min-w-max table-auto",
+                                                                isCompact ? "text-[10px]" : "text-[11px]"
                                                             )}>
-                                                                <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5">
+                                                                <thead className="bg-slate-50 dark:bg-slate-900 border-b border-black/5 sticky top-0 z-10">
                                                                     <tr>
                                                                         {displayKeys.map((key) => (
                                                                             <th key={key} className={cn(
                                                                                 "text-left font-semibold text-muted-foreground whitespace-nowrap uppercase tracking-wider",
-                                                                                isCompact ? "px-1.5 py-1" : "px-2 py-1.5"
+                                                                                isCompact ? "px-2 py-1.5" : "px-3 py-2"
                                                                             )}>
                                                                                 {key.replace(/_/g, ' ')}
                                                                             </th>
@@ -1061,14 +1092,14 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody className="divide-y divide-black/5 dark:divide-white/5">
-                                                                    {message.results.slice(0, 10).map((row, i) => (
+                                                                    {visibleRows.map((row, i) => (
                                                                         <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                                                                             {displayKeys.map((key) => (
                                                                                 <td
                                                                                     key={key}
                                                                                     className={cn(
-                                                                                        "whitespace-nowrap truncate",
-                                                                                        isCompact ? "px-1.5 py-1 max-w-[70px]" : "px-2 py-1.5 max-w-[120px]"
+                                                                                        "whitespace-nowrap align-top",
+                                                                                        isCompact ? "px-2 py-1.5" : "px-3 py-2"
                                                                                     )}
                                                                                     title={String((row as any)[key])}
                                                                                 >
@@ -1084,14 +1115,42 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                                                             </table>
                                                         </div>
                                                         <div className={cn(
-                                                            "bg-slate-50 dark:bg-slate-900 text-muted-foreground flex justify-between border-t border-black/5",
-                                                            isCompact ? "px-2 py-1 text-[8px]" : "px-3 py-1.5 text-[9px]"
+                                                            "bg-slate-50 dark:bg-slate-900 text-muted-foreground flex flex-wrap items-center justify-between gap-2 border-t border-black/5",
+                                                            isCompact ? "px-3 py-1.5 text-[9px]" : "px-4 py-2 text-[10px]"
                                                         )}>
                                                             <span>
-                                                                Showing {Math.min(message.results.length, 10)} of {message.results.length} results
-                                                                {hasMoreColumns && ` (${allKeys.length - maxColumns} more columns)`}
+                                                                Showing {visibleRows.length} of {message.results.length} results
+                                                                {allKeys.length > 5 && ` (${allKeys.length} columns)`}
                                                             </span>
-                                                            {message.timing && <span>Exec: {formatTime(message.timing.sqlRun)}</span>}
+                                                            <div className="flex items-center gap-2">
+                                                                {canShowLessRows && (
+                                                                    <button
+                                                                        onClick={() => setRowLimit(defaultRowLimit)}
+                                                                        className="text-muted-foreground hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                                                    >
+                                                                        Show less
+                                                                    </button>
+                                                                )}
+                                                                {canShowMoreRows && (
+                                                                    <>
+                                                                        <button
+                                                                            onClick={() => setRowLimit(prev => Math.min(prev + rowIncrement, totalRows))}
+                                                                            className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium transition-colors"
+                                                                        >
+                                                                            Show {nextRowCount} more
+                                                                        </button>
+                                                                        {remainingRows > rowIncrement && (
+                                                                            <button
+                                                                                onClick={() => setRowLimit(totalRows)}
+                                                                                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                                                            >
+                                                                                Show all
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                                {message.timing && <span>Exec: {formatTime(message.timing.sqlRun)}</span>}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </motion.div>

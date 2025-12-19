@@ -145,7 +145,7 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
         );
     }
 
-    const height = isCompact ? 140 : 200;
+    const height = isCompact ? 160 : 220;
 
     if (chartConfig.type === 'pie') {
         return (

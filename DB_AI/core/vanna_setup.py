@@ -248,21 +248,53 @@ class VannaAI:
              # SQLite %W is 00-53. Ensure 2 digits.
              return f"strftime('%W', {column}) = '{int(week_num):02d}'"
 
-        # 3. Relative Ranges ("Last X months", "Past X years", "Last month")
+        # 2.5 Specific Weekdays ("Wednesday", "Mon", etc) - MUST come before relative ranges
+        # because "wednesday" contains "day" which matches the relative regex
+        days = {
+            'sunday': '0', 'sun': '0',
+            'monday': '1', 'mon': '1',
+            'tuesday': '2', 'tue': '2',
+            'wednesday': '3', 'wed': '3',
+            'thursday': '4', 'thu': '4',
+            'friday': '5', 'fri': '5',
+            'saturday': '6', 'sat': '6'
+        }
+        for day_name, day_num in days.items():
+            if f" {day_name} " in f" {q} ":
+                return f"strftime('%w', {column}) = '{day_num}'"
+
+        # 3. Relative Ranges ("Last X months", "Past X years", "Last month", "2 months")
         is_complete = "complete" in q
-        relative_match = re.search(r'(?:last|past|from)\s+(\d+)?\s*(year|month|week|day)s?', q)
+        # Matches: "last 2 months", "in the past 3 weeks", "2 months", "this year", etc.
+        # Ensure we only match if there is a number OR a date unit, and not just the prefix.
+        relative_match = re.search(r'(?:last|past|in the last|in the past|this|next)?\s*(\d+)?\s*(year|month|week|day)s?', q)
+        if relative_match and not (relative_match.group(1) or relative_match.group(2)):
+            relative_match = None
         if relative_match:
             amount_str = relative_match.group(1)
             unit = relative_match.group(2)
             
-            # Case 1: "last month" or "last week" (singular and specific)
-            # User said "last month" or "last week" - exactly the previous period, excluding current.
+            # Case 1: "this month", "current month", "month" (singular, no prefix) - return CURRENT month
+            # Case 2: "last month" or "last week" - exactly the previous period
+            # Case 3: "this week" - current week
+            
+            # Check for "this", "current" prefix -> current period
+            is_current = bool(re.search(r'\b(this|current)\b', q))
+            is_last = bool(re.search(r'\b(last|past|previous)\b', q))
+            
             if not amount_str and (unit == 'month' or unit == 'week'):
                 if unit == 'month':
-                    return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes', '-1 month')"
+                    if is_last:
+                        return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes', '-1 month')"
+                    else:
+                        # "this month", "current month", or just "month" -> current month
+                        return f"strftime('%Y-%m', {column}) = strftime('%Y-%m', 'now', '+5 hours', '30 minutes')"
                 else: # week
-                    # Start of last week (Sunday to Saturday)
-                    return f"DATE({column}) >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-14 days') AND DATE({column}) < date('now', '+5 hours', '30 minutes', 'weekday 0', '-7 days')"
+                    if is_last:
+                        return f"DATE({column}) >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-14 days') AND DATE({column}) < date('now', '+5 hours', '30 minutes', 'weekday 0', '-7 days')"
+                    else:
+                        # "this week" or just "week" -> current week
+                        return f"DATE({column}) >= date('now', '+5 hours', '30 minutes', 'weekday 0', '-7 days')"
 
             amount = int(amount_str or "1")
             
@@ -302,12 +334,10 @@ class VannaAI:
             'december': '12', 'dec': '12'
         }
         for month_name, month_num in months.items():
-            # Check for word boundary logic manually or simple strict match
-            # "november" in q might match "november rain" but reasonably implies date filter here
-            if f" {month_name} " in f" {q} ": # simplistic word boundary
-                # Verify it's not part of "last november" which implies range? 
-                # Actually "last november" usually means "the previous november", but simplistic "month = 11" 
-                # gets ALL novembers. User asked for "November month".
+            # Check for word boundary - handles both middle of string and end of string
+            # Works for: "customer december", "invoice november 2024", "december sales"
+            q_padded = f" {q} "  # Pad with spaces for consistent word boundary matching
+            if f" {month_name} " in q_padded or q.endswith(month_name) or q.startswith(f"{month_name} "):
                 return f"strftime('%m', {column}) = '{month_num}'"
 
         # 5. Specific Years ("2025")
@@ -360,7 +390,7 @@ class VannaAI:
         logger.info(f"DEBUG: vector_store type: {type(self.vector_store)}")
         logger.info(f"Generating SQL for question: {question}")
         
-        question_lower = question.lower()
+        question_lower = ' '.join(question.lower().split())
         import re
         
         # Extract potential identifiers from question
@@ -404,7 +434,92 @@ class VannaAI:
                 sql = sql[4:].strip()
             
             return sql
-        elif 'customer credit' in question_lower or 'credit for customer' in question_lower:
+        
+        # =================
+        # CUSTOMERS WITH PENDING CREDIT (all customers who have pending credit > 0)
+        # =================
+        if 'customers with credit' in question_lower or 'customer with credit' in question_lower or 'pending credit' in question_lower or 'credit pending' in question_lower:
+            sql = """SELECT c.name AS "NAME", c.phone AS "CONTACT INFO", c.address AS "ADDRESS", c.email AS "EMAIL",
+                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as "CREDIT GIVEN",
+                COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as "CREDIT REPAID",
+                COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as "PENDING CREDIT"
+                FROM customers c
+                WHERE (
+                    COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - 
+                    COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0)
+                ) > 0
+                ORDER BY "PENDING CREDIT" DESC"""
+            logger.info(f"Detected customers with pending credit query, using hardcoded SQL: {sql}")
+            return sql
+        
+        # =================
+        # CUSTOMER INVOICE LIST (customer name invoice list)
+        # =================
+        invoice_list_match = re.search(r'(?:customer|customers)\s+(\w+)\s+invoice(?:s)?\s*(?:list)?', question_lower)
+        if invoice_list_match or ('invoice list' in question_lower and 'customer' in question_lower):
+            # Extract customer name
+            if invoice_list_match:
+                customer_name = invoice_list_match.group(1).strip()
+            else:
+                # Try to extract name from "customer X invoice list" pattern
+                name_match = re.search(r'(?:customer|customers)\s+(\w+)', question_lower)
+                customer_name = name_match.group(1).strip() if name_match else None
+            
+            if customer_name and customer_name.lower() not in ['invoice', 'invoices', 'list', 'all']:
+                sql = f"""SELECT c.name AS "CUSTOMER NAME", i.invoice_number AS "INVOICE NUMBER", 
+                    i.total_amount AS "TOTAL SPENT", 
+                    date(i.created_at, '+5 hours', '30 minutes') AS "INVOICE DATE"
+                    FROM customers c 
+                    JOIN invoices i ON c.id = i.customer_id 
+                    WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%')
+                    ORDER BY i.created_at DESC"""
+                logger.info(f"Detected customer invoice list query, using hardcoded SQL: {sql}")
+                return sql
+        
+        # =================
+        # CUSTOMER + PLACE FILTER (customer Kurnool, customer [city name])
+        # =================
+        # Common place names in India - detect if the word after "customer" is a place name
+        place_keywords = ['kurnool', 'hyderabad', 'bangalore', 'chennai', 'mumbai', 'delhi', 'pune', 'kolkata', 
+                         'nandyal', 'kadapa', 'anantapur', 'tirupati', 'vijayawada', 'visakhapatnam', 'guntur',
+                         'warangal', 'nizamabad', 'karimnagar', 'khammam', 'rajahmundry', 'kakinada', 'eluru',
+                         'ongole', 'nellore', 'chittoor', 'srikakulam', 'vizianagaram', 'machilipatnam']
+        
+        # Check if query matches "customer [place]" pattern
+        place_match = re.search(r'(?:customer|customers)\s+(\w+)', question_lower)
+        if place_match:
+            potential_place = place_match.group(1).strip().lower()
+            # Check if it's a place name or if user explicitly asks for place filter
+            is_place_query = (potential_place in place_keywords or 
+                             'place' in question_lower or 
+                             'city' in question_lower or 
+                             'town' in question_lower or
+                             'district' in question_lower or
+                             'state' in question_lower)
+            
+            if is_place_query and potential_place not in ['credit', 'list', 'all', 'invoice', 'invoices', 'month', 'week', 'year', 'today', 'yesterday', 'last', 'this', 'current']:
+                place_name = potential_place
+                base_sql = f"""SELECT c.name AS "NAME", c.phone AS "CONTACT INFO", c.address AS "ADDRESS", c.email AS "EMAIL", 
+                    date(MAX(i.created_at), '+5 hours', '30 minutes') AS "INVOICE DATE", 
+                    datetime(MAX(i.created_at), '+5 hours', '30 minutes') AS "LAST BILLED", 
+                    COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS "PRODUCTS BOUGHT", 
+                    SUM(i.total_amount) AS "TOTAL SPENT", 
+                    COUNT(i.id) AS "TOTAL INVOICES" 
+                    FROM customers c 
+                    JOIN invoices i ON c.id = i.customer_id 
+                    WHERE (LOWER(c.place) LIKE LOWER('%{place_name}%') OR LOWER(c.town) LIKE LOWER('%{place_name}%') OR LOWER(c.district) LIKE LOWER('%{place_name}%') OR LOWER(c.state) LIKE LOWER('%{place_name}%') OR LOWER(c.address) LIKE LOWER('%{place_name}%'))"""
+                
+                # Check for date filter as well (e.g., "customer kurnool last week")
+                date_filter = self.get_date_filter(question, 'i.created_at')
+                if date_filter:
+                    base_sql += f" AND {date_filter}"
+                
+                base_sql += """ GROUP BY c.id ORDER BY "TOTAL SPENT" DESC"""
+                logger.info(f"Detected customer place query, using hardcoded SQL: {base_sql}")
+                return base_sql
+        
+        if 'customer credit' in question_lower or 'credit for customer' in question_lower:
+
             # Check for phone in credit query
             if phone_match:
                 phone = phone_match.group(1)
@@ -500,70 +615,68 @@ class VannaAI:
                 logger.info(f"Detected customer email query, using hardcoded SQL: {sql}")
                 return sql
             
-            # Default to name search
-            # Capture full name after keywords (allow spaces)
-            name_match = re.search(r'(?:customer name|customer details for|customer info for|who is customer|customers|customer|name)\s+(.+)', question_lower)
-            customer_name = name_match.group(1).strip() if name_match else question.split()[-1]
-            
-            # CHECK: Is the "name" actually a date phrase?
+            # IDENTIFY INTENT: Is it a date query, a list query, or a name search?
+            # First, extract potential name component
+            name_match = re.search(r'(?:customer name|customer details for|customer info for|who is customer|customers|customer|name)\s+((?:(?!day|week|month|year).)+)', question_lower)
+            customer_name_raw = name_match.group(1).strip() if name_match else question.split()[-1]
+            logger.info(f"DEBUG: customer_name_raw extracted: '{customer_name_raw}'")
+
+            # 1. Is it a date phrase?
             date_phrases = [
                 'today', 'yesterday', 'this week', 'last week', 'this month', 'last month', 
-                'this year', 'last year', 'current month', 'wednesday', 'monday', 'tuesday', 
-                'thursday', 'friday', 'saturday', 'sunday', '2024', '2025'
+                'this year', 'last year', 'current month', 'month', 'wednesday', 'monday', 'tuesday', 
+                'thursday', 'friday', 'saturday', 'sunday', '2024', '2025',
+                # Month names
+                'january', 'february', 'march', 'april', 'may', 'june',
+                'july', 'august', 'september', 'october', 'november', 'december',
+                'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
             ]
-            is_date_phrase = any(dp == customer_name.lower() or f"{dp} " in f"{customer_name.lower()} " or f" {dp}" in f" {customer_name.lower()}" for dp in date_phrases)
-            
-            # Check for "week X" pattern
-            if not is_date_phrase:
-                is_date_phrase = bool(re.search(r'week\s+\d+', customer_name.lower()))
-            # Check for relative days/weeks/months "last X days", "last 2 weeks", "2 months", etc.
-            if not is_date_phrase:
-                is_date_phrase = bool(re.search(r'(?:last|past|in the last|in the past|this|next)?\s*(\d+)?\s*(day|week|month|year)s?', customer_name.lower()))
-            
-            # Check for "complete" keyword in date phrases
-            if not is_date_phrase:
-                is_date_phrase = "complete" in customer_name.lower() and any(u in customer_name.lower() for u in ['week', 'month', 'year'])
+            is_date_phrase = (
+                any(dp == customer_name_raw.lower() or f"{dp} " in f"{customer_name_raw.lower()} " or f" {dp}" in f" {customer_name_raw.lower()}" for dp in date_phrases) or
+                bool(re.search(r'(?:\d+)?\s*(?:day|week|month|year)s?$', customer_name_raw.lower())) or
+                bool(re.search(r'week\s+\d+', question_lower)) or
+                bool(re.search(r'(?:last|past|in the last|in the past|this|next)?\s*(\d+)?\s*(year|month|week|day)s?', question_lower)) or
+                ("complete" in question_lower and any(u in question_lower for u in ['week', 'month', 'year']))
+            )
             
             if is_date_phrase:
-                # If it looks like a date phrase, use the hardcoded template for precision
+                logger.info(f"Detected date intent for question: {question_lower}")
                 base_sql = 'SELECT c.name AS "NAME", c.phone AS "CONTACT INFO", c.address AS "ADDRESS", c.email AS "EMAIL", date(MAX(i.created_at), \'+5 hours\', \'30 minutes\') AS "INVOICE DATE", datetime(MAX(i.created_at), \'+5 hours\', \'30 minutes\') AS "LAST BILLED", COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) AS "PRODUCTS BOUGHT", SUM(i.total_amount) AS "TOTAL SPENT", COUNT(i.id) AS "TOTAL INVOICES" FROM customers c JOIN invoices i ON c.id = i.customer_id'
-                
                 date_filter = self.get_date_filter(question, 'i.created_at')
                 if date_filter:
                     sql = base_sql + f" WHERE {date_filter} GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
-                    logger.info(f"Detected date-phrase customer query, using hardcoded SQL: {sql}")
+                    logger.info(f"Generated date-filtered SQL: {sql}")
                     return sql
-                
-                logger.info(f"Customer name '{customer_name}' looks like a date phrase but filter extraction failed, falling through to LLM/RAG")
-                # Fall through to LLM if extraction failed for some reason
-                pass 
-            else:
-                # Handle "customer list" or "customer all" explicitly
-                list_keywords = ['list', 'all', 'data', 'details', 'detail', 'info', 'supplier list', 'suppliers list', 'supplier data']
-                if any(k == customer_name.lower() or f"{k} " in f"{customer_name.lower()} " or f" {k}" in f" {customer_name.lower()}" for k in list_keywords):
-                    base_sql = "SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) as \"PRODUCTS BOUGHT\", COUNT(DISTINCT i.id) as \"TOTAL INVOICES\", COALESCE(SUM(i.total_amount) , 0) as \"TOTAL SPENT\", MAX(i.created_at) as \"LAST BILLED\" FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id"
-                    
-                    # Apply date filter if present
-                    date_filter = self.get_date_filter(question, 'i.created_at')
-                    if date_filter:
-                        base_sql += f" WHERE {date_filter}"
-                    
-                    sql = base_sql + " GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
-                    logger.info(f"Detected customer list query (filtered: {bool(date_filter)}), using hardcoded SQL: {sql}")
-                    return sql
-                
+                logger.warning(f"Date intent detected but extraction failed for: {question_lower}")
+
+            # 2. Is it a list query?
+            list_keywords = ['list', 'all', 'data', 'details', 'detail', 'info', 'supplier list', 'suppliers list', 'supplier data']
+            customer_name_for_list = "" if is_date_phrase else customer_name_raw
+            if any(k == customer_name_for_list.lower() or f"{k} " in f"{customer_name_for_list.lower()} " or f" {k}" in f" {customer_name_for_list.lower()}" for k in list_keywords):
+                logger.info(f"Detected list intent for question: {question_lower}")
+                base_sql = "SELECT c.id, c.name, c.phone, c.email, c.address, c.place, COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) as \"PRODUCTS BOUGHT\", COUNT(DISTINCT i.id) as \"TOTAL INVOICES\", COALESCE(SUM(i.total_amount) , 0) as \"TOTAL SPENT\", MAX(i.created_at) as \"LAST BILLED\" FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id"
+                date_filter = self.get_date_filter(question, 'i.created_at')
+                if date_filter:
+                    base_sql += f" WHERE {date_filter}"
+                sql = base_sql + " GROUP BY c.id ORDER BY \"TOTAL SPENT\" DESC"
+                return sql
+
+            # 3. Default to Name Search
+            if not is_date_phrase and customer_name_raw:
+
                 sql = f"""SELECT c.*, 
                     COUNT(DISTINCT i.id) as "TOTAL INVOICES", 
                     COALESCE(SUM(i.total_amount), 0) as "TOTAL SPENT", 
                     MAX(i.created_at) as "LAST BILLED",
+                    COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i2 ON ii.invoice_id = i2.id WHERE i2.customer_id = c.id), 0) as "PRODUCTS BOUGHT",
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) as credit_given,
                     COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as credit_repaid,
                     COALESCE((SELECT SUM(credit_amount) FROM invoices WHERE customer_id = c.id AND (credit_amount > 0 OR payment_method = 'Credit')), 0) - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp JOIN invoices inv ON cp.invoice_id = inv.id WHERE cp.customer_id = c.id AND (inv.credit_amount > 0 OR inv.payment_method = 'Credit') AND (cp.note IS NULL OR cp.note NOT LIKE '%Initial payment%')), 0) as current_credit
                     FROM customers c 
                     LEFT JOIN invoices i ON c.id = i.customer_id 
-                    WHERE LOWER(c.name) LIKE LOWER('%{customer_name}%') 
+                    WHERE LOWER(c.name) LIKE LOWER('%{customer_name_raw}%') 
                     GROUP BY c.id"""
-                logger.info(f"Detected customer name query, using hardcoded SQL: {sql}")
+                logger.info(f"Generated name-search SQL: {sql}")
                 return sql
         
         # =================
@@ -590,16 +703,15 @@ class VannaAI:
         # =================
         
         # Supplier queries (name, details, info, or just "supplier X")
-        if question_lower.startswith('supplier ') or any(keyword in question_lower for keyword in ['supplier name', 'supplier details', 'supplier info', 'who is supplier']):
+        if question_lower.startswith('supplier ') or question_lower.startswith('suppliers ') or any(keyword in question_lower for keyword in ['supplier name', 'supplier details', 'supplier info', 'who is supplier']):
             # Check for phone number in query
             if phone_match:
                 phone = phone_match.group(1)
                 sql = f"""SELECT s.*, 
                     COUNT(DISTINCT p.id) as total_products, 
-                    COALESCE(SUM(p.stock_quantity), 0) as total_stock, 
-                    COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,
-                    COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - 
-                             COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount
+                    COALESCE(SUM(p.initial_stock), 0) as total_stock, 
+                    COALESCE(SUM(p.initial_stock * p.price), 0) as stock_value,
+                    COALESCE((SELECT SUM(poi.total_cost) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE po.supplier_id = s.id), 0) + COALESCE(SUM(p.initial_stock * p.price), 0) - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) as pending_amount
                     FROM suppliers s 
                     LEFT JOIN products p ON s.id = p.supplier_id 
                     WHERE s.contact_info LIKE '%{phone}%' 
@@ -612,10 +724,9 @@ class VannaAI:
                 email = email_match.group(0)
                 sql = f"""SELECT s.*, 
                     COUNT(DISTINCT p.id) as total_products, 
-                    COALESCE(SUM(p.stock_quantity), 0) as total_stock, 
-                    COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,
-                    COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - 
-                             COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount
+                    COALESCE(SUM(p.initial_stock), 0) as total_stock, 
+                    COALESCE(SUM(p.initial_stock * p.price), 0) as stock_value,
+                    COALESCE((SELECT SUM(poi.total_cost) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE po.supplier_id = s.id), 0) + COALESCE(SUM(p.initial_stock * p.price), 0) - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) as pending_amount
                     FROM suppliers s 
                     LEFT JOIN products p ON s.id = p.supplier_id 
                     WHERE s.email LIKE '%{email}%' 
@@ -624,15 +735,28 @@ class VannaAI:
                 return sql
             
             # Default to name search
-            name_match = re.search(r'(?:supplier name|supplier details for|supplier info for|who is supplier|supplier)\s+(\w+)', question_lower)
+            name_match = re.search(r'(?:supplier name|supplier details for|supplier info for|who is supplier|suppliers|supplier)\s+(\w+)', question_lower)
             supplier_name = name_match.group(1).strip() if name_match else question.split()[-1]
+            
+            # Handle "supplier list" or "supplier all" explicitly
+            list_keywords = ['list', 'all', 'data', 'details', 'detail', 'info']
+            if supplier_name.lower() in list_keywords:
+                sql = """SELECT s.*, 
+                    COUNT(DISTINCT p.id) as total_products, 
+                    COALESCE(SUM(p.initial_stock), 0) as total_stock, 
+                    COALESCE(SUM(p.initial_stock * p.price), 0) as stock_value,
+                    COALESCE((SELECT SUM(poi.total_cost) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE po.supplier_id = s.id), 0) + COALESCE(SUM(p.initial_stock * p.price), 0) - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) as pending_amount
+                    FROM suppliers s 
+                    LEFT JOIN products p ON s.id = p.supplier_id 
+                    GROUP BY s.id"""
+                logger.info(f"Detected supplier list query, using hardcoded SQL: {sql}")
+                return sql
             
             sql = f"""SELECT s.*, 
                 COUNT(DISTINCT p.id) as total_products, 
-                COALESCE(SUM(p.stock_quantity), 0) as total_stock, 
-                COALESCE(SUM(p.stock_quantity * p.price), 0) as stock_value,
-                COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po WHERE po.supplier_id = s.id) - 
-                         COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0), 0) as pending_amount
+                COALESCE(SUM(p.initial_stock), 0) as total_stock, 
+                COALESCE(SUM(p.initial_stock * p.price), 0) as stock_value,
+                COALESCE((SELECT SUM(poi.total_cost) FROM purchase_order_items poi JOIN purchase_orders po ON poi.po_id = po.id WHERE po.supplier_id = s.id), 0) + COALESCE(SUM(p.initial_stock * p.price), 0) - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) as pending_amount
                 FROM suppliers s 
                 LEFT JOIN products p ON s.id = p.supplier_id 
                 WHERE LOWER(s.name) LIKE LOWER('%{supplier_name}%') 

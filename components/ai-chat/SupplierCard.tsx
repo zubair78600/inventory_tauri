@@ -26,7 +26,7 @@ export function SupplierCard({ data }: { data: SupplierData }) {
     if (!data.name) return null;
 
     return (
-        <Card className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden mt-4">
+        <Card className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
             {/* Header Section with Gradient Background */}
             <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 p-6">
                 <div className="flex items-start justify-between gap-4">
