@@ -172,3 +172,27 @@ body {
 .section-title {
   @apply text-xl font-semibold mb-3 text-slate-900 dark:text-slate-100;
 }
+
+.chat-table-scroll {
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+.chat-table-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.chat-table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+}
+
+.dark .chat-table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+}
+
+.chat-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
