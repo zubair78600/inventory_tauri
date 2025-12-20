@@ -28,6 +28,7 @@ import {
     Download
 } from 'lucide-react';
 import { CustomerCard } from "./CustomerCard";
+import { IdentityCard } from "./IdentityCard";
 import { SupplierCard } from "./SupplierCard";
 import {
     aiChatApi,
@@ -986,6 +987,13 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
         )
     );
 
+    // Check if this is an identity card
+    const isIdentityCard = Boolean(
+        message.results &&
+        message.results.length === 1 &&
+        (firstResult?.type === 'identity' || firstResult?.TYPE === 'identity')
+    );
+
     // Check if this is a conversational response (e.g., greetings, identity questions)
     const isConversational = Boolean(
         message.results &&
@@ -993,9 +1001,9 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
         firstResult?.message !== undefined
     );
 
-    const isDataResult = hasResults && !isCardResult && !isConversational;
+    const isDataResult = hasResults && !isCardResult && !isConversational && !isIdentityCard;
     // Strict table sizes: 400px minimized, 750px maximized
-    const assistantWidthClass = isDataResult
+    const assistantWidthClass = (isDataResult || isIdentityCard)
         ? (isCompact ? "w-[400px] max-w-[400px]" : "w-[750px] max-w-[750px]")
         : (isCompact ? "max-w-[50%] min-w-[200px]" : "max-w-[50%] min-w-[300px]");
     const defaultRowLimit = isCompact ? 50 : 100;
@@ -1069,18 +1077,7 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                         </p>
                     )}
 
-                    {/* Card Results (Customer/Supplier) - Show directly without collapse */}
-                    {isCardResult && normalizedData && (
-                        <div className="mt-4">
-                            {normalizedData.total_stock !== undefined ? (
-                                <SupplierCard data={normalizedData as any} />
-                            ) : (
-                                <CustomerCard data={normalizedData as any} />
-                            )}
-                        </div>
-                    )}
-
-                    {/* Conversational Response - Simple text message */}
+                    {/* Rendering Results */}
                     {isConversational && firstResult?.message && (
                         <div className="mt-2 text-sm leading-relaxed whitespace-pre-wrap">
                             {String(firstResult.message).split('\n').map((line, i) => (
@@ -1101,8 +1098,24 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                         </div>
                     )}
 
-                    {/* Collapsible Sections for non-card, non-conversational results */}
-                    {!isCardResult && !isConversational && message.results && message.results.length > 0 && (
+                    {isIdentityCard && (
+                        <div className="mt-4">
+                            <IdentityCard data={firstResult as any} />
+                        </div>
+                    )}
+
+                    {isCardResult && (
+                        <div className="mt-4">
+                            {firstResult?.total_stock !== undefined || firstResult?.TOTAL_STOCK !== undefined ? (
+                                <SupplierCard data={firstResult as any} />
+                            ) : (
+                                <CustomerCard data={firstResult as any} />
+                            )}
+                        </div>
+                    )}
+
+                    {/* Collapsible Sections for non-card, non-conversational, non-identity results */}
+                    {!isCardResult && !isConversational && !isIdentityCard && message.results && message.results.length > 0 && (
                         <div className="mt-3 space-y-2">
                             {/* 1. SQL Query - Collapsible */}
                             {message.sql && (
