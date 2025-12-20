@@ -47,18 +47,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    // If on login page, render immediately without waiting for auth loading
+    // This makes the login page appear instantly
+    if (pathname === '/login' || pathname === '/login/') {
+        return <>{children}</>;
+    }
+
+    // Only show loading spinner for authenticated routes
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
         );
-    }
-
-    // If on login page, just render children (the login form)
-    // Handle potential trailing slash
-    if (pathname === '/login' || pathname === '/login/') {
-        return <>{children}</>;
     }
 
     // If not logged in (and not on login page), AuthContext will redirect, but we render nothing/loading here

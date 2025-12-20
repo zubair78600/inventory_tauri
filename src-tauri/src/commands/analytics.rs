@@ -553,7 +553,8 @@ pub fn get_sales_analytics(
                 COALESCE(SUM(tax_amount), 0.0),
                 COALESCE(SUM(discount_amount), 0.0)
              FROM invoices
-             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+             WHERE created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')",
             [&start_date, &end_date],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
@@ -575,8 +576,8 @@ pub fn get_sales_analytics(
                 COALESCE(SUM(total_amount), 0.0),
                 COUNT(*)
              FROM invoices, date_diff
-             WHERE date(created_at) >= date(?1, '-' || (days + 1) || ' days')
-               AND date(created_at) < date(?1)",
+             WHERE created_at >= datetime(?1, '-' || (days + 1) || ' days')
+               AND created_at < datetime(?1)",
             [&start_date, &end_date],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -605,7 +606,8 @@ pub fn get_sales_analytics(
              FROM invoice_items ii
              JOIN invoices i ON ii.invoice_id = i.id
              JOIN products p ON ii.product_id = p.id
-             WHERE date(i.created_at) >= date(?1) AND date(i.created_at) <= date(?2)",
+             WHERE i.created_at >= datetime(?1)
+               AND i.created_at < datetime(?2, '+1 day')",
             [&start_date, &end_date],
             |row| row.get(0),
         )
@@ -650,7 +652,8 @@ pub fn get_revenue_trend(
                 COALESCE(SUM(total_amount), 0.0) as revenue,
                 COUNT(*) as order_count
              FROM invoices
-             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+             WHERE created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')
              GROUP BY period
              ORDER BY period ASC",
             date_format
@@ -698,7 +701,8 @@ pub fn get_top_products(
          FROM products p
          JOIN invoice_items ii ON p.id = ii.product_id
          JOIN invoices i ON ii.invoice_id = i.id
-         WHERE date(i.created_at) >= date(?1) AND date(i.created_at) <= date(?2)
+         WHERE i.created_at >= datetime(?1)
+           AND i.created_at < datetime(?2, '+1 day')
          GROUP BY p.id
          ORDER BY revenue DESC
          LIMIT {}",
@@ -741,7 +745,8 @@ pub fn get_sales_by_payment_method(
     let total: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(total_amount), 0.0) FROM invoices
-             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+             WHERE created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')",
             [&start_date, &end_date],
             |row| row.get(0),
         )
@@ -754,7 +759,8 @@ pub fn get_sales_by_payment_method(
                 COALESCE(SUM(total_amount), 0.0) as total,
                 COUNT(*) as count
              FROM invoices
-             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+             WHERE created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')
              GROUP BY payment_method
              ORDER BY total DESC"
         )
@@ -797,7 +803,8 @@ pub fn get_sales_by_region(
                 COALESCE(SUM(total_amount), 0.0) as revenue,
                 COUNT(*) as order_count
              FROM invoices
-             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+             WHERE created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')
                AND town IS NOT NULL AND town != ''
              GROUP BY town
              ORDER BY revenue DESC"
@@ -837,7 +844,8 @@ pub fn get_customer_analytics(
         .query_row(
             "SELECT COUNT(DISTINCT customer_id) FROM invoices
              WHERE customer_id IS NOT NULL
-               AND date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+               AND created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')",
             [&start_date, &end_date],
             |row| row.get(0),
         )
@@ -848,11 +856,12 @@ pub fn get_customer_analytics(
         .query_row(
             "SELECT COUNT(DISTINCT customer_id) FROM invoices i1
              WHERE customer_id IS NOT NULL
-               AND date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+               AND created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')
                AND NOT EXISTS (
                    SELECT 1 FROM invoices i2
                    WHERE i2.customer_id = i1.customer_id
-                     AND date(i2.created_at) < date(?1)
+                     AND i2.created_at < datetime(?1)
                )",
             [&start_date, &end_date],
             |row| row.get(0),
@@ -865,7 +874,8 @@ pub fn get_customer_analytics(
             "SELECT COUNT(*) FROM (
                 SELECT customer_id FROM invoices
                 WHERE customer_id IS NOT NULL
-                  AND date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+                  AND created_at >= datetime(?1)
+                  AND created_at < datetime(?2, '+1 day')
                 GROUP BY customer_id
                 HAVING COUNT(*) > 1
              )",
@@ -924,7 +934,8 @@ pub fn get_top_customers(
             COUNT(i.id) as order_count
          FROM customers c
          JOIN invoices i ON c.id = i.customer_id
-         WHERE date(i.created_at) >= date(?1) AND date(i.created_at) <= date(?2)
+         WHERE i.created_at >= datetime(?1)
+           AND i.created_at < datetime(?2, '+1 day')
          GROUP BY c.id
          ORDER BY total_spent DESC
          LIMIT {}",
@@ -983,7 +994,8 @@ pub fn get_customer_trend(
                 strftime('{}', first_order_date) as period,
                 COUNT(*) as new_customers
             FROM first_orders
-            WHERE date(first_order_date) >= date(?1) AND date(first_order_date) <= date(?2)
+            WHERE first_order_date >= datetime(?1)
+              AND first_order_date < datetime(?2, '+1 day')
             GROUP BY period
             ORDER BY period ASC",
             date_format
@@ -1063,7 +1075,7 @@ pub fn get_low_stock_alerts(db: State<Database>) -> Result<Vec<LowStockAlert>, S
                      FROM invoice_items ii
                      JOIN invoices i ON ii.invoice_id = i.id
                      WHERE ii.product_id = p.id
-                       AND date(i.created_at) >= date('now', '-30 days')
+                       AND i.created_at >= datetime('now', '-30 days')
                     ), 0.0
                 ) as avg_daily_sales
              FROM products p
@@ -1159,7 +1171,7 @@ pub fn get_purchase_analytics(
     let active_suppliers: i32 = conn
         .query_row(
             "SELECT COUNT(DISTINCT supplier_id) FROM purchase_orders
-             WHERE date(order_date) >= date(?1) AND date(order_date) <= date(?2)",
+             WHERE order_date >= ?1 AND order_date <= ?2",
             [&start_date, &end_date],
             |row| row.get(0),
         )
@@ -1169,7 +1181,7 @@ pub fn get_purchase_analytics(
     let po_count: i32 = conn
         .query_row(
             "SELECT COUNT(*) FROM purchase_orders
-             WHERE date(order_date) >= date(?1) AND date(order_date) <= date(?2)",
+             WHERE order_date >= ?1 AND order_date <= ?2",
             [&start_date, &end_date],
             |row| row.get(0),
         )
@@ -1207,13 +1219,14 @@ pub fn get_cashflow_trend(
             "WITH sales_data AS (
                 SELECT strftime('{}', created_at) as period, SUM(total_amount) as amount
                 FROM invoices
-                WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+                WHERE created_at >= datetime(?1)
+                  AND created_at < datetime(?2, '+1 day')
                 GROUP BY period
             ),
             purchase_data AS (
                 SELECT strftime('{}', order_date) as period, SUM(total_amount) as amount
                 FROM purchase_orders
-                WHERE date(order_date) >= date(?1) AND date(order_date) <= date(?2)
+                WHERE order_date >= ?1 AND order_date <= ?2
                 GROUP BY period
             ),
             all_periods AS (
@@ -1273,7 +1286,7 @@ pub fn get_top_suppliers(
          FROM suppliers s
          JOIN purchase_orders po ON s.id = po.supplier_id
          LEFT JOIN purchase_order_items poi ON po.id = poi.po_id
-         WHERE date(po.order_date) >= date(?1) AND date(po.order_date) <= date(?2)
+         WHERE po.order_date >= ?1 AND po.order_date <= ?2
          GROUP BY s.id
          ORDER BY total_spent DESC
          LIMIT {}",
@@ -1318,7 +1331,8 @@ pub fn get_tax_summary(
                 COALESCE(SUM(sgst_amount), 0.0),
                 COALESCE(SUM(igst_amount), 0.0)
              FROM invoices
-             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+             WHERE created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')",
             [&start_date, &end_date],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
@@ -1331,7 +1345,8 @@ pub fn get_tax_summary(
                 COALESCE(SUM(tax_amount), 0.0),
                 COUNT(*)
              FROM invoices
-             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)
+             WHERE created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')
              GROUP BY state
              ORDER BY SUM(tax_amount) DESC"
         )
@@ -1376,7 +1391,8 @@ pub fn get_discount_analysis(
                 COALESCE(SUM(total_amount), 0.0),
                 SUM(CASE WHEN discount_amount > 0 THEN 1 ELSE 0 END)
              FROM invoices
-             WHERE date(created_at) >= date(?1) AND date(created_at) <= date(?2)",
+             WHERE created_at >= datetime(?1)
+               AND created_at < datetime(?2, '+1 day')",
             [&start_date, &end_date],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )

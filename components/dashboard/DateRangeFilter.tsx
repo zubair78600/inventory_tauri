@@ -156,11 +156,14 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   );
 }
 
-export const getDefaultDateRange = (): DateRange => {
-  const today = new Date();
-  return {
-    startDate: '2000-01-01',
-    endDate: formatDate(today),
-    label: 'All',
-  };
+export type DateRangeKey = '1d' | '7d' | '30d' | '90d' | '1y' | 'all';
+
+const DEFAULT_RANGE_KEY: DateRangeKey = '1d';
+
+export const getDateRangeForKey = (key: DateRangeKey): DateRange => {
+  const ranges = getDateRanges();
+  const rangeGetter = ranges[key] ?? ranges[DEFAULT_RANGE_KEY];
+  return rangeGetter();
 };
+
+export const getDefaultDateRange = (): DateRange => getDateRangeForKey(DEFAULT_RANGE_KEY);
