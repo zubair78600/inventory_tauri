@@ -294,5 +294,169 @@
     {
         "question": "Products without purchase orders",
         "sql": "SELECT p.name, p.stock_quantity, COALESCE(p.initial_stock, 0) as initial_stock FROM products p LEFT JOIN purchase_order_items poi ON p.id = poi.product_id WHERE poi.id IS NULL AND COALESCE(p.initial_stock, 0) > 0"
+    },
+    {
+        "question": "Top sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Most sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Products sold the most",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Which products sold the most?",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Top selling products by quantity",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Best sellers",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Show top sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "List top sold products from high to low",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Top sold products by price",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", p.selling_price AS \"PRICE\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Most sold products with price",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", p.selling_price AS \"PRICE\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Top selling products with price from high to low",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", p.selling_price AS \"PRICE\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Best selling products by price",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", p.selling_price AS \"PRICE\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Products sold most with price details",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", p.selling_price AS \"PRICE\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Top 5 sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 5"
+    },
+    {
+        "question": "Top 5 selling products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 5"
+    },
+    {
+        "question": "Show top 5 products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 5"
+    },
+    {
+        "question": "Top 6 sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 6"
+    },
+    {
+        "question": "Top 6 selling products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 6"
+    },
+    {
+        "question": "Show top 6 products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 6"
+    },
+    {
+        "question": "Top 7 sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 7"
+    },
+    {
+        "question": "Top 7 selling products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 7"
+    },
+    {
+        "question": "Show top 7 products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 7"
+    },
+    {
+        "question": "Top 8 sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 8"
+    },
+    {
+        "question": "Top 8 selling products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 8"
+    },
+    {
+        "question": "Show top 8 products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 8"
+    },
+    {
+        "question": "Top 10 sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 10"
+    },
+    {
+        "question": "Top 10 selling products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 10"
+    },
+    {
+        "question": "Show top 10 products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 10"
+    },
+    {
+        "question": "Top 20 sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 20"
+    },
+    {
+        "question": "Top 50 sold products",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC LIMIT 50"
+    },
+    {
+        "question": "All products sold from high to low",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id GROUP BY p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Product name sold to customers",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\", c.name AS \"CUSTOMER NAME\", COUNT(DISTINCT i.id) AS \"TIMES PURCHASED\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id GROUP BY p.id, c.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Products sold to customers with count",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\", c.name AS \"CUSTOMER NAME\", COUNT(DISTINCT i.id) AS \"TIMES PURCHASED\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id GROUP BY p.id, c.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Which customers bought which products the most?",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\", c.name AS \"CUSTOMER NAME\", COUNT(DISTINCT i.id) AS \"TIMES PURCHASED\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id GROUP BY p.id, c.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Products taken by customers",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY SOLD\", c.name AS \"CUSTOMER NAME\", COUNT(DISTINCT i.id) AS \"TIMES PURCHASED\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id GROUP BY p.id, c.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Customer wise product sales",
+        "sql": "SELECT c.name AS \"CUSTOMER NAME\", p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY BOUGHT\" FROM customers c JOIN invoices i ON c.id = i.customer_id JOIN invoice_items ii ON i.id = ii.invoice_id JOIN products p ON ii.product_id = p.id GROUP BY c.id, p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Products count by customer",
+        "sql": "SELECT c.name AS \"CUSTOMER NAME\", p.name AS \"PRODUCT NAME\", SUM(ii.quantity) AS \"QUANTITY BOUGHT\" FROM customers c JOIN invoices i ON c.id = i.customer_id JOIN invoice_items ii ON i.id = ii.invoice_id JOIN products p ON ii.product_id = p.id GROUP BY c.id, p.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Customers who bought most products",
+        "sql": "SELECT c.name AS \"CUSTOMER NAME\", SUM(ii.quantity) AS \"TOTAL PRODUCTS BOUGHT\", COUNT(DISTINCT p.id) AS \"UNIQUE PRODUCTS\" FROM customers c JOIN invoices i ON c.id = i.customer_id JOIN invoice_items ii ON i.id = ii.invoice_id JOIN products p ON ii.product_id = p.id GROUP BY c.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Top customers by product count",
+        "sql": "SELECT c.name AS \"CUSTOMER NAME\", SUM(ii.quantity) AS \"TOTAL PRODUCTS BOUGHT\", COUNT(DISTINCT p.id) AS \"UNIQUE PRODUCTS\" FROM customers c JOIN invoices i ON c.id = i.customer_id JOIN invoice_items ii ON i.id = ii.invoice_id JOIN products p ON ii.product_id = p.id GROUP BY c.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Which product sold to which customer the most?",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", c.name AS \"CUSTOMER NAME\", SUM(ii.quantity) AS \"QUANTITY BOUGHT\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id GROUP BY p.id, c.id ORDER BY SUM(ii.quantity) DESC"
+    },
+    {
+        "question": "Top product customers",
+        "sql": "SELECT p.name AS \"PRODUCT NAME\", c.name AS \"CUSTOMER NAME\", SUM(ii.quantity) AS \"QUANTITY BOUGHT\" FROM products p JOIN invoice_items ii ON p.id = ii.product_id JOIN invoices i ON ii.invoice_id = i.id JOIN customers c ON i.customer_id = c.id GROUP BY p.id, c.id ORDER BY SUM(ii.quantity) DESC"
     }
 ]

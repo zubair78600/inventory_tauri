@@ -62,9 +62,12 @@ export default function ResultChart({ data, isCompact = false }: ResultChartProp
         // Priority metrics to show in charts
         const PRIORITY_METRICS = [
             'TOTAL SPENT', 'TOTAL REVENUE', 'TOTAL AMOUNT', 'REVENUE', 'AMOUNT',
-            'TOTAL INVOICES', 'PRODUCTS BOUGHT', 'TOTAL PRODUCTS', 'TOTAL STOCK',
-            'total_spent', 'total_revenue', 'total_amount', 'total_invoices', 'total_items'
+            'STOCK VALUE', 'TOTAL STOCK', 'PENDING AMOUNT', 'PENDING CREDIT',
+            'TOTAL INVOICES', 'PRODUCTS BOUGHT', 'TOTAL PRODUCTS',
+            'total_spent', 'total_revenue', 'total_amount', 'total_invoices', 'total_items',
+            'stock_value', 'total_stock', 'pending_amount'
         ];
+
 
         // Sort numericKeys to put priority metrics first
         numericKeys.sort((a, b) => {
