@@ -433,13 +433,13 @@ class VannaAI:
         # CONVERSATIONAL RESPONSES (Non-SQL)
         # =================
         # Handle greetings
-        greeting_patterns = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
+        greeting_patterns = ['hi', 'hello', 'hey', 'hu', 'ho', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
         if q_clean in greeting_patterns or any(q_clean.startswith(g + ' ') for g in greeting_patterns):
             logger.info("Detected greeting, returning conversational response")
             return "CONVERSATIONAL:Hello! How can I help you today? You can ask me about products, customers, suppliers, invoices, or sales analytics."
         
         # Handle identity questions
-        identity_patterns = ['who are you', 'what are you', 'who is this', 'what is this', 'introduce yourself', 'tell me about yourself']
+        identity_patterns = ['who are you', 'what are you', 'who is this', 'what is this', 'introduce yourself', 'tell me about yourself', 'your identity', 'hu are you', 'hu who are you']
         if any(pattern in q_clean for pattern in identity_patterns):
             info = self._get_company_info()
             logger.info(f"Detected identity question, returning company info: {info['name']}")
