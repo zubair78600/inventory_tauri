@@ -384,20 +384,38 @@ class VannaAI:
             
         return ""
 
-    def _get_company_name(self) -> str:
-        """Get company name from settings database"""
+    def _get_company_info(self) -> dict:
+        """Get company info from app_settings database"""
+        info = {
+            "name": "Inventory Management System",
+            "address": "",
+            "phone": "",
+            "email": ""
+        }
         try:
             import sqlite3
             conn = sqlite3.connect(str(self.db_path))
             cursor = conn.cursor()
-            cursor.execute("SELECT value FROM settings WHERE key = 'invoice_company_name'")
-            result = cursor.fetchone()
+            
+            # Fetch all invoice company related settings
+            cursor.execute("SELECT key, value FROM app_settings WHERE key LIKE 'invoice_company_%'")
+            results = cursor.fetchall()
             conn.close()
-            if result and result[0]:
-                return result[0]
+            
+            settings = {row[0]: row[1] for row in results}
+            
+            if settings.get('invoice_company_name'):
+                info["name"] = settings['invoice_company_name']
+            if settings.get('invoice_company_address'):
+                info["address"] = settings['invoice_company_address']
+            if settings.get('invoice_company_phone'):
+                info["phone"] = settings['invoice_company_phone']
+            if settings.get('invoice_company_email'):
+                info["email"] = settings['invoice_company_email']
+                
         except Exception as e:
-            logger.warning(f"Could not get company name from settings: {e}")
-        return "Inventory Management System"
+            logger.warning(f"Could not get company info from settings: {e}")
+        return info
 
     def generate_sql(self, question: str) -> str:
         """Generate SQL from a natural language question"""
@@ -408,21 +426,34 @@ class VannaAI:
         question_lower = ' '.join(question.lower().split())
         import re
         
+        # Remove common punctuation for better pattern matching (e.g., "Hi!" -> "hi")
+        q_clean = re.sub(r'[!?.,]', '', question_lower).strip()
+        
         # =================
         # CONVERSATIONAL RESPONSES (Non-SQL)
         # =================
         # Handle greetings
         greeting_patterns = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
-        if question_lower.strip() in greeting_patterns or any(question_lower.strip().startswith(g + ' ') for g in greeting_patterns) or any(question_lower.strip() == g for g in greeting_patterns):
+        if q_clean in greeting_patterns or any(q_clean.startswith(g + ' ') for g in greeting_patterns):
             logger.info("Detected greeting, returning conversational response")
             return "CONVERSATIONAL:Hello! How can I help you today? You can ask me about products, customers, suppliers, invoices, or sales analytics."
         
         # Handle identity questions
         identity_patterns = ['who are you', 'what are you', 'who is this', 'what is this', 'introduce yourself', 'tell me about yourself']
-        if any(pattern in question_lower for pattern in identity_patterns):
-            company_name = self._get_company_name()
-            logger.info(f"Detected identity question, returning company info: {company_name}")
-            return f"CONVERSATIONAL:I'm the AI assistant for {company_name}. I can help you with inventory queries, customer information, sales analytics, and more. Just ask me anything about your business data!"
+        if any(pattern in q_clean for pattern in identity_patterns):
+            info = self._get_company_info()
+            logger.info(f"Detected identity question, returning company info: {info['name']}")
+            
+            import json
+            identity_data = {
+                "type": "identity",
+                "company_name": info['name'],
+                "address": info['address'],
+                "phone": info['phone'],
+                "email": info['email'],
+                "message": f"I'm the AI assistant for **{info['name']}**. I can help you with inventory queries, customer information, sales analytics, and more."
+            }
+            return f"IDENTITY:{json.dumps(identity_data)}"
         
         # Handle thank you / goodbye
         farewell_patterns = ['thank you', 'thanks', 'bye', 'goodbye', 'see you', 'take care']
@@ -432,7 +463,7 @@ class VannaAI:
         
         # Handle help requests
         help_patterns = ['help', 'what can you do', 'how to use', 'commands', 'features']
-        if any(pattern in question_lower for pattern in help_patterns) and len(question_lower) < 50:
+        if any(pattern in q_clean for pattern in help_patterns) and len(q_clean) < 50:
             logger.info("Detected help request, returning help info")
             return """CONVERSATIONAL:I can help you with:
 • **Products**: Stock levels, prices, top sellers, product details

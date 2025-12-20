@@ -176,14 +176,45 @@ async def query(request: QueryRequest):
             total_time_ms=total_time, 
             success=True
         )
+    
+    # Handle structured identity responses
+    if sql.startswith("IDENTITY:"):
+        import json
+        try:
+            message_data = json.loads(sql[9:])
+            total_time = (time.perf_counter() - total_start) * 1000
+            logger.info(f"Identity response for: {message_data.get('company_name')}")
+            return QueryResponse(
+                sql="", 
+                results=[message_data],
+                sql_extraction_time_ms=sql_time,
+                execution_time_ms=0, 
+                total_time_ms=total_time, 
+                success=True
+            )
+        except Exception as e:
+            logger.error(f"Failed to parse identity JSON: {e}")
+            # Fallback to plain text if JSON fails
+            return QueryResponse(
+                sql="", 
+                results=[{"message": sql[9:]}],
+                sql_extraction_time_ms=sql_time,
+                execution_time_ms=0, 
+                total_time_ms=(time.perf_counter() - total_start) * 1000, 
+                success=True
+            )
 
     # SQL Execution
     exec_start = time.perf_counter()
     try:
         results = sql_executor.execute(sql)
         
-        # Only cache if execution was successful and we didn't just read it from cache
-        if not cached_sql:
+        # Only cache if:
+        # 1. Execution was successful
+        # 2. We didn't just read it from cache
+        # 3. It's not a conversational response
+        # 4. It doesn't contain placeholders like [DATE_CONDITION]
+        if not cached_sql and not sql.startswith("CONVERSATIONAL:") and "[DATE_CONDITION]" not in sql:
             query_cache.set(request.question, sql)
             
     except Exception as e:
@@ -230,6 +261,17 @@ async def train(request: TrainingRequest):
         return {"success": True}
     except Exception as e:
         logger.error(f"Training failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/clear-cache")
+async def clear_cache():
+    """Clear the query cache"""
+    try:
+        query_cache.clear()
+        return {"success": True, "message": "Cache cleared successfully"}
+    except Exception as e:
+        logger.error(f"Failed to clear cache: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -52,4 +52,8 @@ class QueryCache:
         if key not in self.cache or self.cache[key] != sql:
             self.cache[key] = sql
             self._save()
-            logger.info(f"Cached SQL for: {key}")
+    def clear(self):
+        """Clear the entire cache"""
+        self.cache = {}
+        self._save()
+        logger.info("Query cache cleared")
