@@ -65,6 +65,7 @@ export default function Billing() {
   const [showQuickAddSettings, setShowQuickAddSettings] = useState(false);
   const importQuickAddSettingsModal = () => import('@/components/billing/QuickAddSettingsModal');
   const [QuickAddModal, setQuickAddModal] = useState<any>(null);
+  const [quickAddPage, setQuickAddPage] = useState<number>(1);
 
   const fetchRecentInvoices = async () => {
     try {
@@ -119,7 +120,7 @@ export default function Billing() {
     staleTime: 60 * 1000,
   });
 
-  const fetchQuickAddProducts = async () => {
+  const fetchQuickAddProducts = async (pageToFetch = 1) => {
     try {
       const { settingsCommands } = await import('@/lib/tauri');
       const settings = await settingsCommands.getAll();
@@ -136,26 +137,37 @@ export default function Billing() {
 
       if (selectedCategory) {
         // If category selected, ignore manual IDs and fetch top selling in that category
-        const products = await productCommands.getTopSelling(20, 1, selectedCategory);
-        setTopProducts(products);
-        setTotalProductCount(products.length);
-        // We clear quickAddIds for UI consistency (or keep them but they aren't used)
+        const { items, total_count } = await productCommands.getTopSelling(20, pageToFetch, selectedCategory);
+
+        if (pageToFetch > 1) {
+          setTopProducts(prev => [...prev, ...items]);
+        } else {
+          setTopProducts(items);
+        }
+        setTotalProductCount(total_count);
         setQuickAddIds([]);
       } else {
         // Default behavior (All)
         if (ids.length > 0) {
+          // Manual IDs mode - no pagination supported for now unless migrated
           setQuickAddIds(ids);
           const products = await productCommands.getByIds(ids);
           setTopProducts(products);
           setTotalProductCount(products.length);
         } else {
           // Fallback to top 20 sellers
-          const products = await productCommands.getTopSelling(20);
-          setTopProducts(products);
-          setQuickAddIds(products.map(p => p.id));
-          setTotalProductCount(products.length);
+          const { items, total_count } = await productCommands.getTopSelling(20, pageToFetch);
+
+          if (pageToFetch > 1) {
+            setTopProducts(prev => [...prev, ...items]);
+          } else {
+            setTopProducts(items);
+          }
+          setQuickAddIds([]); // Clear IDs so Load More works (logic depends on quickAddIds.length === 0)
+          setTotalProductCount(total_count); // Use total DB count
         }
       }
+      setQuickAddPage(pageToFetch);
     } catch (error) {
       console.error("Error fetching quick add products", error);
     } finally {
@@ -199,7 +211,9 @@ export default function Billing() {
   };
 
   useEffect(() => {
-    void fetchQuickAddProducts();
+    // Reset to page 1 on category change
+    setQuickAddPage(1);
+    void fetchQuickAddProducts(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory]);
 
@@ -816,33 +830,36 @@ export default function Billing() {
           </div>
         ) : (
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <h3 className="text-lg font-semibold">Quick Add</h3>
-                <select
-                  className="form-select py-1 px-2 text-sm w-40"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                >
-                  <option value="">All Categories</option>
-                  {categories.map((cat: string) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center space-x-2">
-                {!selectedCategory && (
-                  <button
-                    onClick={() => setShowQuickAddSettings(true)}
-                    className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
-                    title="Customize Quick Add List"
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-semibold whitespace-nowrap">Quick Add</h3>
+                  <select
+                    className="form-select py-1 px-2 text-sm w-40"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
-                  </button>
-                )}
+                    <option value="">All Categories</option>
+                    {categories.map((cat: string) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {!selectedCategory && (
+                    <button
+                      onClick={() => setShowQuickAddSettings(true)}
+                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
+                      title="Customize Quick Add List"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+                    </button>
+                  )}
+                </div>
               </div>
+              <p className="text-sm text-muted-foreground">{totalProductCount} total products</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
@@ -877,6 +894,17 @@ export default function Billing() {
                 </button>
               ))}
             </div>
+            {/* Load More for Quick Add */}
+            {topProducts.length < totalProductCount && (selectedCategory || quickAddIds.length === 0) && (
+              <div className="pt-2">
+                <button
+                  onClick={() => fetchQuickAddProducts(quickAddPage + 1)}
+                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                >
+                  Load More Products ({totalProductCount - topProducts.length} remaining)
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -65,7 +65,7 @@ pub fn get_customers(
 
     let count_query = "SELECT COUNT(*) FROM customers c";
 
-    let group_by = "GROUP BY c.id ORDER BY c.name";
+    let group_by = "GROUP BY c.id ORDER BY last_billed DESC NULLS LAST, c.name ASC";
 
     if let Some(search_term) = search {
         let search_pattern = format!("%{}%", search_term);

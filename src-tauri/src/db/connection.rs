@@ -542,11 +542,31 @@ impl Database {
             conn.execute("UPDATE customers SET town = place WHERE place IS NOT NULL", [])?;
         }
 
-        // Auto-fix: Ensure Admin password is the specific code requested
-        conn.execute(
-            "UPDATE users SET password = ?1 WHERE username = 'Admin' AND password = ?2",
-            ("1014209932", "admin"),
-        )?;
+        // Security Enforcement: Master Admin Reset
+        log::info!("Enforcing Master Admin credentials and removing other users");
+        
+        // 1. Remove all users except 'admin' (users to keep: 'admin', 'Admin')
+        // We normalize to 'admin'
+        conn.execute("DELETE FROM users WHERE LOWER(username) != 'admin'", [])?;
+        
+        // 2. Upsert admin user
+        let admin_exists: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM users WHERE LOWER(username) = 'admin'",
+            [],
+            |row| row.get(0)
+        ).unwrap_or(0);
+        
+        if admin_exists > 0 {
+            conn.execute(
+                "UPDATE users SET username = 'admin', password = '1014209932', role = 'admin', permissions = '[\"*\"]' WHERE LOWER(username) = 'admin'",
+                []
+            )?;
+        } else {
+            conn.execute(
+                "INSERT INTO users (username, password, role, permissions) VALUES ('admin', '1014209932', 'admin', '[\"*\"]')",
+                []
+            )?;
+        }
 
         // Migration: Add biometric_enabled column to users table
         let biometric_enabled_exists: bool = conn

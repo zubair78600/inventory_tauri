@@ -80,7 +80,10 @@ pub fn get_suppliers(
     let mut suppliers = Vec::new();
     let total_count: i64;
 
-    let base_query = "SELECT id, name, contact_info, address, email, comments, state, district, town, image_path, created_at, updated_at FROM suppliers";
+    let base_query = "
+        SELECT s.id, s.name, s.contact_info, s.address, s.email, s.comments, s.state, s.district, s.town, s.image_path, s.created_at, s.updated_at,
+               (SELECT MAX(created_at) FROM products WHERE supplier_id = s.id) as last_purchase_at
+        FROM suppliers s";
     let count_query = "SELECT COUNT(*) FROM suppliers";
 
     if let Some(search_term) = search {
@@ -95,7 +98,7 @@ pub fn get_suppliers(
             .map_err(|e| e.to_string())?;
 
         // Get paginated items
-        let query = format!("{} {} ORDER BY name LIMIT ?2 OFFSET ?3", base_query, where_clause);
+        let query = format!("{} {} ORDER BY last_purchase_at DESC NULLS LAST, name ASC LIMIT ?2 OFFSET ?3", base_query, where_clause);
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let supplier_iter = stmt
@@ -127,7 +130,7 @@ pub fn get_suppliers(
             .map_err(|e| e.to_string())?;
 
         // Get paginated items
-        let query = format!("{} ORDER BY name LIMIT ?1 OFFSET ?2", base_query);
+        let query = format!("{} ORDER BY last_purchase_at DESC NULLS LAST, name LIMIT ?1 OFFSET ?2", base_query);
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let supplier_iter = stmt

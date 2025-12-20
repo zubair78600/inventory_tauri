@@ -73,15 +73,15 @@ export function QuickAddSettingsModal({ isOpen, onClose, currentIds, onSave }: Q
     const fetchTopSelling = async (page: number) => {
         try {
             const limit = 20;
-            const newProducts = await productCommands.getTopSelling(limit, page);
+            const { items } = await productCommands.getTopSelling(limit, page);
 
             if (page === 1) {
-                setTopSellingProducts(newProducts);
+                setTopSellingProducts(items);
             } else {
-                setTopSellingProducts(prev => [...prev, ...newProducts]);
+                setTopSellingProducts(prev => [...prev, ...items]);
             }
 
-            setHasMoreTopSelling(newProducts.length === limit);
+            setHasMoreTopSelling(items.length === limit);
         } catch (err) {
             console.error(err);
         }

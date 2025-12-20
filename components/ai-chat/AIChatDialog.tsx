@@ -24,7 +24,8 @@ import {
     History,
     Settings,
     BarChart3,
-    Table2
+    Table2,
+    Download
 } from 'lucide-react';
 import { CustomerCard } from "./CustomerCard";
 import { SupplierCard } from "./SupplierCard";
@@ -709,24 +710,52 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                         animate={{ opacity: 1, y: 0 }}
                         className="px-6 py-4 flex items-center justify-between border-b border-black/5 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-md z-10"
                     >
-                        <DialogTitle className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
-                                <Bot className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <span className="font-semibold text-lg bg-gradient-to-r from-sky-600 to-indigo-600 dark:from-sky-400 dark:to-indigo-400 bg-clip-text text-transparent">
-                                    Inventory Intelligence
-                                </span>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                    <div className={`h-1.5 w-1.5 rounded-full ${isServerReady ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`} />
-                                    <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
-                                        {isServerReady ? 'Online' : 'Connecting...'}
-                                    </span>
+                        <div className="flex-1 min-w-0">
+                            <DialogTitle className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20 flex-shrink-0">
+                                    <Bot className="h-5 w-5 text-white" />
                                 </div>
-                            </div>
-                        </DialogTitle>
+                                <div className="min-w-0">
+                                    <span className="font-semibold text-lg bg-gradient-to-r from-sky-600 to-indigo-600 dark:from-sky-400 dark:to-indigo-400 bg-clip-text text-transparent truncate block">
+                                        Inventory Intelligence
+                                    </span>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <div className={`h-1.5 w-1.5 rounded-full ${isServerReady ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`} />
+                                        <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+                                            {isServerReady ? 'Online' : 'Connecting...'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </DialogTitle>
+                        </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0 ml-4">
+                            {/* Download Chats Button */}
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const { save } = await import('@tauri-apps/plugin-dialog');
+                                        const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+
+                                        const filePath = await save({
+                                            defaultPath: `chat_export_${new Date().toISOString().split('T')[0]}.json`,
+                                            filters: [{ name: 'JSON', extensions: ['json'] }]
+                                        });
+
+                                        if (filePath) {
+                                            const chatData = JSON.stringify(messages, null, 2);
+                                            await writeTextFile(filePath, chatData);
+                                        }
+                                    } catch (error) {
+                                        console.error('Failed to save chat:', error);
+                                        alert('Failed to save chat: ' + String(error));
+                                    }
+                                }}
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                                title="Download Chat History"
+                            >
+                                <Download className="h-4 w-4" />
+                            </button>
                             {/* Toolbar buttons */}
                             <button
                                 className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
@@ -969,9 +998,11 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
     const assistantWidthClass = isDataResult
         ? (isCompact ? "w-[400px] max-w-[400px]" : "w-[750px] max-w-[750px]")
         : (isCompact ? "max-w-[50%] min-w-[200px]" : "max-w-[50%] min-w-[300px]");
-    const defaultRowLimit = isCompact ? 12 : 20;
-    const rowIncrement = isCompact ? 12 : 20;
+    const defaultRowLimit = isCompact ? 50 : 100;
+    const rowIncrement = isCompact ? 50 : 100;
     const [rowLimit, setRowLimit] = useState(defaultRowLimit);
+    const [isDownloadingCSV, setIsDownloadingCSV] = useState(false);
+    const [exportProgress, setExportProgress] = useState(0);
 
     useEffect(() => {
         setRowLimit(defaultRowLimit);
@@ -1028,12 +1059,15 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                             ? "bg-indigo-600 text-white"
                             : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 flex-1"
                     )}>
-                    <p className={cn(
-                        "leading-relaxed whitespace-pre-wrap break-words",
-                        isUser ? "text-white" : "text-slate-900 dark:text-slate-100"
-                    )}>
-                        {message.content || (isUser ? "[Message]" : "[Response]")}
-                    </p>
+                    {/* Message content - hide for conversational responses since they show in dedicated section */}
+                    {(!isConversational || message.content) && (
+                        <p className={cn(
+                            "leading-relaxed whitespace-pre-wrap break-words",
+                            isUser ? "text-white" : "text-slate-900 dark:text-slate-100"
+                        )}>
+                            {message.content || (isUser ? "[Message]" : "")}
+                        </p>
+                    )}
 
                     {/* Card Results (Customer/Supplier) - Show directly without collapse */}
                     {isCardResult && normalizedData && (
@@ -1113,17 +1147,78 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
 
                                 return (
                                     <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
-                                        <button
-                                            onClick={() => setShowRawData(!showRawData)}
-                                            className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] text-muted-foreground flex justify-between items-center transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
-                                        >
-                                            <div className="flex items-center gap-1.5">
+                                        {/* Header row - flex container with toggle and CSV button as siblings */}
+                                        <div className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] text-muted-foreground flex justify-between items-center">
+                                            <button
+                                                onClick={() => setShowRawData(!showRawData)}
+                                                className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+                                            >
                                                 <ChevronRight className={cn("h-3 w-3 transition-transform", showRawData && "rotate-90")} />
                                                 <Table2 className="h-3 w-3" />
                                                 <span>Raw Data</span>
+                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={async () => {
+                                                        try {
+                                                            setIsDownloadingCSV(true);
+                                                            setExportProgress(0);
+                                                            const { save } = await import('@tauri-apps/plugin-dialog');
+                                                            const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+
+                                                            const filePath = await save({
+                                                                defaultPath: `query_results_${new Date().toISOString().split('T')[0]}.csv`,
+                                                                filters: [{ name: 'CSV', extensions: ['csv'] }]
+                                                            });
+
+                                                            if (filePath && message.results) {
+                                                                const headers = Object.keys(message.results[0]);
+                                                                let csvLines = [headers.join(',')];
+                                                                const total = message.results.length;
+                                                                const chunkSize = 2000;
+                                                                for (let i = 0; i < total; i += chunkSize) {
+                                                                    const chunk = message.results.slice(i, i + chunkSize);
+                                                                    const chunkLines = chunk.map(row =>
+                                                                        headers.map(h => {
+                                                                            const val = (row as any)[h];
+                                                                            const str = String(val ?? '');
+                                                                            return str.includes(',') || str.includes('"') || str.includes('\n')
+                                                                                ? `"${str.replace(/"/g, '""')}"`
+                                                                                : str;
+                                                                        }).join(',')
+                                                                    );
+                                                                    csvLines.push(...chunkLines);
+                                                                    setExportProgress(Math.round(((i + chunk.length) / total) * 100));
+                                                                    await new Promise(resolve => setTimeout(resolve, 0));
+                                                                }
+                                                                await writeTextFile(filePath, csvLines.join('\n'));
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('Failed to save CSV:', error);
+                                                            alert('Failed to save CSV: ' + String(error));
+                                                        } finally {
+                                                            setIsDownloadingCSV(false);
+                                                            setExportProgress(0);
+                                                        }
+                                                    }}
+                                                    disabled={isDownloadingCSV}
+                                                    className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors disabled:opacity-50"
+                                                    title="Download all data as CSV"
+                                                >
+                                                    {isDownloadingCSV ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <Download className="h-3 w-3" />
+                                                    )}
+                                                    <span>
+                                                        {isDownloadingCSV
+                                                            ? (exportProgress > 0 && exportProgress < 100 ? `${exportProgress}%` : 'Saving...')
+                                                            : 'CSV'}
+                                                    </span>
+                                                </button>
+                                                <span className="font-medium">{message.results.length} rows</span>
                                             </div>
-                                            <span>{message.results.length} rows</span>
-                                        </button>
+                                        </div>
                                         <AnimatePresence>
                                             {showRawData && (
                                                 <motion.div
