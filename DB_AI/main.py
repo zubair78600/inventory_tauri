@@ -163,6 +163,20 @@ async def query(request: QueryRequest):
             )
         sql_time = (time.perf_counter() - sql_start) * 1000
 
+    # Handle conversational responses (non-SQL)
+    if sql.startswith("CONVERSATIONAL:"):
+        message = sql[15:]  # Remove the prefix
+        total_time = (time.perf_counter() - total_start) * 1000
+        logger.info(f"Conversational response: {message[:100]}...")
+        return QueryResponse(
+            sql="", 
+            results=[{"message": message}],
+            sql_extraction_time_ms=sql_time,
+            execution_time_ms=0, 
+            total_time_ms=total_time, 
+            success=True
+        )
+
     # SQL Execution
     exec_start = time.perf_counter()
     try:

@@ -384,6 +384,21 @@ class VannaAI:
             
         return ""
 
+    def _get_company_name(self) -> str:
+        """Get company name from settings database"""
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM settings WHERE key = 'invoice_company_name'")
+            result = cursor.fetchone()
+            conn.close()
+            if result and result[0]:
+                return result[0]
+        except Exception as e:
+            logger.warning(f"Could not get company name from settings: {e}")
+        return "Inventory Management System"
+
     def generate_sql(self, question: str) -> str:
         """Generate SQL from a natural language question"""
         logger.info(f"DEBUG: generate_sql called with question: {question}")
@@ -393,9 +408,67 @@ class VannaAI:
         question_lower = ' '.join(question.lower().split())
         import re
         
+        # =================
+        # CONVERSATIONAL RESPONSES (Non-SQL)
+        # =================
+        # Handle greetings
+        greeting_patterns = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
+        if question_lower.strip() in greeting_patterns or any(question_lower.strip().startswith(g + ' ') for g in greeting_patterns) or any(question_lower.strip() == g for g in greeting_patterns):
+            logger.info("Detected greeting, returning conversational response")
+            return "CONVERSATIONAL:Hello! How can I help you today? You can ask me about products, customers, suppliers, invoices, or sales analytics."
+        
+        # Handle identity questions
+        identity_patterns = ['who are you', 'what are you', 'who is this', 'what is this', 'introduce yourself', 'tell me about yourself']
+        if any(pattern in question_lower for pattern in identity_patterns):
+            company_name = self._get_company_name()
+            logger.info(f"Detected identity question, returning company info: {company_name}")
+            return f"CONVERSATIONAL:I'm the AI assistant for {company_name}. I can help you with inventory queries, customer information, sales analytics, and more. Just ask me anything about your business data!"
+        
+        # Handle thank you / goodbye
+        farewell_patterns = ['thank you', 'thanks', 'bye', 'goodbye', 'see you', 'take care']
+        if any(pattern in question_lower for pattern in farewell_patterns):
+            logger.info("Detected farewell, returning conversational response")
+            return "CONVERSATIONAL:You're welcome! Feel free to ask if you need anything else. Have a great day!"
+        
+        # Handle help requests
+        help_patterns = ['help', 'what can you do', 'how to use', 'commands', 'features']
+        if any(pattern in question_lower for pattern in help_patterns) and len(question_lower) < 50:
+            logger.info("Detected help request, returning help info")
+            return """CONVERSATIONAL:I can help you with:
+• **Products**: Stock levels, prices, top sellers, product details
+• **Customers**: Customer info, purchase history, credit balances
+• **Suppliers**: Supplier details, pending payments
+• **Sales**: Revenue, invoices, payment methods, trends
+• **Analytics**: Top products, customer spending, sales reports
+
+Just ask naturally, like "Show top 5 sold products" or "Customer John details"!"""
+        
         # Extract potential identifiers from question
         phone_match = re.search(r'(\d{7,12})', question)
         email_match = re.search(r'[\w\.-]+@[\w\.-]+', question)
+        
+        # =================
+        # LOW STOCK / OUT OF STOCK PRODUCT QUERIES
+        # =================
+        if 'low stock' in question_lower or 'running low' in question_lower:
+            sql = """SELECT p.name AS "PRODUCT NAME", p.sku AS "SKU", p.stock_quantity AS "CURRENT STOCK", 
+                p.price AS "COST PRICE", s.name AS "SUPPLIER"
+                FROM products p 
+                LEFT JOIN suppliers s ON p.supplier_id = s.id 
+                WHERE p.stock_quantity < 10 
+                ORDER BY p.stock_quantity ASC"""
+            logger.info(f"Detected low stock query, using hardcoded SQL: {sql}")
+            return sql
+        
+        if 'out of stock' in question_lower or 'no stock' in question_lower or 'zero stock' in question_lower:
+            sql = """SELECT p.name AS "PRODUCT NAME", p.sku AS "SKU", p.stock_quantity AS "CURRENT STOCK", 
+                p.price AS "COST PRICE", s.name AS "SUPPLIER"
+                FROM products p 
+                LEFT JOIN suppliers s ON p.supplier_id = s.id 
+                WHERE p.stock_quantity = 0 
+                ORDER BY p.name ASC"""
+            logger.info(f"Detected out of stock query, using hardcoded SQL: {sql}")
+            return sql
         
         # =================
         # CUSTOMER QUERIES
@@ -403,7 +476,9 @@ class VannaAI:
         
         # Bypass hardcoded logic for "who bought" or specific product sales queries
         # This allows the trained LLM to handle "customer who bought X" queries
-        is_purchase_query = (
+        # NOTE: Exclude "sold to customer" patterns - those go to top_sold_query handler
+        is_sold_to_customer = 'sold to customer' in question_lower
+        is_purchase_query = not is_sold_to_customer and (
             'bought' in question_lower or 
             'sales with' in question_lower or 
             'customers for' in question_lower or
@@ -411,7 +486,7 @@ class VannaAI:
             'by customers' in question_lower or
             # Check for product keywords combined with customer context
             ('kisses' in question_lower and 'customer' in question_lower) or
-            ('product' in question_lower and 'customer' in question_lower)
+            ('product' in question_lower and 'customer' in question_lower and 'sold' not in question_lower)
         )
         logger.info(f"DEBUG: is_purchase_query = {is_purchase_query}, question = '{question_lower}'")
         
@@ -762,6 +837,45 @@ class VannaAI:
                 WHERE LOWER(s.name) LIKE LOWER('%{supplier_name}%') 
                 GROUP BY s.id"""
             logger.info(f"Detected supplier name query, using hardcoded SQL: {sql}")
+            return sql
+        
+        # =================
+        # TOP SOLD PRODUCTS / ANALYTICS QUERIES (bypass to LLM)
+        # =================
+        # These queries should use trained data, not hardcoded product name extraction
+        is_top_sold_query = (
+            'top sold' in question_lower or
+            'top selling' in question_lower or
+            'most sold' in question_lower or
+            'best seller' in question_lower or
+            ('top' in question_lower and 'products' in question_lower) or
+            ('product' in question_lower and 'sold to customer' in question_lower) or
+            'products sold to customer' in question_lower or
+            'customer wise product' in question_lower or
+            'products count by customer' in question_lower or
+            'customers who bought most' in question_lower or
+            'top customers by product' in question_lower or
+            'products taken by customer' in question_lower
+        )
+        
+        if is_top_sold_query:
+            logger.info(f"Detected top sold/analytics query, bypassing hardcoded logic to use LLM")
+            context = self.vector_store.get_relevant_context(question, n_results=3)
+            logger.info(f"DEBUG: Retrieved context for top sold query: {context[:300] if context else 'EMPTY'}...")
+            sql = self.llm.generate(question, context=context)
+            logger.info(f"DEBUG: LLM generated SQL: {sql}")
+            
+            # Basic cleanup
+            sql = sql.strip()
+            if "```" in sql:
+                parts = sql.split("```")
+                if len(parts) > 1:
+                    s = parts[1]
+                    if s.lower().startswith("sql"): s = s[3:]
+                    sql = s.strip()
+            if sql.lower().startswith("sql:"):
+                sql = sql[4:].strip()
+            
             return sql
         
         # =================

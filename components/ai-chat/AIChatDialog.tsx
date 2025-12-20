@@ -185,7 +185,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
             if (messages.length > 0) {
                 try {
                     const { appDataDir, join } = await import('@tauri-apps/api/path');
-                    const { writeTextFile, mkdir, exists } = await import('@tauri-apps/plugin-fs');
+                    const { writeTextFile, mkdir, exists, readTextFile } = await import('@tauri-apps/plugin-fs');
 
                     const appDir = await appDataDir();
                     const historyFolder = await join(appDir, CHAT_HISTORY_FOLDER);
@@ -196,7 +196,44 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                     }
 
                     const filePath = await join(historyFolder, getMonthlyFileName());
-                    await writeTextFile(filePath, JSON.stringify(messages, null, 2));
+
+                    // Read existing history to merge with new messages
+                    let existingMessages: ChatMessage[] = [];
+                    if (await exists(filePath)) {
+                        try {
+                            const content = await readTextFile(filePath);
+                            const parsed = JSON.parse(content);
+                            if (Array.isArray(parsed)) {
+                                existingMessages = parsed;
+                            }
+                        } catch {
+                            // File might be corrupted, start fresh
+                            existingMessages = [];
+                        }
+                    }
+
+                    // Merge: add new messages, update existing ones by ID
+                    const messageMap = new Map<string, ChatMessage>();
+
+                    // Add existing messages first
+                    for (const msg of existingMessages) {
+                        if (msg.id) {
+                            messageMap.set(msg.id, msg);
+                        }
+                    }
+
+                    // Add/update with current session messages
+                    for (const msg of messages) {
+                        if (msg.id) {
+                            messageMap.set(msg.id, msg);
+                        }
+                    }
+
+                    // Convert back to array and sort by timestamp
+                    const mergedMessages = Array.from(messageMap.values())
+                        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+                    await writeTextFile(filePath, JSON.stringify(mergedMessages, null, 2));
                     setHasOldHistory(true);
                 } catch (e) {
                     console.error('Failed to save chat history:', e);
@@ -205,6 +242,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         };
         saveHistory();
     }, [messages]);
+
 
     // Check sidecar status on open
     useEffect(() => {
@@ -396,7 +434,9 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                 id: generateMessageId(),
                 role: 'assistant',
                 content: response.success
-                    ? `Found ${response.results.length} result(s)`
+                    ? (response.results.length === 1 && response.results[0]?.message !== undefined
+                        ? '' // Conversational response - message shown in dedicated section
+                        : `Found ${response.results.length} result(s)`)
                     : response.error || 'An error occurred',
                 timestamp: new Date(),
                 sql: response.sql,
@@ -917,7 +957,14 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
         )
     );
 
-    const isDataResult = hasResults && !isCardResult;
+    // Check if this is a conversational response (e.g., greetings, identity questions)
+    const isConversational = Boolean(
+        message.results &&
+        message.results.length === 1 &&
+        firstResult?.message !== undefined
+    );
+
+    const isDataResult = hasResults && !isCardResult && !isConversational;
     // Strict table sizes: 400px minimized, 750px maximized
     const assistantWidthClass = isDataResult
         ? (isCompact ? "w-[400px] max-w-[400px]" : "w-[750px] max-w-[750px]")
@@ -999,8 +1046,29 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                         </div>
                     )}
 
-                    {/* Collapsible Sections for non-card results */}
-                    {!isCardResult && message.results && message.results.length > 0 && (
+                    {/* Conversational Response - Simple text message */}
+                    {isConversational && firstResult?.message && (
+                        <div className="mt-2 text-sm leading-relaxed whitespace-pre-wrap">
+                            {String(firstResult.message).split('\n').map((line, i) => (
+                                <p key={i} className={cn(
+                                    "mb-1",
+                                    line.startsWith('•') && "ml-2"
+                                )}>
+                                    {line.includes('**')
+                                        ? line.split(/(\*\*[^*]+\*\*)/).map((part, j) =>
+                                            part.startsWith('**') && part.endsWith('**')
+                                                ? <strong key={j}>{part.slice(2, -2)}</strong>
+                                                : part
+                                        )
+                                        : line
+                                    }
+                                </p>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Collapsible Sections for non-card, non-conversational results */}
+                    {!isCardResult && !isConversational && message.results && message.results.length > 0 && (
                         <div className="mt-3 space-y-2">
                             {/* 1. SQL Query - Collapsible */}
                             {message.sql && (
