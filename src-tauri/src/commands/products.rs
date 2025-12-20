@@ -94,7 +94,7 @@ pub fn get_products(
 
         // Get paginated items
         // Note: ORDER BY name is standard for search
-        let query = format!("{} {} {} ORDER BY p.name LIMIT ?2 OFFSET ?3", base_query, where_clause, group_by);
+        let query = format!("{} {} {} ORDER BY p.created_at DESC, p.name ASC LIMIT ?2 OFFSET ?3", base_query, where_clause, group_by);
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let product_iter = stmt
@@ -139,7 +139,7 @@ pub fn get_products(
             .map_err(|e| e.to_string())?;
 
         // Get paginated items
-        let query = format!("{} {} ORDER BY p.name LIMIT ?1 OFFSET ?2", base_query, group_by);
+        let query = format!("{} {} ORDER BY p.created_at DESC, p.name ASC LIMIT ?1 OFFSET ?2", base_query, group_by);
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
         let product_iter = stmt
@@ -673,8 +673,9 @@ pub fn add_mock_products(db: State<Database>) -> Result<String, String> {
 }
 
 /// Get top selling products based on invoice items, optionally filtered by category
+/// Get top selling products based on invoice items, optionally filtered by category
 #[tauri::command]
-pub fn get_top_selling_products(page: i32, limit: i32, category: Option<String>, db: State<Database>) -> Result<Vec<Product>, String> {
+pub fn get_top_selling_products(page: i32, limit: i32, category: Option<String>, db: State<Database>) -> Result<PaginatedResult<Product>, String> {
     log::info!("get_top_selling_products called with page: {}, limit: {}", page, limit);
 
     let conn = db.get_conn()?;
@@ -685,6 +686,18 @@ pub fn get_top_selling_products(page: i32, limit: i32, category: Option<String>,
     } else {
         String::new()
     };
+
+    // Calculate total count for the filter
+    let count_query = format!("
+        SELECT COUNT(*) 
+        FROM products p 
+        WHERE p.stock_quantity > 0
+        {}
+    ", category_filter);
+
+    let total_count: i64 = conn
+        .query_row(&count_query, [], |row| row.get(0))
+        .map_err(|e| format!("Failed to get count: {}", e))?;
 
     let query = format!("
         SELECT p.id, p.name, p.sku, p.price, p.selling_price, p.initial_stock, p.stock_quantity, 
@@ -733,7 +746,10 @@ pub fn get_top_selling_products(page: i32, limit: i32, category: Option<String>,
         products.push(product.map_err(|e| e.to_string())?);
     }
 
-    Ok(products)
+    Ok(PaginatedResult {
+        items: products,
+        total_count,
+    })
 }
 
 /// Get products by a list of IDs
