@@ -57,11 +57,12 @@ export default function LoginPage() {
             const user = await invoke<User>('login', {
                 input: { username, password },
             });
+            // Keep loading state while navigating - login() will navigate to /
             login(user);
+            // Don't set isLoading to false - let the navigation complete
         } catch (err) {
             console.error('Login failed:', err);
             setError(typeof err === 'string' ? err : 'Invalid username or password');
-        } finally {
             setIsLoading(false);
         }
     };
@@ -106,17 +107,18 @@ export default function LoginPage() {
                 // SECURITY: Verify the authenticated user matches the entered username
                 if (user.username.toLowerCase() !== username.toLowerCase()) {
                     setError('Biometric authentication failed: User mismatch. Please log in with your own credentials.');
-                    // Optional: Logout immediately if verify_biometric_token returned a valid session (though here it just returns user struct)
+                    setIsBiometricLoading(false);
                 } else {
+                    // Keep loading state while navigating
                     login(user);
                 }
             } else {
                 setError('Fingerprint authentication failed. Please use your password.');
+                setIsBiometricLoading(false);
             }
         } catch (err) {
             console.error('Biometric login failed:', err);
             setError(getBiometricErrorMessage(err));
-        } finally {
             setIsBiometricLoading(false);
         }
     };

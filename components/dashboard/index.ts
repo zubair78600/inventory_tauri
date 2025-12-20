@@ -1,5 +1,5 @@
-export { DateRangeFilter, getDefaultDateRange } from './DateRangeFilter';
-export type { DateRange } from './DateRangeFilter';
+export { DateRangeFilter, getDateRangeForKey, getDefaultDateRange } from './DateRangeFilter';
+export type { DateRange, DateRangeKey } from './DateRangeFilter';
 export { KPICard, KPICardSkeleton, MiniStat } from './KPICard';
 export { RevenueChart } from './RevenueChart';
 export { TopProductsChart } from './TopProductsChart';

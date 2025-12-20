@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useMemo, useEffect } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import {
   DateRangeFilter,
+  getDateRangeForKey,
   getDefaultDateRange,
   KPICard,
   KPICardSkeleton,
@@ -19,6 +20,7 @@ import {
 import type { DateRange } from '@/components/dashboard';
 import {
   analyticsCommands,
+  type DashboardStats,
   type SalesAnalytics,
   type RevenueTrendPoint,
   type TopProduct,
@@ -31,6 +33,8 @@ import {
   type PurchaseAnalytics,
   type CashflowPoint,
 } from '@/lib/tauri';
+
+const SALES_VOLUME_THRESHOLD = 200000;
 
 const getGranularity = (startDate: string, endDate: string): 'daily' | 'weekly' | 'monthly' => {
   const start = new Date(startDate);
@@ -51,98 +55,134 @@ const formatCurrency = (value: number): string => {
 
 export default function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
+  const [autoRangeApplied, setAutoRangeApplied] = useState(false);
+  const [hasUserChangedRange, setHasUserChangedRange] = useState(false);
 
   const granularity = useMemo(
     () => getGranularity(dateRange.startDate, dateRange.endDate),
     [dateRange]
   );
 
+  const shouldPoll = useMemo(() => {
+    const start = new Date(dateRange.startDate);
+    const end = new Date(dateRange.endDate);
+    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    return days <= 7;
+  }, [dateRange.startDate, dateRange.endDate]);
+
+  const dashboardQueryOptions = {
+    staleTime: 60_000,
+    refetchInterval: shouldPoll ? 5000 : false,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
+  } as const;
+
+  const { data: dashboardStats } = useQuery<DashboardStats>({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => analyticsCommands.getDashboardStats(),
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (autoRangeApplied || hasUserChangedRange || !dashboardStats) return;
+
+    const nextRangeKey = dashboardStats.total_orders >= SALES_VOLUME_THRESHOLD ? '7d' : '1d';
+    const nextRange = getDateRangeForKey(nextRangeKey);
+
+    if (nextRange.startDate !== dateRange.startDate || nextRange.endDate !== dateRange.endDate) {
+      setDateRange(nextRange);
+    }
+    setAutoRangeApplied(true);
+  }, [
+    autoRangeApplied,
+    hasUserChangedRange,
+    dashboardStats,
+    dateRange.startDate,
+    dateRange.endDate,
+  ]);
+
+  const handleDateRangeChange = (range: DateRange) => {
+    setHasUserChangedRange(true);
+    setDateRange(range);
+  };
+
   // Sales Analytics
   const { data: salesAnalytics, isLoading: salesLoading } = useQuery<SalesAnalytics>({
     queryKey: ['sales-analytics', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getSalesAnalytics(dateRange.startDate, dateRange.endDate),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Revenue Trend
   const { data: revenueTrend, isLoading: trendLoading } = useQuery<RevenueTrendPoint[]>({
     queryKey: ['revenue-trend', dateRange.startDate, dateRange.endDate, granularity],
     queryFn: () => analyticsCommands.getRevenueTrend(dateRange.startDate, dateRange.endDate, granularity),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Top Products
   const { data: topProducts, isLoading: productsLoading } = useQuery<TopProduct[]>({
     queryKey: ['top-products', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getTopProducts(dateRange.startDate, dateRange.endDate, 10),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Payment Methods
   const { data: paymentMethods, isLoading: paymentsLoading } = useQuery<PaymentMethodBreakdown[]>({
     queryKey: ['payment-methods', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getSalesByPaymentMethod(dateRange.startDate, dateRange.endDate),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Region Sales
   const { data: regionSales, isLoading: regionLoading } = useQuery<RegionSales[]>({
     queryKey: ['region-sales', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getSalesByRegion(dateRange.startDate, dateRange.endDate),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Customer Analytics
   const { data: customerAnalytics, isLoading: customersLoading } = useQuery<CustomerAnalytics>({
     queryKey: ['customer-analytics', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getCustomerAnalytics(dateRange.startDate, dateRange.endDate),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Top Customers
   const { data: topCustomers, isLoading: topCustomersLoading } = useQuery<TopCustomer[]>({
     queryKey: ['top-customers', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getTopCustomers(dateRange.startDate, dateRange.endDate, 10),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Inventory Health
   const { data: inventoryHealth, isLoading: inventoryLoading } = useQuery<InventoryHealth>({
     queryKey: ['inventory-health'],
     queryFn: () => analyticsCommands.getInventoryHealth(),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Low Stock Alerts
   const { data: lowStockAlerts, isLoading: lowStockLoading } = useQuery<LowStockAlert[]>({
     queryKey: ['low-stock-alerts'],
     queryFn: () => analyticsCommands.getLowStockAlerts(),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Purchase Analytics
   const { data: purchaseAnalytics, isLoading: purchaseLoading } = useQuery<PurchaseAnalytics>({
     queryKey: ['purchase-analytics', dateRange.startDate, dateRange.endDate],
     queryFn: () => analyticsCommands.getPurchaseAnalytics(dateRange.startDate, dateRange.endDate),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   // Cashflow Trend
   const { data: cashflowTrend, isLoading: cashflowLoading } = useQuery<CashflowPoint[]>({
     queryKey: ['cashflow-trend', dateRange.startDate, dateRange.endDate, granularity],
     queryFn: () => analyticsCommands.getCashflowTrend(dateRange.startDate, dateRange.endDate, granularity),
-    staleTime: 0,
-    refetchInterval: 5000,
+    ...dashboardQueryOptions,
   });
 
   return (
@@ -153,7 +193,7 @@ export default function Dashboard() {
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">Business analytics overview</p>
         </div>
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
+        <DateRangeFilter value={dateRange} onChange={handleDateRangeChange} />
       </div>
 
       {/* Row 1: Primary KPIs */}

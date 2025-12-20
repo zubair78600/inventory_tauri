@@ -1,15 +1,15 @@
 'use client';
 
 import type { Product, Invoice } from '@/types';
-import { useEffect, useState } from 'react';
-import { productCommands, customerCommands, invoiceCommands } from '@/lib/tauri';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useEffect, useState, useMemo } from 'react';
+import { productCommands, customerCommands, invoiceCommands, settingsCommands } from '@/lib/tauri';
+import { useQueryClient, useQuery, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { LocationSelector } from '@/components/shared/LocationSelector';
 import { useLocationDefaults } from '@/hooks/useLocationDefaults';
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { generateInvoicePDF } from '@/lib/pdf-generator';
-import { FileText, Download, Clock, Loader2 } from 'lucide-react';
+import { FileText, Clock, Loader2 } from 'lucide-react';
 
 type CartItem = {
   product_id: number;
@@ -22,8 +22,6 @@ type CartItem = {
 
 export default function Billing() {
   const queryClient = useQueryClient();
-  const [topProducts, setTopProducts] = useState<Product[]>([]);
-  const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
@@ -39,15 +37,10 @@ export default function Billing() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState<boolean>(false);
   const [productSearch, setProductSearch] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<Product[]>([]);
-  const [totalSearchCount, setTotalSearchCount] = useState<number>(0);
-  const [searchPage, setSearchPage] = useState<number>(1);
-  const [isSearching, setIsSearching] = useState<boolean>(false);
-  const [totalProductCount, setTotalProductCount] = useState<number>(0);
+  const [debouncedProductSearch, setDebouncedProductSearch] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
   const [taxRate, setTaxRate] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
   const [initialPaid, setInitialPaid] = useState<number>(0); // For credit payments
 
   // Location state management with smart defaults
@@ -65,16 +58,98 @@ export default function Billing() {
   const [showQuickAddSettings, setShowQuickAddSettings] = useState(false);
   const importQuickAddSettingsModal = () => import('@/components/billing/QuickAddSettingsModal');
   const [QuickAddModal, setQuickAddModal] = useState<any>(null);
-  const [quickAddPage, setQuickAddPage] = useState<number>(1);
 
-  const fetchRecentInvoices = async () => {
-    try {
-      const result = await invoiceCommands.getAll(1, 5); // Fetch last 5
-      setRecentInvoices(result.items);
-    } catch (error) {
-      console.error('Failed to fetch recent invoices:', error);
-    }
-  };
+  const pageSize = 20;
+
+  // Debounce product search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedProductSearch(productSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [productSearch]);
+
+  // Infinite query for Quick Add products (cached, fast loading)
+  const {
+    data: quickAddData,
+    fetchNextPage: fetchNextQuickAdd,
+    hasNextPage: hasMoreQuickAdd,
+    isFetchingNextPage: isFetchingMoreQuickAdd,
+    isLoading: isQuickAddLoading,
+  } = useInfiniteQuery({
+    queryKey: ['billing-products', selectedCategory, quickAddIds],
+    queryFn: async ({ pageParam = 1 }) => {
+      if (quickAddIds.length > 0 && !selectedCategory) {
+        // Manual IDs mode - fetch all at once, no pagination
+        const products = await productCommands.getByIds(quickAddIds);
+        return { items: products, total_count: products.length };
+      }
+      // Top selling with pagination
+      return await productCommands.getTopSelling(pageSize, pageParam, selectedCategory || undefined);
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      // No pagination for manual IDs mode
+      if (quickAddIds.length > 0 && !selectedCategory) return undefined;
+      const loadedCount = allPages.flatMap(p => p.items).length;
+      if (loadedCount < lastPage.total_count) {
+        return allPages.length + 1;
+      }
+      return undefined;
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30 * 1000, // Cache for 30 seconds
+  });
+
+  // Flatten quick add products
+  const topProducts = useMemo(() => {
+    return quickAddData?.pages.flatMap(page => page.items) ?? [];
+  }, [quickAddData]);
+
+  const totalProductCount = quickAddData?.pages[0]?.total_count ?? 0;
+
+  // Infinite query for search results
+  const {
+    data: searchData,
+    fetchNextPage: fetchNextSearch,
+    hasNextPage: hasMoreSearch,
+    isFetchingNextPage: isFetchingMoreSearch,
+    isLoading: isSearchLoading,
+    isFetching: isSearching,
+  } = useInfiniteQuery({
+    queryKey: ['billing-search', debouncedProductSearch],
+    queryFn: async ({ pageParam = 1 }) => {
+      return await productCommands.getAll(pageParam, 50, debouncedProductSearch);
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.flatMap(p => p.items).length;
+      if (loadedCount < lastPage.total_count) {
+        return allPages.length + 1;
+      }
+      return undefined;
+    },
+    enabled: debouncedProductSearch.length >= 2,
+    placeholderData: keepPreviousData,
+  });
+
+  // Flatten search results
+  const searchResults = useMemo(() => {
+    return searchData?.pages.flatMap(page => page.items) ?? [];
+  }, [searchData]);
+
+  const totalSearchCount = searchData?.pages[0]?.total_count ?? 0;
+
+  // Recent invoices query (cached)
+  const { data: recentInvoices = [], isLoading: isRecentInvoicesLoading } = useQuery({
+    queryKey: ['recent-invoices-billing'],
+    queryFn: async () => {
+      const result = await invoiceCommands.getAll(1, 5);
+      return result.items;
+    },
+    staleTime: 30 * 1000,
+  });
+
 
   const handleViewPdf = async (invoice: Invoice) => {
     if (generatingPdfId === invoice.id) return; // Prevent double click
@@ -110,7 +185,6 @@ export default function Billing() {
   useEffect(() => {
     // Load the modal component dynamically to avoid circular dependencies if any, or just performance
     importQuickAddSettingsModal().then(mod => setQuickAddModal(() => mod.QuickAddSettingsModal));
-    void fetchRecentInvoices();
   }, []);
 
   // Fetch categories
@@ -120,71 +194,31 @@ export default function Billing() {
     staleTime: 60 * 1000,
   });
 
-  const fetchQuickAddProducts = async (pageToFetch = 1) => {
-    try {
-      const { settingsCommands } = await import('@/lib/tauri');
-      const settings = await settingsCommands.getAll();
-      const savedIdsJson = settings['quick_add_ids'];
-
-      let ids: number[] = [];
-      if (savedIdsJson) {
-        try {
-          ids = JSON.parse(savedIdsJson);
-        } catch (e) {
-          console.error("Failed to parse quick add ids", e);
-        }
-      }
-
-      if (selectedCategory) {
-        // If category selected, ignore manual IDs and fetch top selling in that category
-        const { items, total_count } = await productCommands.getTopSelling(20, pageToFetch, selectedCategory);
-
-        if (pageToFetch > 1) {
-          setTopProducts(prev => [...prev, ...items]);
-        } else {
-          setTopProducts(items);
-        }
-        setTotalProductCount(total_count);
-        setQuickAddIds([]);
-      } else {
-        // Default behavior (All)
-        if (ids.length > 0) {
-          // Manual IDs mode - no pagination supported for now unless migrated
-          setQuickAddIds(ids);
-          const products = await productCommands.getByIds(ids);
-          setTopProducts(products);
-          setTotalProductCount(products.length);
-        } else {
-          // Fallback to top 20 sellers
-          const { items, total_count } = await productCommands.getTopSelling(20, pageToFetch);
-
-          if (pageToFetch > 1) {
-            setTopProducts(prev => [...prev, ...items]);
-          } else {
-            setTopProducts(items);
+  // Load quick add IDs from settings on mount
+  useEffect(() => {
+    const loadQuickAddIds = async () => {
+      try {
+        const settings = await settingsCommands.getAll();
+        const savedIdsJson = settings['quick_add_ids'];
+        if (savedIdsJson) {
+          const ids = JSON.parse(savedIdsJson);
+          if (Array.isArray(ids) && ids.length > 0) {
+            setQuickAddIds(ids);
           }
-          setQuickAddIds([]); // Clear IDs so Load More works (logic depends on quickAddIds.length === 0)
-          setTotalProductCount(total_count); // Use total DB count
         }
+      } catch (e) {
+        console.error("Failed to load quick add ids", e);
       }
-      setQuickAddPage(pageToFetch);
-    } catch (error) {
-      console.error("Error fetching quick add products", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    loadQuickAddIds();
+  }, []);
 
   const handleUpdateQuickAdd = async (newIds: number[]) => {
-    setQuickAddIds(newIds);
-    // Persist
     try {
-      const { settingsCommands } = await import('@/lib/tauri');
       await settingsCommands.set('quick_add_ids', JSON.stringify(newIds));
-
-      // Refresh display
-      const products = await productCommands.getByIds(newIds);
-      setTopProducts(products);
+      setQuickAddIds(newIds);
+      // Invalidate the query to refetch with new IDs
+      await queryClient.invalidateQueries({ queryKey: ['billing-products'] });
     } catch (err) {
       console.error("Failed to save quick add settings", err);
     }
@@ -211,52 +245,10 @@ export default function Billing() {
   };
 
   useEffect(() => {
-    // Reset to page 1 on category change
-    setQuickAddPage(1);
-    void fetchQuickAddProducts(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory]);
-
-  useEffect(() => {
     void fetchDefaultLocation();
   }, []);
 
-  // Debounced product search
-  useEffect(() => {
-    const controller = new AbortController();
-
-    const searchProducts = async () => {
-      const trimmed = productSearch.trim();
-      if (trimmed.length < 2) {
-        setSearchResults([]);
-        setTotalSearchCount(0);
-        setSearchPage(1);
-        setIsSearching(false);
-        // If search cleared, show Quick Add list again
-        return;
-      }
-
-      setIsSearching(true);
-      try {
-        // Reset to page 1 for new search
-        const data = await productCommands.getAll(1, 50, trimmed);
-        setSearchResults(data.items);
-        setTotalSearchCount(data.total_count);
-        setSearchPage(1);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setIsSearching(false);
-      }
-    };
-
-    const timer = setTimeout(searchProducts, 300);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [productSearch]);
-
+  // Customer phone lookup effect
   useEffect(() => {
     const controller = new AbortController();
     const lookup = async () => {
@@ -289,19 +281,6 @@ export default function Billing() {
     };
   }, [customerPhone]);
 
-  const loadMoreSearchResults = async () => {
-    const trimmed = productSearch.trim();
-    if (trimmed.length < 2) return;
-
-    const nextPage = searchPage + 1;
-    try {
-      const data = await productCommands.getAll(nextPage, 50, trimmed);
-      setSearchResults((prev) => [...prev, ...data.items]);
-      setSearchPage(nextPage);
-    } catch (error) {
-      console.error(error);
-    }
-  };
 
   const addToCart = (product: Product) => {
     const existing = cart.find((item) => item.product_id === product.id);
@@ -463,15 +442,14 @@ export default function Billing() {
       setSelectedCustomerId(null);
       setPaymentMethod('Cash');
       setInitialPaid(0);
-      await fetchQuickAddProducts();
-      await fetchRecentInvoices();
+      // Invalidate queries to refresh product stock and recent invoices
+      await queryClient.invalidateQueries({ queryKey: ['billing-products'] });
+      await queryClient.invalidateQueries({ queryKey: ['recent-invoices-billing'] });
     } catch (error) {
       console.error(error);
       alert('Checkout failed: ' + error);
     }
   };
-
-  if (loading) return <div>Loading...</div>;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -724,7 +702,11 @@ export default function Billing() {
           </div>
 
           <div className="space-y-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
-            {recentInvoices.length === 0 ? (
+            {isRecentInvoicesLoading ? (
+              <div className="text-center py-6 text-sm text-muted-foreground">
+                Loading recent invoices...
+              </div>
+            ) : recentInvoices.length === 0 ? (
               <div className="text-center py-6 text-sm text-muted-foreground">
                 No invoices yet.
               </div>
@@ -816,13 +798,14 @@ export default function Billing() {
               {searchResults.length === 0 && !isSearching && (
                 <div className="text-muted-foreground">No products found</div>
               )}
-              {searchResults.length < totalSearchCount && (
+              {hasMoreSearch && (
                 <div className="col-span-1 md:col-span-2 pt-2">
                   <button
-                    onClick={loadMoreSearchResults}
-                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                    onClick={() => fetchNextSearch()}
+                    disabled={isFetchingMoreSearch}
+                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-medium rounded-md transition-colors"
                   >
-                    Load More Results
+                    {isFetchingMoreSearch ? 'Loading...' : `Load More Results (${totalSearchCount - searchResults.length} remaining)`}
                   </button>
                 </div>
               )}
@@ -863,45 +846,52 @@ export default function Billing() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
-              {topProducts.map((product, index) => (
-                <button
-                  type="button"
-                  key={product.id}
-                  className="card text-left hover:-translate-y-0.5 transition relative"
-                  onClick={() => addToCart(product)}
-                >
-                  <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500">
-                    {index + 1}
-                  </div>
-                  <div className="flex gap-3">
-                    <EntityThumbnail
-                      entityId={product.id}
-                      entityType="product"
-                      imagePath={product.image_path}
-                      size="md"
-                    />
-                    <div className="flex-1 min-w-0 pr-6">
-                      <div className="font-semibold truncate">{product.name}</div>
-                      <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
-                      <div className="flex justify-between mt-2 text-sm">
-                        <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
-                        <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
-                          Stock: {product.stock_quantity}
-                        </span>
+              {isQuickAddLoading && topProducts.length === 0 ? (
+                <div className="col-span-1 md:col-span-2 text-center text-sm text-muted-foreground py-6">
+                  Loading products...
+                </div>
+              ) : (
+                topProducts.map((product, index) => (
+                  <button
+                    type="button"
+                    key={product.id}
+                    className="card text-left hover:-translate-y-0.5 transition relative"
+                    onClick={() => addToCart(product)}
+                  >
+                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500">
+                      {index + 1}
+                    </div>
+                    <div className="flex gap-3">
+                      <EntityThumbnail
+                        entityId={product.id}
+                        entityType="product"
+                        imagePath={product.image_path}
+                        size="md"
+                      />
+                      <div className="flex-1 min-w-0 pr-6">
+                        <div className="font-semibold truncate">{product.name}</div>
+                        <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
+                        <div className="flex justify-between mt-2 text-sm">
+                          <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
+                          <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
+                            Stock: {product.stock_quantity}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))
+              )}
             </div>
             {/* Load More for Quick Add */}
-            {topProducts.length < totalProductCount && (selectedCategory || quickAddIds.length === 0) && (
+            {hasMoreQuickAdd && (
               <div className="pt-2">
                 <button
-                  onClick={() => fetchQuickAddProducts(quickAddPage + 1)}
-                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md transition-colors"
+                  onClick={() => fetchNextQuickAdd()}
+                  disabled={isFetchingMoreQuickAdd}
+                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-medium rounded-md transition-colors"
                 >
-                  Load More Products ({totalProductCount - topProducts.length} remaining)
+                  {isFetchingMoreQuickAdd ? 'Loading...' : `Load More Products (${totalProductCount - topProducts.length} remaining)`}
                 </button>
               </div>
             )}

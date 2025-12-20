@@ -22,22 +22,46 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const SESSION_KEY = 'inventory_user_session';
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
     const pathname = usePathname();
 
+    // Restore session from sessionStorage on mount for faster navigation
     useEffect(() => {
+        try {
+            const savedSession = sessionStorage.getItem(SESSION_KEY);
+            if (savedSession) {
+                const userData = JSON.parse(savedSession) as User;
+                setUser(userData);
+            }
+        } catch (e) {
+            console.error('Failed to restore session:', e);
+        }
         setLoading(false);
     }, []);
 
     const login = (userData: User) => {
+        // Save to sessionStorage for faster subsequent loads
+        try {
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(userData));
+        } catch (e) {
+            console.error('Failed to save session:', e);
+        }
         setUser(userData);
         router.push('/');
     };
 
     const logout = () => {
+        // Clear session
+        try {
+            sessionStorage.removeItem(SESSION_KEY);
+        } catch (e) {
+            console.error('Failed to clear session:', e);
+        }
         setUser(null);
         router.push('/login');
     };
