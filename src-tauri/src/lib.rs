@@ -206,6 +206,9 @@ pub fn run() {
       commands::check_ai_sidecar_status,
       commands::check_sidecar_downloaded,
       commands::download_ai_sidecar,
+      commands::export_csv,
+      commands::import_csv_chunk,
+      commands::scan_duplicates,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

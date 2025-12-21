@@ -9,10 +9,26 @@ export type DateRange = {
   label: string;
 };
 
-const formatDate = (date: Date): string => {
-  return date.toISOString().split('T')[0];
+const getISTDate = (): Date => {
+  const now = new Date();
+  const istString = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata' }).format(now);
+  return new Date(istString);
 };
 
+// We need a custom formatter because toISOString() converts back to UTC, 
+// potentially shifting the date back by 5.5 hrs (e.g., 2am IST becomes 8:30pm Previous Day UTC).
+const formatISTDate = (date: Date): string => {
+  // Use Intl to force Asia/Kolkata output in YYYY-MM-DD
+  // en-CA is YYYY-MM-DD
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+};
+
+// Restore formatDisplayDate for UI
 const formatDisplayDate = (dateStr: string): string => {
   if (dateStr === '2000-01-01') return 'All time';
   const date = new Date(dateStr);
@@ -20,36 +36,37 @@ const formatDisplayDate = (dateStr: string): string => {
 };
 
 const getDateRanges = (): Record<string, () => DateRange> => {
-  const today = new Date();
+  const today = getISTDate();
   today.setHours(0, 0, 0, 0);
 
   return {
     '1d': () => {
-      return { startDate: formatDate(today), endDate: formatDate(today), label: 'D' };
+      // For Day filter, we want strict start of IST day to end of IST day
+      return { startDate: formatISTDate(today), endDate: formatISTDate(today), label: 'D' };
     },
     '7d': () => {
       const start = new Date(today);
       start.setDate(start.getDate() - 6);
-      return { startDate: formatDate(start), endDate: formatDate(today), label: 'W' };
+      return { startDate: formatISTDate(start), endDate: formatISTDate(today), label: 'W' };
     },
     '30d': () => {
       const start = new Date(today);
       start.setDate(start.getDate() - 29);
-      return { startDate: formatDate(start), endDate: formatDate(today), label: 'M' };
+      return { startDate: formatISTDate(start), endDate: formatISTDate(today), label: 'M' };
     },
     '90d': () => {
       const start = new Date(today);
       start.setDate(start.getDate() - 89);
-      return { startDate: formatDate(start), endDate: formatDate(today), label: 'Q' };
+      return { startDate: formatISTDate(start), endDate: formatISTDate(today), label: 'Q' };
     },
     '1y': () => {
       const start = new Date(today);
       start.setDate(start.getDate() - 364);
-      return { startDate: formatDate(start), endDate: formatDate(today), label: 'Y' };
+      return { startDate: formatISTDate(start), endDate: formatISTDate(today), label: 'Y' };
     },
     'all': () => ({
       startDate: '2000-01-01',
-      endDate: formatDate(today),
+      endDate: formatISTDate(today),
       label: 'All',
     }),
   };
@@ -97,8 +114,8 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
             key={opt.key}
             onClick={() => handleSelect(opt.key)}
             className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-all ${isActive(opt.key)
-                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
           >
             {opt.label}

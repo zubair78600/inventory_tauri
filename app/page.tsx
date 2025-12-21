@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   DateRangeFilter,
   getDateRangeForKey,
@@ -17,7 +17,7 @@ import {
   RegionSalesChart,
   CashflowChart,
 } from '@/components/dashboard';
-import type { DateRange } from '@/components/dashboard';
+import type { DateRange, DateRangeKey } from '@/components/dashboard';
 import {
   analyticsCommands,
   type DashboardStats,
@@ -57,6 +57,61 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
   const [autoRangeApplied, setAutoRangeApplied] = useState(false);
   const [hasUserChangedRange, setHasUserChangedRange] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Prefetch other ranges for smooth switching (Deferred)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const ranges: DateRangeKey[] = ['1d', '7d', '30d', '90d', '1y'];
+
+      ranges.forEach(key => {
+        const range = getDateRangeForKey(key);
+        const gran = getGranularity(range.startDate, range.endDate);
+
+        // Skip if it matches current range (already being fetched)
+        if (range.startDate === dateRange.startDate && range.endDate === dateRange.endDate) return;
+
+        // Prefetch Sales Analytics
+        queryClient.prefetchQuery({
+          queryKey: ['sales-analytics', range.startDate, range.endDate],
+          queryFn: () => analyticsCommands.getSalesAnalytics(range.startDate, range.endDate),
+          staleTime: 60_000,
+        });
+
+        // Prefetch Revenue Trend
+        queryClient.prefetchQuery({
+          queryKey: ['revenue-trend', range.startDate, range.endDate, gran],
+          queryFn: () => analyticsCommands.getRevenueTrend(range.startDate, range.endDate, gran),
+          staleTime: 60_000,
+        });
+
+        // Prefetch Top Products
+        queryClient.prefetchQuery({
+          queryKey: ['top-products', range.startDate, range.endDate],
+          queryFn: () => analyticsCommands.getTopProducts(range.startDate, range.endDate, 10),
+          staleTime: 60_000,
+        });
+
+        // Prefetch Payment Methods
+        queryClient.prefetchQuery({
+          queryKey: ['payment-methods', range.startDate, range.endDate],
+          queryFn: () => analyticsCommands.getSalesByPaymentMethod(range.startDate, range.endDate),
+          staleTime: 60_000,
+        });
+
+        // Prefetch Customer Analytics
+        queryClient.prefetchQuery({
+          queryKey: ['customer-analytics', range.startDate, range.endDate],
+          queryFn: () => analyticsCommands.getCustomerAnalytics(range.startDate, range.endDate),
+          staleTime: 60_000,
+        });
+
+        // We can prefetch others too if needed, but these are the main ones visible "above fold" or high priority
+      });
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [queryClient, dateRange]);
 
   const granularity = useMemo(
     () => getGranularity(dateRange.startDate, dateRange.endDate),

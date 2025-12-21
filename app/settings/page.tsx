@@ -6,6 +6,7 @@ import { ask, save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { settingsCommands, imageCommands, GoogleImageResult, EntityModification } from '@/lib/tauri';
 import { PdfConfiguration } from '@/components/settings/PdfConfiguration';
+import { DataMigrationSettings } from '@/components/settings/DataMigrationSettings';
 
 type DeletedItem = {
   id: number;
@@ -1462,6 +1463,8 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+
+          <DataMigrationSettings />
         </div>
       )}
 

@@ -45,12 +45,14 @@ const LazyChart = dynamic(() => import('./ResultChart'), {
     loading: () => <div className="h-32 flex items-center justify-center text-xs text-muted-foreground">Loading chart...</div>
 });
 
-import { listen } from '@tauri-apps/api/event';
-import { getVersion } from '@tauri-apps/api/app';
+import { cn } from '@/lib/utils';
+import { settingsCommands } from '@/lib/tauri';
 import { DownloadProgress } from './DownloadProgress';
 import { TrainingFeedbackModal } from './TrainingFeedbackModal';
-import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { listen } from '@tauri-apps/api/event';
+import { getVersion } from '@tauri-apps/api/app';
+
 
 interface AIChatDialogProps {
     open: boolean;
@@ -416,6 +418,71 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         }
     };
 
+
+
+    /**
+     * Checks if the user's input matches a local pattern (Greetings, Identity).
+     * Returns a simulated QueryResult if matched, or null otherwise.
+     */
+    const checkLocalResponse = async (text: string): Promise<any | null> => {
+        const q_clean = text.toLowerCase().replace(/[!?.,]/g, '').trim();
+
+        // --- 1. Identity Check ---
+        const identityPatterns = ['who are you', 'what are you', 'who is this', 'introduce yourself', 'tell me about yourself', 'your identity', 'hu who are you', 'who r u', 'hu are you'];
+        if (identityPatterns.some(p => q_clean.includes(p))) {
+            try {
+                // Fetch settings locally
+                const settings = await settingsCommands.getAll();
+                return {
+                    success: true,
+                    sql: "IDENTITY:LOCAL_OVERRIDE", // Marker
+                    results: [{
+                        type: 'identity',
+                        company_name: settings['company_name'] || 'Inventory Intelligence',
+                        address: settings['company_address'] || '',
+                        phone: settings['company_phone'] || '',
+                        email: settings['company_email'] || '',
+                        message: `I'm the AI assistant for **${settings['company_name'] || 'Inventory Intelligence'}**. I can help you with inventory queries, customer information, sales analytics, and more.`
+                    }],
+                    sql_extraction_time_ms: 0,
+                    execution_time_ms: 0,
+                    total_time_ms: 0
+                };
+            } catch (e) {
+                console.error("Failed to fetch settings for identity:", e);
+                // Fallback if settings fail
+                return {
+                    success: true,
+                    results: [{
+                        type: 'identity',
+                        company_name: 'Inventory Intelligence',
+                        message: "I'm your AI Inventory Assistant."
+                    }],
+                    sql: "IDENTITY:FALLBACK",
+                    sql_extraction_time_ms: 0, execution_time_ms: 0, total_time_ms: 0
+                };
+            }
+        }
+
+        // --- 2. Greeting Check ---
+        const greetingPatterns = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola', 'hu'];
+        // Check exact match or starts with greeting + space
+        if (greetingPatterns.includes(q_clean) || greetingPatterns.some(g => q_clean.startsWith(g + ' '))) {
+            return {
+                success: true,
+                sql: "CONVERSATIONAL:LOCAL",
+                results: [{
+                    message: "Hello! How can I help you today? You can ask me about products, customers, suppliers, invoices, or sales analytics."
+                }],
+                sql_extraction_time_ms: 0,
+                execution_time_ms: 0,
+                total_time_ms: 0
+            };
+        }
+
+        return null;
+    };
+
     const handleSend = async (text: string) => {
         if (!text.trim() || isLoading) return;
 
@@ -430,8 +497,23 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         setInput('');
         setIsLoading(true);
 
+        setIsLoading(true);
+
         try {
-            const response = await aiChatApi.query(userMessage.content);
+            // 1. Check Local Response (Frontend Interception)
+            const localResponse = await checkLocalResponse(userMessage.content);
+
+            let response;
+            if (localResponse) {
+                console.log("Using local response:", localResponse);
+                response = localResponse;
+                // Add a small artificial delay for realism (optional, but feels better)
+                await new Promise(r => setTimeout(r, 600));
+            } else {
+                // 2. Fallback to Backend API
+                response = await aiChatApi.query(userMessage.content);
+            }
+
             const assistantMessage: ChatMessage = {
                 id: generateMessageId(),
                 role: 'assistant',
