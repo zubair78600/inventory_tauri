@@ -284,7 +284,7 @@ export default function Inventory() {
   if (loading && !displayedProducts.length) return <div>Loading...</div>;
 
   return (
-    <div className="space-y-4 flex flex-col h-full min-h-[calc(100vh-6rem)] pb-8">
+    <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col relative">
       <div className="flex items-center justify-between h-14 min-h-[3.5rem] sticky top-0 bg-slate-50 dark:bg-slate-900 z-30 px-1">
         <div className="flex flex-col items-start gap-0.5">
           <div className="flex items-center gap-[25px]">
@@ -708,9 +708,9 @@ export default function Inventory() {
       }
 
       {/* Products Table - Always Visible */}
-      <div className="w-full flex-1 relative">
-        <Card className="table-container p-0 min-h-[400px] flex flex-col">
-          <div className="flex-1 overflow-x-auto">
+      <div className="w-full flex-1 overflow-hidden">
+        <Card className="table-container p-0 h-full flex flex-col">
+          <div className="flex-1 overflow-y-auto">
             <Table>
               <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
                 <TableRow>

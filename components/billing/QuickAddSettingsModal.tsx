@@ -137,17 +137,20 @@ export function QuickAddSettingsModal({ isOpen, onClose, currentIds, onSave }: Q
                     <div className="space-y-3">
                         {viewMode === 'search' ? (
                             <div className="flex items-center justify-between gap-4">
-                                <div className="relative group w-[30%]">
-                                    {!searchQuery && (
-                                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none group-focus-within:hidden transition-opacity" />
-                                    )}
-                                    <input
-                                        className={`w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg py-2 text-sm shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 focus:ring-2 focus:ring-primary/50 transition-all ${searchQuery ? 'pl-3' : 'pl-10'}`}
-                                        placeholder="Search products..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        autoFocus
-                                    />
+                                <div className="flex items-center gap-3 flex-1">
+                                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Search & Pin It</h3>
+                                    <div className="relative group w-full max-w-sm">
+                                        {!searchQuery && (
+                                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none group-focus-within:hidden transition-opacity" />
+                                        )}
+                                        <input
+                                            className={`w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg py-2 text-sm shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 focus:ring-2 focus:ring-primary/50 transition-all ${searchQuery ? 'pl-3' : 'pl-10'}`}
+                                            placeholder="Search products..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
                                 </div>
 
                                 <button
@@ -174,12 +177,14 @@ export function QuickAddSettingsModal({ isOpen, onClose, currentIds, onSave }: Q
                             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm max-h-56 overflow-y-auto">
                                 {(viewMode === 'top-selling' ? topSellingProducts : searchResults).map((p, index) => {
                                     const isSelected = selectedProducts.some(sp => sp.id === p.id);
+                                    const isOutOfStock = p.stock_quantity <= 0;
+
                                     return (
                                         <button
                                             key={p.id}
-                                            className="flex items-center w-full px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-left border-b border-slate-100 dark:border-slate-800 last:border-0 transition-colors disabled:opacity-50"
-                                            onClick={() => handleAdd(p)}
-                                            disabled={isSelected}
+                                            className={`flex items-center w-full px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-left border-b border-slate-100 dark:border-slate-800 last:border-0 transition-colors disabled:opacity-50 disabled:hover:bg-transparent ${isOutOfStock ? 'opacity-60 grayscale' : ''}`}
+                                            onClick={() => !isOutOfStock && handleAdd(p)}
+                                            disabled={isSelected || isOutOfStock}
                                         >
                                             {viewMode === 'top-selling' && (
                                                 <span className="w-6 text-center text-xs font-bold text-slate-400 mr-2">#{index + 1}</span>
@@ -197,8 +202,13 @@ export function QuickAddSettingsModal({ isOpen, onClose, currentIds, onSave }: Q
                                                 </div>
                                                 <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                                                     <span>SKU: {p.sku}</span>
+                                                    {isOutOfStock ? (
+                                                        <span className="text-red-500 font-medium bg-red-50 px-1.5 py-0.5 rounded">Out of Stock</span>
+                                                    ) : (
+                                                        <span className="text-slate-400">Stock: {p.stock_quantity}</span>
+                                                    )}
                                                     {/* Show badge for top selling view, or if significant sales */}
-                                                    {viewMode === 'top-selling' && (
+                                                    {viewMode === 'top-selling' && !isOutOfStock && (
                                                         <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
                                                             Sold: {p.total_sold ?? 0}
                                                         </span>
@@ -208,6 +218,8 @@ export function QuickAddSettingsModal({ isOpen, onClose, currentIds, onSave }: Q
 
                                             {isSelected ? (
                                                 <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded">Added</span>
+                                            ) : isOutOfStock ? (
+                                                <span className="text-xs text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded">OOS</span>
                                             ) : (
                                                 <div className="h-7 w-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600">
                                                     <Plus size={14} />

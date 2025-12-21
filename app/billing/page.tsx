@@ -9,7 +9,7 @@ import { useLocationDefaults } from '@/hooks/useLocationDefaults';
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { generateInvoicePDF } from '@/lib/pdf-generator';
-import { FileText, Clock, Loader2 } from 'lucide-react';
+import { FileText, Clock, Loader2, Pin } from 'lucide-react';
 
 type CartItem = {
   product_id: number;
@@ -69,7 +69,19 @@ export default function Billing() {
     return () => clearTimeout(timer);
   }, [productSearch]);
 
-  // Infinite query for Quick Add products (cached, fast loading)
+  // 1. Fetch Pinned Products (Quick List) separately
+  const { data: pinnedProducts } = useQuery({
+    queryKey: ['pinned-products', quickAddIds],
+    queryFn: async () => {
+      if (quickAddIds.length === 0) return [];
+      return await productCommands.getByIds(quickAddIds);
+    },
+    enabled: quickAddIds.length > 0 && !selectedCategory, // Only fetch when in "All Categories" mode
+    staleTime: 60 * 1000,
+  });
+
+  // 2. Fetch All Products (Infinite Scroll)
+  // We ALWAYS fetch from top selling/all endpoint now, even if we have quick add ids
   const {
     data: quickAddData,
     fetchNextPage: fetchNextQuickAdd,
@@ -77,20 +89,13 @@ export default function Billing() {
     isFetchingNextPage: isFetchingMoreQuickAdd,
     isLoading: isQuickAddLoading,
   } = useInfiniteQuery({
-    queryKey: ['billing-products', selectedCategory, quickAddIds],
+    queryKey: ['billing-products', selectedCategory], // Removed quickAddIds from key to prevent re-fetch on ID change
     queryFn: async ({ pageParam = 1 }) => {
-      if (quickAddIds.length > 0 && !selectedCategory) {
-        // Manual IDs mode - fetch all at once, no pagination
-        const products = await productCommands.getByIds(quickAddIds);
-        return { items: products, total_count: products.length };
-      }
-      // Top selling with pagination
+      // Always fetch paginated list
       return await productCommands.getTopSelling(pageSize, pageParam, selectedCategory || undefined);
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => {
-      // No pagination for manual IDs mode
-      if (quickAddIds.length > 0 && !selectedCategory) return undefined;
       const loadedCount = allPages.flatMap(p => p.items).length;
       if (loadedCount < lastPage.total_count) {
         return allPages.length + 1;
@@ -98,13 +103,27 @@ export default function Billing() {
       return undefined;
     },
     placeholderData: keepPreviousData,
-    staleTime: 30 * 1000, // Cache for 30 seconds
+    staleTime: 30 * 1000,
   });
 
-  // Flatten quick add products
+  // Flatten and Merge: Pinned First + Rest
   const topProducts = useMemo(() => {
-    return quickAddData?.pages.flatMap(page => page.items) ?? [];
-  }, [quickAddData]);
+    const pinned = pinnedProducts || [];
+    const infinite = quickAddData?.pages.flatMap(page => page.items) ?? [];
+
+    if (selectedCategory) {
+      // If specific category is selected, just show the infinite filtered list
+      return infinite;
+    }
+
+    // Merge: Pinned -> Infinite (deduplicated)
+    // Filter pinned items: must be in stock (> 0)
+    const activePinned = pinned.filter(p => p.stock_quantity > 0);
+    const pinnedIds = new Set(activePinned.map(p => p.id));
+    const filteredInfinite = infinite.filter(p => !pinnedIds.has(p.id));
+
+    return [...activePinned, ...filteredInfinite];
+  }, [quickAddData, pinnedProducts, selectedCategory]);
 
   const totalProductCount = quickAddData?.pages[0]?.total_count ?? 0;
 
@@ -452,7 +471,7 @@ export default function Billing() {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-6 lg:grid-cols-2 h-[calc(100vh-6rem)] overflow-hidden">
       {QuickAddModal && (
         <QuickAddModal
           isOpen={showQuickAddSettings}
@@ -461,8 +480,8 @@ export default function Billing() {
           onSave={handleUpdateQuickAdd}
         />
       )}
-      <div>
-        <div className="card space-y-4">
+      <div className="h-full flex flex-col overflow-hidden">
+        <div className="card space-y-4 flex-1 overflow-y-auto">
           <h2 className="section-title">Current Bill</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -692,57 +711,57 @@ export default function Billing() {
           <button className="btn btn-primary w-full" onClick={handleCheckout}>
             Generate Invoice
           </button>
-        </div>
 
-        {/* Recent Invoices Section */}
-        <div className="card space-y-4">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-slate-500" />
-            <h2 className="section-title mb-0">Recent Invoices</h2>
-          </div>
+          {/* Recent Invoices Section */}
+          <div className="card space-y-4">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-slate-500" />
+              <h2 className="section-title mb-0">Recent Invoices</h2>
+            </div>
 
-          <div className="space-y-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
-            {isRecentInvoicesLoading ? (
-              <div className="text-center py-6 text-sm text-muted-foreground">
-                Loading recent invoices...
-              </div>
-            ) : recentInvoices.length === 0 ? (
-              <div className="text-center py-6 text-sm text-muted-foreground">
-                No invoices yet.
-              </div>
-            ) : (
-              recentInvoices.map((inv) => (
-                <div key={inv.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <div className="space-y-1">
-                    <div className="font-semibold text-sm text-slate-900 dark:text-slate-100">
-                      {inv.invoice_number}
-                    </div>
-                    <div className="text-xs text-slate-500 flex items-center gap-2">
-                      <span>{new Date(inv.created_at).toLocaleString()}</span>
-                      <span className="text-slate-300">•</span>
-                      <span className="font-medium">₹{inv.total_amount.toFixed(0)}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleViewPdf(inv)}
-                    className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
-                    title="View Invoice PDF"
-                    disabled={generatingPdfId === inv.id}
-                  >
-                    {generatingPdfId === inv.id ? (
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                    ) : (
-                      <FileText className="w-5 h-5" />
-                    )}
-                  </button>
+            <div className="space-y-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
+              {isRecentInvoicesLoading ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  Loading recent invoices...
                 </div>
-              ))
-            )}
+              ) : recentInvoices.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  No invoices yet.
+                </div>
+              ) : (
+                recentInvoices.map((inv) => (
+                  <div key={inv.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+                        {inv.invoice_number}
+                      </div>
+                      <div className="text-xs text-slate-500 flex items-center gap-2">
+                        <span>{new Date(inv.created_at).toLocaleString()}</span>
+                        <span className="text-slate-300">•</span>
+                        <span className="font-medium">₹{inv.total_amount.toFixed(0)}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleViewPdf(inv)}
+                      className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
+                      title="View Invoice PDF"
+                      disabled={generatingPdfId === inv.id}
+                    >
+                      {generatingPdfId === inv.id ? (
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                      ) : (
+                        <FileText className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 h-full flex flex-col overflow-hidden">
         <div className="flex items-center justify-between">
           <h2 className="section-title">
             Products {isSearching || productSearch.length >= 2 ? `(${totalSearchCount})` : `(${totalProductCount})`}
@@ -812,8 +831,8 @@ export default function Billing() {
             </div>
           </div>
         ) : (
-          <div>
-            <div className="mb-4">
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+            <div className="mb-4 flex-shrink-0">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-3">
                   <h3 className="text-lg font-semibold whitespace-nowrap">Quick Add</h3>
@@ -845,7 +864,7 @@ export default function Billing() {
               <p className="text-sm text-muted-foreground">{totalProductCount} total products</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 overflow-y-auto pr-1">
               {isQuickAddLoading && topProducts.length === 0 ? (
                 <div className="col-span-1 md:col-span-2 text-center text-sm text-muted-foreground py-6">
                   Loading products...
@@ -859,7 +878,7 @@ export default function Billing() {
                     onClick={() => addToCart(product)}
                   >
                     <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500">
-                      {index + 1}
+                      {quickAddIds.includes(product.id) ? <Pin size={12} className="fill-current" /> : index + 1}
                     </div>
                     <div className="flex gap-3">
                       <EntityThumbnail
@@ -900,45 +919,47 @@ export default function Billing() {
       </div>
 
       {/* Success Modal */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl text-center space-y-4 animate-in fade-in zoom-in duration-200">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-              <svg
-                className="h-6 w-6 text-green-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+      {
+        showSuccessModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl text-center space-y-4 animate-in fade-in zoom-in duration-200">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                <svg
+                  className="h-6 w-6 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Invoice Generated!</h3>
+                <p className="text-sm text-slate-500">
+                  The invoice has been successfully created and saved.
+                </p>
+              </div>
+              <button
+                className="btn btn-primary w-full"
+                onClick={() => setShowSuccessModal(false)}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
+                Done
+              </button>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">Invoice Generated!</h3>
-              <p className="text-sm text-slate-500">
-                The invoice has been successfully created and saved.
-              </p>
-            </div>
-            <button
-              className="btn btn-primary w-full"
-              onClick={() => setShowSuccessModal(false)}
-            >
-              Done
-            </button>
           </div>
-        </div>
-      )}
+        )
+      }
       <PDFPreviewDialog
         open={showPdfPreview}
         onOpenChange={setShowPdfPreview}
         url={pdfUrl}
         fileName={pdfFileName}
       />
-    </div>
+    </div >
   );
 }
