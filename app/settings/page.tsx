@@ -6,6 +6,7 @@ import { ask, save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { settingsCommands, imageCommands, GoogleImageResult, EntityModification } from '@/lib/tauri';
 import { PdfConfiguration } from '@/components/settings/PdfConfiguration';
+import { InvoiceSeriesSettings } from '@/components/settings/InvoiceSeriesSettings';
 import { DataMigrationSettings } from '@/components/settings/DataMigrationSettings';
 
 type DeletedItem = {
@@ -1123,40 +1124,35 @@ export default function SettingsPage() {
       {/* General Tab */}
       {activeTab === 'general' && (
         <div className="space-y-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Initial Setup & Maintenance</h2>
-            <div className="space-y-4">
-
-            </div>
-          </div>
+          {/* Invoice Series Settings - Compact (Card included in component) */}
+          <InvoiceSeriesSettings />
 
           {/* Current Place Defaults */}
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Current Place</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-              Set your default location. This will be automatically filled in new invoices.
-            </p>
+          <div className="card p-4">
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h2 className="text-base font-semibold">Current Place</h2>
+                <p className="text-xs text-slate-500">Default location for new invoices.</p>
+              </div>
+              <button
+                onClick={() => void handleSaveDefaultLocation()}
+                disabled={savingSettings}
+                className="btn btn-primary h-8 text-xs"
+              >
+                {savingSettings ? (
+                  <Loader2 size={14} className="animate-spin mr-1.5" />
+                ) : (
+                  <Save size={14} className="mr-1.5" />
+                )}
+                Save Defaults
+              </button>
+            </div>
 
-            <div className="max-w-3xl">
+            <div className="max-w-4xl">
               <LocationSelector
                 value={defaultLocation}
                 onChange={setDefaultLocation}
               />
-
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => void handleSaveDefaultLocation()}
-                  disabled={savingSettings}
-                  className="btn btn-primary"
-                >
-                  {savingSettings ? (
-                    <Loader2 size={16} className="animate-spin mr-2" />
-                  ) : (
-                    <Save size={16} className="mr-2" />
-                  )}
-                  Save Defaults
-                </button>
-              </div>
             </div>
           </div>
 
@@ -1167,110 +1163,108 @@ export default function SettingsPage() {
       {/* API Tab */}
       {activeTab === 'api' && (
         <div className="space-y-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Google Image Search API</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-              Configure Google Custom Search API to enable searching product images from Google.
-            </p>
-
-            <div className="space-y-4 max-w-xl">
+          <div className="card p-4">
+            <div className="flex justify-between items-start mb-4">
               <div>
-                <label className="form-label">API Key</label>
+                <h2 className="text-base font-semibold">Google Image Search API</h2>
+                <p className="text-xs text-slate-500">Configure to enable product image search.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void handleVerifyApiConnection()}
+                  disabled={verifyingApi || !googleApiKey}
+                  className={`btn h-8 text-xs ${apiVerified === true ? 'btn-success bg-green-50 text-green-700 hover:bg-green-100 border-green-200' : 'btn-secondary'}`}
+                  title="Verify connection"
+                >
+                  {verifyingApi ? (
+                    <Loader2 size={12} className="animate-spin mr-1.5" />
+                  ) : apiVerified === true ? (
+                    <CheckCircle size={12} className="mr-1.5" />
+                  ) : apiVerified === false ? (
+                    <XCircle size={12} className="mr-1.5 text-red-500" />
+                  ) : (
+                    <RefreshCw size={12} className="mr-1.5" />
+                  )}
+                  {apiVerified === true ? 'Verified' : 'Verify'}
+                </button>
+                <button
+                  onClick={() => void handleSaveGoogleSettings()}
+                  disabled={savingSettings}
+                  className="btn btn-primary h-8 text-xs"
+                >
+                  {savingSettings ? (
+                    <Loader2 size={12} className="animate-spin mr-1.5" />
+                  ) : (
+                    <Save size={12} className="mr-1.5" />
+                  )}
+                  Save
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mb-6">
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">API Key</label>
                 <div className="relative">
                   <input
                     type={showApiKey ? 'text' : 'password'}
-                    className="form-input pr-10"
+                    className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:ring-1 focus-visible:ring-primary pr-8"
                     value={googleApiKey}
                     onChange={(e) => setGoogleApiKey(e.target.value)}
-                    placeholder="Enter your Google API Key"
+                    placeholder="Enter API Key"
                   />
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
                   >
-                    {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="form-label">Search Engine ID (CX)</label>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Search Engine ID (CX)</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:ring-1 focus-visible:ring-primary"
                   value={googleCxId}
                   onChange={(e) => setGoogleCxId(e.target.value)}
-                  placeholder="Enter your Custom Search Engine ID"
+                  placeholder="Enter CX ID"
                 />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  onClick={() => void handleSaveGoogleSettings()}
-                  disabled={savingSettings}
-                  className="btn btn-primary"
-                >
-                  {savingSettings ? (
-                    <Loader2 size={16} className="animate-spin mr-2" />
-                  ) : (
-                    <Save size={16} className="mr-2" />
-                  )}
-                  Save Settings
-                </button>
-
-                <button
-                  onClick={() => void handleVerifyApiConnection()}
-                  disabled={verifyingApi || !googleApiKey}
-                  className={`btn ${apiVerified === true ? 'btn-success bg-green-50 text-green-700 hover:bg-green-100 border-green-200' : 'btn-secondary'}`}
-                  title="Verify connection"
-                >
-                  {verifyingApi ? (
-                    <Loader2 size={16} className="animate-spin mr-2" />
-                  ) : apiVerified === true ? (
-                    <CheckCircle size={16} className="mr-2" />
-                  ) : apiVerified === false ? (
-                    <XCircle size={16} className="mr-2 text-red-500" />
-                  ) : (
-                    <RefreshCw size={16} className="mr-2" />
-                  )}
-                  {apiVerified === true ? 'Verified' : 'Verify API'}
-                </button>
-
-                {settingsSuccess && (
-                  <span className="text-sm text-green-600 dark:text-green-400 ml-2 animate-in fade-in slide-in-from-left-2">
-                    Saved!
-                  </span>
-                )}
               </div>
             </div>
 
-            {/* Test Area */}
-            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-              <h3 className="text-md font-medium mb-3">Test Configuration</h3>
-              <div className="flex gap-2 max-w-xl">
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Search query (e.g. 'iphone 13')"
-                  value={testQuery}
-                  onChange={(e) => setTestQuery(e.target.value)}
-                />
-                <button
-                  onClick={() => void handleTestApi()}
-                  disabled={testing || !testQuery}
-                  className="btn btn-secondary whitespace-nowrap"
-                >
-                  {testing ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                  Test Search
-                </button>
+            {/* Test Area - Inline */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">Test Configuration:</h3>
+                <div className="flex gap-2 flex-1 max-w-sm">
+                  <input
+                    type="text"
+                    className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    placeholder="Search term..."
+                    value={testQuery}
+                    onChange={(e) => setTestQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleTestApi()}
+                  />
+                  <button
+                    onClick={() => void handleTestApi()}
+                    disabled={testing || !testQuery}
+                    className="btn btn-secondary h-8 text-xs whitespace-nowrap px-3"
+                  >
+                    {testing ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                    <span className="ml-1.5">Search</span>
+                  </button>
+                </div>
+                {testError && <span className="text-xs text-red-500 truncate" title={testError}>{testError}</span>}
               </div>
-              {testError && <p className="text-sm text-red-500 mt-2">{testError}</p>}
+
               {testResults.length > 0 && (
-                <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                   {testResults.map((res, i) => (
-                    <div key={i} className="w-24 h-24 flex-shrink-0 border rounded bg-slate-50 relative">
-                      <img src={res.thumbnail_link} alt={res.title} className="w-full h-full object-cover rounded" />
+                    <div key={i} className="w-16 h-16 flex-shrink-0 border rounded bg-slate-50 relative overflow-hidden group">
+                      <img src={res.thumbnail_link} alt={res.title} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                     </div>
                   ))}
                 </div>
@@ -1322,10 +1316,13 @@ export default function SettingsPage() {
 
       {/* Users Tab - Restored */}
       {activeTab === 'users' && user?.role === 'admin' && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">User Management</h2>
-            <button className="btn btn-primary" onClick={() => {
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div>
+              <h2 className="text-base font-semibold">User Management</h2>
+              <p className="text-xs text-slate-500">Manage system access and permissions.</p>
+            </div>
+            <button className="btn btn-primary h-8 text-xs" onClick={() => {
               setEditingUser(null);
               setNewUser({ username: '', password: '', role: 'user', permissions: [] });
               setShowAddUser(true);
@@ -1334,30 +1331,30 @@ export default function SettingsPage() {
             </button>
           </div>
 
-          <div className="card overflow-hidden">
+          <div className="card overflow-hidden !p-0">
             <table className="w-full">
-              <thead className="bg-slate-50 dark:bg-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Username</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Created At</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-500">Actions</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Username</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Role</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Created At</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase text-slate-500">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {users.filter(u => u.username.toLowerCase() !== 'admin').map(u => (
-                  <tr key={u.id}>
-                    <td className="px-6 py-4 font-medium">{u.username}</td>
-                    <td className="px-6 py-4 capitalize">{u.role}</td>
-                    <td className="px-6 py-4 text-slate-500">{formatDate(u.created_at)}</td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button className="p-2 hover:bg-slate-100 rounded text-blue-600" onClick={() => startEditUser(u)}>
-                          <Edit size={16} />
+                  <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="px-4 py-2.5 font-medium text-xs">{u.username}</td>
+                    <td className="px-4 py-2.5 capitalize text-xs">{u.role}</td>
+                    <td className="px-4 py-2.5 text-slate-500 text-xs">{formatDate(u.created_at)}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="flex justify-end gap-1">
+                        <button className="p-1.5 hover:bg-slate-100 rounded text-blue-600" onClick={() => startEditUser(u)}>
+                          <Edit size={14} />
                         </button>
                         {u.username.toLowerCase() !== 'admin' && (
-                          <button className="p-2 hover:bg-slate-100 rounded text-red-600" onClick={() => handleDeleteUser(u.id)}>
-                            <Trash2 size={16} />
+                          <button className="p-1.5 hover:bg-slate-100 rounded text-red-600" onClick={() => handleDeleteUser(u.id)}>
+                            <Trash2 size={14} />
                           </button>
                         )}
                       </div>
@@ -1372,18 +1369,18 @@ export default function SettingsPage() {
 
       {/* Security Tab - Restored */}
       {activeTab === 'security' && (
-        <div className="space-y-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Security Settings</h2>
+        <div className="space-y-4">
+          <div className="card p-4">
+            <h2 className="text-base font-semibold mb-3">Security Settings</h2>
 
-            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-full ${biometricEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
-                  <Fingerprint size={24} />
+            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${biometricEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
+                  <Fingerprint size={18} />
                 </div>
                 <div>
-                  <h3 className="font-medium">Biometric Authentication</h3>
-                  <p className="text-sm text-slate-500">
+                  <h3 className="font-medium text-sm">Biometric Authentication</h3>
+                  <p className="text-xs text-slate-500">
                     {biometricCapability
                       ? `Use ${getBiometricTypeName(biometricCapability.biometryType)} to sign in`
                       : 'Biometric hardware not available'}
@@ -1394,19 +1391,19 @@ export default function SettingsPage() {
                 <button
                   onClick={() => void handleToggleBiometric()}
                   disabled={biometricLoading}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${biometricEnabled ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${biometricEnabled ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'
                     }`}
                 >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition z-10 ${biometricEnabled ? 'translate-x-6' : 'translate-x-1'
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition z-10 ${biometricEnabled ? 'translate-x-4' : 'translate-x-1'
                     }`} />
                 </button>
               ) : (
-                <span className="text-xs text-slate-400 italic">Not supported</span>
+                <span className="text-[10px] text-slate-400 italic">Not supported</span>
               )}
             </div>
             {biometricError && (
-              <div className="mt-4 p-3 bg-red-50 text-red-600 rounded text-sm flex gap-2 items-center">
-                <AlertTriangle size={16} />
+              <div className="mt-3 p-2 bg-red-50 text-red-600 rounded text-xs flex gap-2 items-center">
+                <AlertTriangle size={14} />
                 {biometricError}
               </div>
             )}
@@ -1416,12 +1413,12 @@ export default function SettingsPage() {
 
       {/* Themes Tab - Restored */}
       {activeTab === 'themes' && (
-        <div className="space-y-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Appearance</h2>
-            <p className="text-sm text-slate-600 mb-6">Customize the look and feel of the application.</p>
+        <div className="space-y-4">
+          <div className="card p-4">
+            <h2 className="text-base font-semibold mb-1">Appearance</h2>
+            <p className="text-xs text-slate-600 mb-4">Customize the look and feel.</p>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 w-fit">
               <span className="text-sm font-medium">Theme Preference:</span>
               <ModeToggle />
             </div>
@@ -1431,35 +1428,35 @@ export default function SettingsPage() {
 
       {/* AI Tab - Admin Only */}
       {activeTab === 'ai' && isMasterAdmin && (
-        <div className="space-y-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">AI Assistant Settings</h2>
-            <p className="text-sm text-slate-600 mb-6">
-              Enable or disable the AI assistant feature. When disabled, the AI button is hidden and the LLM does not run.
+        <div className="space-y-4">
+          <div className="card p-4">
+            <h2 className="text-base font-semibold mb-1">AI Assistant Settings</h2>
+            <p className="text-xs text-slate-600 mb-4">
+              Enable/Disable AI features.
             </p>
 
-            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-800">
               <div>
-                <p className="font-medium">AI Assistant</p>
-                <p className="text-sm text-slate-500">
-                  {aiEnabled ? 'Enabled - AI button is visible and LLM runs in background' : 'Disabled - AI button is hidden'}
+                <p className="font-medium text-sm">AI Assistant</p>
+                <p className="text-xs text-slate-500">
+                  {aiEnabled ? 'Enabled' : 'Disabled - AI hidden'}
                 </p>
               </div>
               <button
                 onClick={handleAiToggle}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${aiEnabled ? 'bg-primary' : 'bg-slate-300'
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${aiEnabled ? 'bg-primary' : 'bg-slate-300'
                   }`}
               >
                 <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiEnabled ? 'translate-x-6' : 'translate-x-1'
+                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${aiEnabled ? 'translate-x-4' : 'translate-x-1'
                     }`}
                 />
               </button>
             </div>
 
-            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>Note:</strong> Changing AI status requires a special password. AI is disabled by default on fresh installs.
+            <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-xs text-amber-800 dark:text-amber-200">
+                <strong>Note:</strong> Requires password confirmation.
               </p>
             </div>
           </div>

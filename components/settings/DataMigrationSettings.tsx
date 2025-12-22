@@ -272,44 +272,43 @@ export function DataMigrationSettings() {
     const hasMoreAdded = importStats ? visibleAddedCount < importStats.addedItems.length : false;
 
     return (
-        <div className="card space-y-6">
+        <div className="card p-4 space-y-4">
             <div className="flex items-start justify-between">
                 <div>
-                    <h2 className="text-lg font-semibold">Data Management</h2>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                        Export data to CSV or import new records.
+                    <h2 className="text-base font-semibold">Data Management</h2>
+                    <p className="text-xs text-slate-500">
+                        Export/Import system data.
                     </p>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Export Section */}
-                <div className="space-y-4">
-                    <h3 className="text-md font-medium flex items-center gap-2">
-                        <Download size={18} className="text-blue-600" />
+                <div className="space-y-2">
+                    <h3 className="text-sm font-medium flex items-center gap-1.5">
+                        <Download size={14} className="text-blue-600" />
                         Export Data
                     </h3>
-                    <div className="grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-1 gap-2">
                         {(['customer', 'inventory', 'supplier'] as EntityType[]).map((type) => (
                             <button
                                 key={type}
                                 onClick={() => handleExport(type)}
                                 disabled={exporting !== null || phase !== 'idle'}
-                                className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                                className="flex items-center justify-between p-2 border border-slate-200 dark:border-slate-800 rounded hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 h-10"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full">
-                                        <FileText size={16} />
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1 bg-slate-100 dark:bg-slate-700 rounded-full">
+                                        <FileText size={12} />
                                     </div>
                                     <div className="text-left">
-                                        <div className="font-medium capitalize">{type}</div>
-                                        <div className="text-xs text-slate-500">Export to CSV</div>
+                                        <div className="font-medium capitalize text-xs">{type}</div>
                                     </div>
                                 </div>
                                 {exporting === type ? (
-                                    <Loader2 size={18} className="animate-spin text-blue-600" />
+                                    <Loader2 size={14} className="animate-spin text-blue-600" />
                                 ) : (
-                                    <Download size={18} className="text-slate-400" />
+                                    <Download size={14} className="text-slate-400" />
                                 )}
                             </button>
                         ))}
@@ -317,9 +316,9 @@ export function DataMigrationSettings() {
                 </div>
 
                 {/* Import Section */}
-                <div className="space-y-4">
-                    <h3 className="text-md font-medium flex items-center gap-2">
-                        <Upload size={18} className="text-green-600" />
+                <div className="space-y-2">
+                    <h3 className="text-sm font-medium flex items-center gap-1.5">
+                        <Upload size={14} className="text-green-600" />
                         Import Data
                     </h3>
                     <input
@@ -329,21 +328,20 @@ export function DataMigrationSettings() {
                         ref={fileInputRef}
                         onChange={(e) => void handleFileChange(e)}
                     />
-                    <div className="grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-1 gap-2">
                         {(['customer', 'inventory', 'supplier'] as EntityType[]).map((type) => (
                             <button
                                 key={type}
                                 onClick={() => handleImportClick(type)}
                                 disabled={phase !== 'idle'}
-                                className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                                className="flex items-center justify-between p-2 border border-slate-200 dark:border-slate-800 rounded hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 h-10"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full">
-                                        <Upload size={16} />
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1 bg-slate-100 dark:bg-slate-700 rounded-full">
+                                        <Upload size={12} />
                                     </div>
                                     <div className="text-left">
-                                        <div className="font-medium capitalize">{type}</div>
-                                        <div className="text-xs text-slate-500">Import from CSV</div>
+                                        <div className="font-medium capitalize text-xs">{type}</div>
                                     </div>
                                 </div>
                             </button>

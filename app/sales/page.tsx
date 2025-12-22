@@ -16,7 +16,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 import { useAuth } from '@/contexts/AuthContext';
+import { InvoicePreview, type InvoiceLayoutSettings } from '@/components/shared/InvoicePreview';
 
 type InvoiceItem = {
   id: number;
@@ -46,32 +48,55 @@ export default function Sales() {
 
   // Settings State for dynamic header
   const [companySettings, setCompanySettings] = useState({
-    name: DEFAULT_COMPANY_NAME,
-    address: DEFAULT_COMPANY_ADDRESS,
-    phone: DEFAULT_COMPANY_PHONE,
-    email: DEFAULT_COMPANY_EMAIL,
+    company_name: DEFAULT_COMPANY_NAME,
+    company_address: DEFAULT_COMPANY_ADDRESS,
+    company_phone: DEFAULT_COMPANY_PHONE,
+    company_email: DEFAULT_COMPANY_EMAIL,
+    company_comments: '',
+    logo_path: null as string | null,
+    logo_width: 30,
+    logo_x: 20,
+    logo_y: 20,
+    header_x: 14,
+    header_y: 50,
+    font_size_header: 16,
+    font_size_body: 10,
+    header_align: 'left' as 'left' | 'center' | 'right',
     logoUrl: null as string | null,
-    headerAlign: 'left' as 'left' | 'center' | 'right',
   });
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
         const settings = await settingsCommands.getAll();
+
         let logoUrl = null;
+        // Construct full logo path if setting exists
+        // Note: PdfConfiguration logic uses both rawSettings['invoice_logo_path'] and separate picture dir logic
+        // We will assume settingsCommands.getAll() returns the keys we need.
         if (settings['invoice_logo_path']) {
           const picturesDir = await imageCommands.getPicturesDirectory();
           logoUrl = convertFileSrc(`${picturesDir}/${settings['invoice_logo_path']}`);
         }
 
         setCompanySettings({
-          name: settings['invoice_company_name'] || DEFAULT_COMPANY_NAME,
-          address: settings['invoice_company_address'] || DEFAULT_COMPANY_ADDRESS,
-          phone: settings['invoice_company_phone'] || DEFAULT_COMPANY_PHONE,
-          email: settings['invoice_company_email'] || DEFAULT_COMPANY_EMAIL,
-          logoUrl,
-          headerAlign: (settings['invoice_header_align'] as 'left' | 'center' | 'right') || 'left',
-        });
+          company_name: settings['invoice_company_name'] || DEFAULT_COMPANY_NAME,
+          company_address: settings['invoice_company_address'] || DEFAULT_COMPANY_ADDRESS,
+          company_phone: settings['invoice_company_phone'] || DEFAULT_COMPANY_PHONE,
+          company_email: settings['invoice_company_email'] || DEFAULT_COMPANY_EMAIL,
+          company_comments: settings['invoice_company_comments'] || '',
+          logo_path: settings['invoice_logo_path'] || null,
+          logo_width: Number(settings['invoice_logo_width']) || 30,
+          logo_x: Number(settings['invoice_logo_x']) || 20,
+          logo_y: Number(settings['invoice_logo_y']) || 20,
+          header_x: Number(settings['invoice_header_x']) || 14,
+          header_y: Number(settings['invoice_header_y']) || 50,
+          font_size_header: Number(settings['invoice_font_size_header']) || 16,
+          font_size_body: Number(settings['invoice_font_size_body']) || 10,
+          header_align: (settings['invoice_header_align'] as 'left' | 'center' | 'right') || 'left',
+          // Extended for LogoUrl which isn't part of settings interface but needed for display
+          logoUrl: logoUrl,
+        } as InvoiceLayoutSettings & { logoUrl: string | null });
       } catch (err) {
         console.error("Failed to load company settings", err);
       }
@@ -395,12 +420,10 @@ export default function Sales() {
                           } as unknown as Customer;
                         }
 
-                        const { url, size, duration } = await generateInvoicePDF(fullInvoice.invoice, fullInvoice.items, customer);
+                        const { url } = await generateInvoicePDF(fullInvoice.invoice, fullInvoice.items, customer);
                         setPdfUrl(url);
                         setPdfFileName(`Invoice_${selected.invoice_number}.pdf`);
                         setShowPdfPreview(true);
-                        // Show stats
-                        // alert(`PDF Generated!\nSize: ${size}\nTime: ${duration}`);
                       } catch (error) {
                         console.error("Error generating PDF:", error);
                         alert("Failed to generate PDF");
@@ -423,165 +446,22 @@ export default function Sales() {
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-hidden bg-slate-100/50 dark:bg-slate-950/50">
             {selected ? (
-              <div className="origin-top transform scale-[0.65] w-full max-w-[210mm] bg-white shadow-lg mx-auto mt-2 p-6 text-slate-900">
-                {/* Document Header: Company Info & Title */}
-                <div className={`flex flex-col border-b border-slate-300 pb-4 mb-4 relative min-h-[120px] ${companySettings.headerAlign === 'center' ? 'items-center text-center' :
-                  companySettings.headerAlign === 'right' ? 'items-end text-right' : 'items-start text-left'
-                  }`}>
-
-                  {/* INVOICE Title - Absolute positioned to top-right to avoid cramping, or flexed */}
-                  <div className="absolute top-0 right-0">
-                    <h2 className="text-2xl font-bold text-slate-900 tracking-widest uppercase">
-                      INVOICE
-                    </h2>
-                  </div>
-
-                  <div className="w-full space-y-2 mt-2 max-w-[70%]">
-                    {/* Dynamic Logo if available */}
-                    {companySettings.logoUrl && (
-                      <div className={`mb-3 h-16 relative ${companySettings.headerAlign === 'center' ? 'mx-auto' :
-                        companySettings.headerAlign === 'right' ? 'ml-auto' : 'mr-auto'
-                        }`}>
-                        <img src={companySettings.logoUrl} alt="Logo" className="h-full object-contain" />
-                      </div>
-                    )}
-
-                    <div>
-                      <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-tight">
-                        {companySettings.name}
-                      </h1>
-                      <div className="text-xs text-slate-600 space-y-1 mt-1 leading-relaxed">
-                        <p className="whitespace-pre-line">{companySettings.address}</p>
-                        {companySettings.phone && <p>Phone: {companySettings.phone}</p>}
-                        {companySettings.email && <p>Email: {companySettings.email}</p>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Removed separate INVOICE title div since it's now absolute positioned above */}
-
-                {/* Bill To & Invoice Meta */}
-                <div className="flex justify-between items-start mb-6">
-                  <div className="w-1/2">
-                    <h3 className="text-sm font-bold text-slate-900 mb-2">
-                      Bill To:
-                    </h3>
-                    <div className="text-sm text-slate-900 space-y-1">
-                      <p className="font-medium text-base">
-                        {fullCustomer?.name || selected.customer_name || 'Walk-in Customer'}
-                      </p>
-                      <p>{fullCustomer?.phone || selected.customer_phone}</p>
-                      {fullCustomer?.email && <p>{fullCustomer.email}</p>}
-                      {fullCustomer?.address && <p>{fullCustomer.address}</p>}
-                    </div>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <p className="text-sm text-slate-900">
-                      <span className="font-semibold">Invoice #:</span> {selected.invoice_number}
-                    </p>
-                    <p className="text-sm text-slate-900">
-                      <span className="font-semibold">Date:</span>{' '}
-                      {new Date(selected.created_at).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </p>
-                    <p className="text-sm text-slate-900">
-                      <span className="font-semibold">Status:</span> Paid
-                    </p>
-                  </div>
-                </div>
-
-                {/* Items Table - PDF Style */}
-                <div className="mb-4">
-                  <table className="w-full text-sm">
-                    <thead className="bg-[#333333] text-white">
-                      <tr>
-                        <th className="px-4 py-2 text-left font-bold">Item</th>
-                        <th className="px-4 py-2 text-center font-bold w-32">SKU</th>
-                        <th className="px-4 py-2 text-center font-bold w-20">Qty</th>
-                        <th className="px-4 py-2 text-center font-bold w-32">Price</th>
-                        <th className="px-4 py-2 text-center font-bold w-32">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {itemsLoading ? (
-                        <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                            Loading items...
-                          </td>
-                        </tr>
-                      ) : items.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                            No items found for this order.
-                          </td>
-                        </tr>
-                      ) : (
-                        <>
-                          {items.map((item) => (
-                            <tr key={item.id} className="text-slate-700">
-                              <td className="px-4 py-3 font-medium text-left">{item.product_name}</td>
-                              <td className="px-4 py-3 text-slate-500 text-center">{item.sku || '-'}</td>
-                              <td className="px-4 py-3 text-center">{item.quantity}</td>
-                              <td className="px-4 py-3 text-center">
-                                Rs. {((item.unit_price * item.quantity - (item.discount_amount || 0)) / item.quantity).toFixed(1)}
-                              </td>
-                              <td className="px-4 py-3 text-center font-semibold">
-                                Rs. {item.total.toFixed(1)}
-                              </td>
-                            </tr>
-                          ))}
-                          {/* Footer Row matching PDF */}
-                          <tr className="bg-slate-100 font-bold border-t border-slate-300">
-                            <td className="px-4 py-3 text-left">Total</td>
-                            <td className="px-4 py-3 text-center"></td>
-                            <td className="px-4 py-3 text-center">{totalQty}</td>
-                            <td className="px-4 py-3 text-center"></td>
-                            <td className="px-4 py-3 text-center">Rs. {selected.total_amount.toFixed(1)}</td>
-                          </tr>
-                        </>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Amount in Words */}
-                <div className="mb-6 border-b border-slate-200 pb-4">
-                  <p className="text-sm font-semibold text-slate-700">
-                    Amount in Words:
-                  </p>
-                  <p className="text-sm text-slate-600 italic mt-1">
-                    {numberToWords(Math.round(selected.total_amount))}
-                  </p>
-                </div>
-
-                {/* Summary Section */}
-                <div className="flex justify-end">
-                  <div className="w-72 space-y-2">
-                    <div className="flex justify-between text-sm text-slate-800">
-                      <span className="font-medium">Subtotal:</span>
-                      <span>
-                        Rs. {(selected.total_amount - (selected.tax_amount || 0) + (selected.discount_amount || 0)).toFixed(1)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm text-slate-800">
-                      <span className="font-medium">Discount:</span>
-                      <span>-Rs. {(selected.discount_amount || 0).toFixed(1)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm text-slate-800">
-                      <span className="font-medium">Tax:</span>
-                      <span>Rs. {(selected.tax_amount || 0).toFixed(1)}</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 mt-2">
-                      <span className="text-xl font-bold text-slate-900">Total:</span>
-                      <span className="text-xl font-bold text-slate-900">
-                        Rs. {selected.total_amount.toFixed(1)}
-                      </span>
-                    </div>
-                  </div>
+              <div className="h-full overflow-auto p-4 flex justify-center">
+                <div className="origin-top transform scale-[0.65] mt-[-20px] mb-[-100px]" style={{ width: '210mm' }}>
+                  <InvoicePreview
+                    settings={companySettings}
+                    invoice={{
+                      ...selected,
+                      status: 'Paid', // Assuming all sales history items are paid/completed
+                    }}
+                    customer={fullCustomer || (selected.customer_name ? {
+                      name: selected.customer_name,
+                      phone: selected.customer_phone
+                    } : null)}
+                    items={items}
+                    logoUrl={companySettings.logoUrl}
+                    amountInWords={numberToWords(Math.round(selected.total_amount))}
+                  />
                 </div>
               </div>
             ) : (

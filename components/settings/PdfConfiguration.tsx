@@ -415,8 +415,8 @@ export function PdfConfiguration() {
                                         <div style={{ flex: 2 }}>Sample Product {i}</div>
                                         <div style={{ flex: 1, color: '#666', textAlign: 'center' }}>SKU-00{i}</div>
                                         <div style={{ width: '8%', textAlign: 'center' }}>1</div>
-                                        <div style={{ width: '18%', textAlign: 'center' }}>Rs. 100.00</div>
-                                        <div style={{ width: '18%', textAlign: 'center' }}>Rs. 100.00</div>
+                                        <div style={{ width: '18%', textAlign: 'right' }}>Rs. 100.00</div>
+                                        <div style={{ width: '18%', textAlign: 'right' }}>Rs. 100.00</div>
                                     </div>
                                 ))}
                                 {/* Footer Row */}
@@ -433,18 +433,19 @@ export function PdfConfiguration() {
                                     <div style={{ flex: 1 }}></div>
                                     <div style={{ width: '8%', textAlign: 'center' }}>3</div>
                                     <div style={{ width: '18%', textAlign: 'center' }}></div>
-                                    <div style={{ width: '18%', textAlign: 'center' }}>Rs. 300.00</div>
+                                    <div style={{ width: '18%', textAlign: 'right' }}>Rs. 300.00</div>
                                 </div>
                             </div>
 
-                            {/* Amount in Words */}
-                            <div style={{ marginTop: mm(3.5), fontSize: mm(ptToMm(10)), color: '#000' }}>
-                                Amount in Words: Three Hundred Rupees Only
-                            </div>
+                            {/* === AMOUNT IN WORDS & TOTALS === */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: mm(3.5) }}>
+                                {/* Amount in Words */}
+                                <div style={{ fontSize: mm(ptToMm(10)), color: '#000', flex: 1, paddingRight: mm(2) }}>
+                                    Amount in Words: Three Hundred Rupees Only
+                                </div>
 
-                            {/* === TOTALS === */}
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: mm(5) }}>
-                                <div style={{ width: '40%', fontSize: mm(ptToMm(10)) }}>
+                                {/* Totals Summary */}
+                                <div style={{ width: mm(61), fontSize: mm(ptToMm(10)), paddingRight: mm(2) }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: mm(2) }}>
                                         <span>Subtotal:</span>
                                         <span>Rs. 300.00</span>
