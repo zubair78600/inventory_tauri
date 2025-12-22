@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import autoTable, { type UserOptions } from 'jspdf-autotable';
+import autoTable, { type UserOptions, type CellHookData } from 'jspdf-autotable';
 import type { Invoice, InvoiceItem, Customer, Product, Supplier, PurchaseOrderComplete, CustomerInvoice, SupplierPaymentSummary } from './tauri';
 import { settingsCommands, imageCommands } from './tauri'; // Import commands to fetch settings/images
 import { readFile } from '@tauri-apps/plugin-fs';
@@ -392,6 +392,10 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
     const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
     const netSubtotal = invoice.total_amount - (invoice.tax_amount || 0);
 
+    const tableMargin = 7;
+    const tableCellPadding = { top: 1.5, right: 2, bottom: 1.5, left: 2 };
+    let totalValueX: number | null = null;
+
     autoTable(doc, {
         startY: startY + 27,
         head: [tableColumn],
@@ -400,25 +404,31 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
             { content: "Total", styles: { halign: 'left' } },
             { content: "", styles: { halign: 'center' } },
             { content: totalQty.toString(), styles: { halign: 'center' } },
-            { content: "", styles: { halign: 'center' } }, // Empty for Price column
-            { content: formatCurrency(netSubtotal), styles: { halign: 'center' } } // Match sum of items (Subtotal)
+            { content: "", styles: { halign: 'right' } }, // Empty for Price column
+            { content: formatCurrency(netSubtotal), styles: { halign: 'right' } } // Match sum of items (Subtotal)
         ]],
         theme: 'grid',
-        margin: { left: 7, right: 7 }, // 5mm border + 2mm inner padding
+        margin: { left: tableMargin, right: tableMargin }, // 5mm border + 2mm inner padding
         headStyles: { fillColor: [66, 66, 66], halign: 'center' },
         footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
         styles: {
             fontSize: 9,
             font: 'helvetica',
-            cellPadding: { top: 1.5, right: 2, bottom: 1.5, left: 2 }
+            cellPadding: tableCellPadding
         },
         columnStyles: {
             0: { cellWidth: 'auto', halign: 'left' }, // Item Name remains left aligned
             1: { halign: 'center' }, // SKU
             2: { halign: 'center' }, // Qty
-            3: { halign: 'center' }, // Price - center aligned
-            4: { halign: 'center' }  // Total - center aligned
-        }
+            3: { halign: 'right' }, // Price - match preview (right aligned)
+            4: { halign: 'right' }  // Total - match preview (right aligned)
+        },
+        didDrawCell: (data: CellHookData) => {
+            if (totalValueX !== null) return;
+            if ((data.section === 'body' || data.section === 'foot') && data.column.index === tableColumn.length - 1) {
+                totalValueX = data.cell.getTextPos().x;
+            }
+        },
     });
 
     // Amount in Words - 10px (~3.5mm) gap after table
@@ -430,38 +440,29 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
     const amountInWords = numberToWords(Math.round(invoice.total_amount));
     doc.text(`Amount in Words: ${amountInWords}`, 7, finalY);
 
-    // Totals Section - align values with Total column center (same as table footer)
-    // Get the actual Total column position from autoTable, with fallback
-    const lastTable = (doc as any).lastAutoTable;
-    let totalColCenter = pageWidth - 30; // Default fallback
-    let summaryLabelX = pageWidth - 65; // Default fallback
-
-    if (lastTable?.columns && lastTable.columns.length > 0) {
-        const totalCol = lastTable.columns[lastTable.columns.length - 1];
-        if (totalCol && typeof totalCol.x === 'number' && typeof totalCol.width === 'number') {
-            totalColCenter = totalCol.x + (totalCol.width / 2);
-            summaryLabelX = totalCol.x - 25;
-        }
-    }
+    // Totals Section - align values with the actual Total column text position
+    const summaryBlockWidth = 61;
+    const summaryRightX = totalValueX ?? (pageWidth - tableMargin - tableCellPadding.right);
+    const summaryLabelX = summaryRightX - summaryBlockWidth;
 
     doc.text(`Subtotal:`, summaryLabelX, finalY);
-    doc.text(formatCurrency(netSubtotal), totalColCenter, finalY, { align: 'center' });
+    doc.text(formatCurrency(netSubtotal), summaryRightX, finalY, { align: 'right' });
 
     if (invoice.discount_amount && invoice.discount_amount > 0) {
         doc.text(`Discount:`, summaryLabelX, finalY + 6);
-        doc.text(`-${formatCurrency(invoice.discount_amount)}`, totalColCenter, finalY + 6, { align: 'center' });
+        doc.text(`-${formatCurrency(invoice.discount_amount)}`, summaryRightX, finalY + 6, { align: 'right' });
     } else {
         doc.text(`Discount:`, summaryLabelX, finalY + 6);
-        doc.text(`-`, totalColCenter, finalY + 6, { align: 'center' });
+        doc.text(`-`, summaryRightX, finalY + 6, { align: 'right' });
     }
 
     doc.text(`Tax:`, summaryLabelX, finalY + 12);
-    doc.text(formatCurrency(invoice.tax_amount || 0), totalColCenter, finalY + 12, { align: 'center' });
+    doc.text(formatCurrency(invoice.tax_amount || 0), summaryRightX, finalY + 12, { align: 'right' });
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.text(`Total:`, summaryLabelX, finalY + 20);
-    doc.text(formatCurrency(invoice.total_amount), totalColCenter, finalY + 20, { align: 'center' });
+    doc.text(formatCurrency(invoice.total_amount), summaryRightX, finalY + 20, { align: 'right' });
 
     addFooter(doc);
 
