@@ -109,14 +109,14 @@ export function LocationSelector({
 
   return (
     <div className={className}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {/* State Dropdown */}
         <div>
-          <label className="form-label">
+          <label className="text-xs font-medium text-slate-600 block mb-1">
             State <span className="text-red-500">*</span>
           </label>
           <select
-            className="form-select"
+            className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm shadow-black/5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
             value={value.state}
             onChange={handleStateChange}
             disabled={disabled}
@@ -133,11 +133,11 @@ export function LocationSelector({
 
         {/* District Dropdown */}
         <div>
-          <label className="form-label">
+          <label className="text-xs font-medium text-slate-600 block mb-1">
             District <span className="text-red-500">*</span>
           </label>
           <select
-            className="form-select"
+            className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm shadow-black/5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
             value={value.district}
             onChange={handleDistrictChange}
             disabled={disabled || !value.state}
@@ -156,12 +156,12 @@ export function LocationSelector({
 
         {/* Town Input */}
         <div>
-          <label className="form-label">
+          <label className="text-xs font-medium text-slate-600 block mb-1">
             Town <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
-            className="form-input"
+            className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm shadow-black/5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
             value={value.town}
             onChange={(e) => onChange({ ...value, town: e.target.value })}
             placeholder="Enter Town"
@@ -171,8 +171,8 @@ export function LocationSelector({
         </div>
       </div>
       {!value.state && (
-        <p className="mt-2 text-xs text-slate-500">
-          Please select a state first to enable district selection
+        <p className="mt-1 text-[10px] text-slate-400">
+          * Select state first
         </p>
       )}
     </div>

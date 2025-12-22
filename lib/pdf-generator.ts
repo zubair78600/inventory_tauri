@@ -8,7 +8,10 @@ import { readFile } from '@tauri-apps/plugin-fs';
 declare module 'jspdf' {
     interface jsPDF {
         autoTable: (options: UserOptions) => jsPDF;
-        lastAutoTable: { finalY: number };
+        lastAutoTable: {
+            finalY: number;
+            columns: Array<{ x: number; width: number }>;
+        };
     }
 }
 
@@ -394,23 +397,27 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
         head: [tableColumn],
         body: tableRows,
         foot: [[
-            "Total",
-            "",
-            totalQty.toString(),
-            "", // Empty for Price column
-            formatCurrency(netSubtotal) // Match sum of items (Subtotal)
+            { content: "Total", styles: { halign: 'left' } },
+            { content: "", styles: { halign: 'center' } },
+            { content: totalQty.toString(), styles: { halign: 'center' } },
+            { content: "", styles: { halign: 'center' } }, // Empty for Price column
+            { content: formatCurrency(netSubtotal), styles: { halign: 'center' } } // Match sum of items (Subtotal)
         ]],
         theme: 'grid',
         margin: { left: 7, right: 7 }, // 5mm border + 2mm inner padding
         headStyles: { fillColor: [66, 66, 66], halign: 'center' },
-        footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
-        styles: { fontSize: 9, font: 'helvetica' },
+        footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: {
+            fontSize: 9,
+            font: 'helvetica',
+            cellPadding: { top: 1.5, right: 2, bottom: 1.5, left: 2 }
+        },
         columnStyles: {
             0: { cellWidth: 'auto', halign: 'left' }, // Item Name remains left aligned
             1: { halign: 'center' }, // SKU
             2: { halign: 'center' }, // Qty
-            3: { halign: 'center' }, // Price
-            4: { halign: 'center' }  // Total
+            3: { halign: 'center' }, // Price - center aligned
+            4: { halign: 'center' }  // Total - center aligned
         }
     });
 
@@ -423,28 +430,38 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
     const amountInWords = numberToWords(Math.round(invoice.total_amount));
     doc.text(`Amount in Words: ${amountInWords}`, 7, finalY);
 
-    // Totals Section (Right Aligned)
-    const summaryX = pageWidth - 70;
-    const valueX = pageWidth - 7;
+    // Totals Section - align values with Total column center (same as table footer)
+    // Get the actual Total column position from autoTable, with fallback
+    const lastTable = (doc as any).lastAutoTable;
+    let totalColCenter = pageWidth - 30; // Default fallback
+    let summaryLabelX = pageWidth - 65; // Default fallback
 
-    doc.text(`Subtotal:`, summaryX, finalY);
-    doc.text(formatCurrency(netSubtotal), valueX, finalY, { align: 'right' });
-
-    if (invoice.discount_amount && invoice.discount_amount > 0) {
-        doc.text(`Total Discount:`, summaryX, finalY + 6);
-        doc.text(`(Included) -${formatCurrency(invoice.discount_amount)}`, valueX, finalY + 6, { align: 'right' });
-    } else {
-        doc.text(`Discount:`, summaryX, finalY + 6);
-        doc.text(`-`, valueX, finalY + 6, { align: 'right' });
+    if (lastTable?.columns && lastTable.columns.length > 0) {
+        const totalCol = lastTable.columns[lastTable.columns.length - 1];
+        if (totalCol && typeof totalCol.x === 'number' && typeof totalCol.width === 'number') {
+            totalColCenter = totalCol.x + (totalCol.width / 2);
+            summaryLabelX = totalCol.x - 25;
+        }
     }
 
-    doc.text(`Tax:`, summaryX, finalY + 12);
-    doc.text(formatCurrency(invoice.tax_amount || 0), valueX, finalY + 12, { align: 'right' });
+    doc.text(`Subtotal:`, summaryLabelX, finalY);
+    doc.text(formatCurrency(netSubtotal), totalColCenter, finalY, { align: 'center' });
+
+    if (invoice.discount_amount && invoice.discount_amount > 0) {
+        doc.text(`Discount:`, summaryLabelX, finalY + 6);
+        doc.text(`-${formatCurrency(invoice.discount_amount)}`, totalColCenter, finalY + 6, { align: 'center' });
+    } else {
+        doc.text(`Discount:`, summaryLabelX, finalY + 6);
+        doc.text(`-`, totalColCenter, finalY + 6, { align: 'center' });
+    }
+
+    doc.text(`Tax:`, summaryLabelX, finalY + 12);
+    doc.text(formatCurrency(invoice.tax_amount || 0), totalColCenter, finalY + 12, { align: 'center' });
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text(`Total:`, summaryX, finalY + 20);
-    doc.text(formatCurrency(invoice.total_amount), valueX, finalY + 20, { align: 'right' });
+    doc.text(`Total:`, summaryLabelX, finalY + 20);
+    doc.text(formatCurrency(invoice.total_amount), totalColCenter, finalY + 20, { align: 'center' });
 
     addFooter(doc);
 
