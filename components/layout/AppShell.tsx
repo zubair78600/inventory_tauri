@@ -86,7 +86,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Sidebar />
             <div className="main">
                 <Header userEmail={user.username} />
-                <div className="page-container">{children}</div>
+                <div className="flex-1 overflow-y-auto w-full">
+                    <div className="page-container">{children}</div>
+                </div>
             </div>
 
             {/* Password prompt for Settings menu access */}
