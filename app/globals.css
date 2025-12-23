@@ -45,7 +45,7 @@ body {
     radial-gradient(circle at 12% 10%, rgba(14, 165, 233, 0.14), transparent 25%),
     radial-gradient(circle at 88% 10%, rgba(236, 72, 153, 0.12), transparent 22%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(244, 249, 255, 0.9));
-  @apply relative flex min-h-screen overflow-hidden dark:bg-slate-900;
+  @apply relative flex h-screen overflow-hidden dark:bg-slate-900;
 }
 
 .dark .app-shell {
@@ -102,7 +102,7 @@ body {
 }
 
 .main {
-  @apply flex-1 flex flex-col;
+  @apply flex-1 flex flex-col h-full overflow-hidden;
 }
 
 .page-container {
@@ -193,6 +193,17 @@ body {
   background: rgba(148, 163, 184, 0.35);
 }
 
+
 .chat-table-scroll::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Global Scrollbar Hide */
+::-webkit-scrollbar {
+  display: none;
+}
+
+html,
+body {
+  scrollbar-width: none;
 }
