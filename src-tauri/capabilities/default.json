@@ -40,6 +40,17 @@
       ]
     },
     "dialog:allow-open",
-    "biometry:default"
+    "biometry:default",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "osascript",
+          "cmd": "osascript",
+          "args": true
+        }
+      ]
+    }
   ]
 }

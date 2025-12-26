@@ -12,7 +12,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_biometry::init())
-    // .plugin(tauri_plugin_shell::init()) // Uncomment when AI feature is ready
+    .plugin(tauri_plugin_shell::init())
     .setup(|app| {
       // Initialize database
       let app_handle = app.handle();
@@ -209,6 +209,9 @@ pub fn run() {
       commands::export_csv,
       commands::import_csv_chunk,
       commands::scan_duplicates,
+      // Share commands
+      commands::open_whatsapp_chat,
+      commands::open_whatsapp_with_file,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

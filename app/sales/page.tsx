@@ -9,7 +9,10 @@ import { invoiceCommands, customerCommands, productCommands, type PaginatedResul
 import { generateInvoicePDF } from '@/lib/pdf-generator';
 import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
-import { Pencil, Trash2, Plus, X, Minus, History, FileX } from 'lucide-react';
+import { Pencil, Trash2, Plus, X, Minus, History, FileX, Loader2 } from 'lucide-react';
+import { shareInvoiceViaWhatsApp, openWhatsAppChat } from '@/lib/whatsapp-share';
+import { PhoneEntryDialog } from '@/components/shared/PhoneEntryDialog';
+import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
@@ -45,6 +48,11 @@ export default function Sales() {
   const [pdfFileName, setPdfFileName] = useState('');
   const [inlinePdfUrl, setInlinePdfUrl] = useState<string | null>(null);
   const [isInlinePdfLoading, setIsInlinePdfLoading] = useState(false);
+  const [isSharingWhatsApp, setIsSharingWhatsApp] = useState(false);
+  const [showPhoneEntry, setShowPhoneEntry] = useState(false);
+  const [pendingShareData, setPendingShareData] = useState<{
+    filePath: string;
+  } | null>(null);
 
   // Edit/Delete State
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -288,6 +296,73 @@ export default function Sales() {
     }
   };
 
+  const handleShareWhatsApp = async () => {
+    if (!selected) return;
+
+    try {
+      setIsSharingWhatsApp(true);
+
+      const fullInvoice = await invoiceCommands.getById(selected.id);
+
+      let customer = null;
+      if (selected.customer_id) {
+        try {
+          customer = await customerCommands.getById(selected.customer_id);
+        } catch (e) {
+          console.error('Could not fetch customer details', e);
+          customer = {
+            name: selected.customer_name || 'Customer',
+            phone: selected.customer_phone,
+          } as any;
+        }
+      } else if (selected.customer_name) {
+        customer = {
+          name: selected.customer_name,
+          phone: selected.customer_phone,
+        } as any;
+      }
+
+      const { url } = await generateInvoicePDF(
+        fullInvoice.invoice,
+        fullInvoice.items,
+        customer
+      );
+
+      const fileName = `Invoice_${selected.invoice_number}.pdf`;
+      const phone = customer?.phone || selected.customer_phone;
+
+      await shareInvoiceViaWhatsApp(
+        url,
+        fileName,
+        phone,
+        (filePath: string) => {
+          // Phone required callback - PDF already saved to temp
+          setPendingShareData({ filePath });
+          setShowPhoneEntry(true);
+        }
+      );
+    } catch (error) {
+      console.error('Error sharing via WhatsApp:', error);
+      alert('Failed to share via WhatsApp');
+    } finally {
+      setIsSharingWhatsApp(false);
+    }
+  };
+
+  const handlePhoneEntryConfirm = async (phone: string) => {
+    if (!pendingShareData) return;
+
+    try {
+      // PDF already saved, just open WhatsApp with the file
+      await openWhatsAppChat(phone, pendingShareData.filePath);
+    } catch (error) {
+      console.error('Error sharing via WhatsApp:', error);
+      alert('Failed to share via WhatsApp');
+    } finally {
+      setPendingShareData(null);
+    }
+  };
+
   return (
     <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col relative">
       <div className="flex items-center justify-between h-14 min-h-[3.5rem]">
@@ -416,6 +491,18 @@ export default function Sales() {
                   >
                     Download PDF
                   </Button>
+                  <button
+                    onClick={handleShareWhatsApp}
+                    disabled={isSharingWhatsApp}
+                    className="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50"
+                    title="Share via WhatsApp"
+                  >
+                    {isSharingWhatsApp ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-green-600" />
+                    ) : (
+                      <WhatsAppIcon size={20} />
+                    )}
+                  </button>
                   <div className="flex bg-slate-100 dark:bg-slate-800 rounded-md p-1 gap-1">
                     <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-500 hover:text-blue-600" onClick={openEditDialog}>
                       <Pencil className="h-4 w-4" />
@@ -620,6 +707,13 @@ export default function Sales() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Phone Entry Dialog */}
+      <PhoneEntryDialog
+        open={showPhoneEntry}
+        onOpenChange={setShowPhoneEntry}
+        onConfirm={handlePhoneEntryConfirm}
+      />
     </div >
   );
 }

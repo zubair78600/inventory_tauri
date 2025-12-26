@@ -10,6 +10,9 @@ import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { generateInvoicePDF } from '@/lib/pdf-generator';
 import { FileText, Clock, Loader2, Pin } from 'lucide-react';
+import { shareInvoiceViaWhatsApp, openWhatsAppChat } from '@/lib/whatsapp-share';
+import { PhoneEntryDialog } from '@/components/shared/PhoneEntryDialog';
+import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
 
 type CartItem = {
   product_id: number;
@@ -26,6 +29,11 @@ export default function Billing() {
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
   const [generatingPdfId, setGeneratingPdfId] = useState<number | null>(null);
+  const [sharingWhatsAppId, setSharingWhatsAppId] = useState<number | null>(null);
+  const [showPhoneEntry, setShowPhoneEntry] = useState(false);
+  const [pendingShareData, setPendingShareData] = useState<{
+    filePath: string;
+  } | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
 
@@ -198,6 +206,63 @@ export default function Billing() {
       alert('Failed to generate PDF');
     } finally {
       setGeneratingPdfId(null);
+    }
+  };
+
+  const handleShareWhatsApp = async (invoice: Invoice) => {
+    if (sharingWhatsAppId === invoice.id) return; // Prevent double click
+    try {
+      setSharingWhatsAppId(invoice.id);
+
+      const fullInvoice = await invoiceCommands.getById(invoice.id);
+      let customer = null;
+
+      if (invoice.customer_id) {
+        try {
+          customer = await customerCommands.getById(invoice.customer_id);
+        } catch (e) {
+          console.error('Could not fetch customer details', e);
+        }
+      }
+
+      const { url } = await generateInvoicePDF(
+        fullInvoice.invoice,
+        fullInvoice.items,
+        customer
+      );
+
+      const fileName = `Invoice_${invoice.invoice_number}.pdf`;
+      const phone = customer?.phone || invoice.customer_phone;
+
+      await shareInvoiceViaWhatsApp(
+        url,
+        fileName,
+        phone,
+        (filePath: string) => {
+          // Phone required callback - PDF already saved to temp
+          setPendingShareData({ filePath });
+          setShowPhoneEntry(true);
+        }
+      );
+    } catch (error) {
+      console.error('Error sharing via WhatsApp:', error);
+      alert('Failed to share via WhatsApp');
+    } finally {
+      setSharingWhatsAppId(null);
+    }
+  };
+
+  const handlePhoneEntryConfirm = async (phone: string) => {
+    if (!pendingShareData) return;
+
+    try {
+      // PDF already saved, just open WhatsApp with the file
+      await openWhatsAppChat(phone, pendingShareData.filePath);
+    } catch (error) {
+      console.error('Error sharing via WhatsApp:', error);
+      alert('Failed to share via WhatsApp');
+    } finally {
+      setPendingShareData(null);
     }
   };
 
@@ -741,18 +806,32 @@ export default function Billing() {
                         <span className="font-medium">₹{inv.total_amount.toFixed(0)}</span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleViewPdf(inv)}
-                      className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
-                      title="View Invoice PDF"
-                      disabled={generatingPdfId === inv.id}
-                    >
-                      {generatingPdfId === inv.id ? (
-                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                      ) : (
-                        <FileText className="w-5 h-5" />
-                      )}
-                    </button>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleViewPdf(inv)}
+                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
+                        title="View Invoice PDF"
+                        disabled={generatingPdfId === inv.id}
+                      >
+                        {generatingPdfId === inv.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                        ) : (
+                          <FileText className="w-5 h-5" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleShareWhatsApp(inv)}
+                        className="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full transition-colors"
+                        title="Share via WhatsApp"
+                        disabled={sharingWhatsAppId === inv.id}
+                      >
+                        {sharingWhatsAppId === inv.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-green-600" />
+                        ) : (
+                          <WhatsAppIcon size={20} />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -959,6 +1038,11 @@ export default function Billing() {
         onOpenChange={setShowPdfPreview}
         url={pdfUrl}
         fileName={pdfFileName}
+      />
+      <PhoneEntryDialog
+        open={showPhoneEntry}
+        onOpenChange={setShowPhoneEntry}
+        onConfirm={handlePhoneEntryConfirm}
       />
     </div >
   );
