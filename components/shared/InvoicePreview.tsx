@@ -1,8 +1,4 @@
 
-import { useMemo } from 'react';
-import { type InvoiceItem, type Customer } from '@/lib/tauri'; // Assuming types exist, or I'll define locally if needed
-import { convertFileSrc } from '@tauri-apps/api/core';
-
 export interface InvoiceLayoutSettings {
     company_name: string;
     company_address: string;
@@ -18,6 +14,10 @@ export interface InvoiceLayoutSettings {
     font_size_header: number;
     font_size_body: number;
     header_align: 'left' | 'center' | 'right';
+    page_size?: 'a4' | 'a5' | 'custom';
+    page_mode?: 'full' | 'half';
+    page_width?: number;
+    page_height?: number;
 }
 
 interface InvoicePreviewProps {
@@ -48,10 +48,6 @@ interface InvoicePreviewProps {
     amountInWords?: string;
 }
 
-// A4 page dimensions in mm
-const PAGE_WIDTH = 210;
-const PAGE_HEIGHT = 297;
-
 // Helpers
 const ptToMm = (pt: number) => pt * 0.352778;
 
@@ -63,10 +59,18 @@ export function InvoicePreview({ settings, invoice, customer, items, logoUrl, am
     // behavior in PdfConfiguration used `zoom` state to multiply values. 
     // Let's use standard mm units in CSS for accurate print preview.
 
-    const logoAspect = 1; // Simplification: assume square if unknown, or handle dynamically. The original code calculated this.
-    // For read-only preview, `object-contain` on the img tag usually handles the aspect ratio visual correctness within the box.
-
-    const logoHeight = settings.logo_width; // simplified, allows object-contain to handle it
+    const logoHeight = settings.logo_width;
+    const pageWidth = settings.page_size === 'a5'
+        ? 148
+        : settings.page_size === 'custom'
+            ? (settings.page_width || 210)
+            : 210;
+    const baseHeight = settings.page_size === 'a5'
+        ? 210
+        : settings.page_size === 'custom'
+            ? (settings.page_height || 297)
+            : 297;
+    const pageHeight = settings.page_mode === 'half' ? baseHeight / 2 : baseHeight;
     const safeHeaderY = Math.max(settings.header_y, 10);
     const lastTextOffset = settings.company_comments ? 21 : 16;
     const addressEndY = safeHeaderY + lastTextOffset;
@@ -75,6 +79,17 @@ export function InvoicePreview({ settings, invoice, customer, items, logoUrl, am
 
     const totalQty = items.reduce((sum, i) => sum + i.quantity, 0);
 
+    // Match pdf-generator.ts table layout
+    const tableStartY = startY + 27;
+    const tableFontSize = 9;
+    const tableLineHeight = ptToMm(tableFontSize) * 1.15;
+    const tableCellPaddingX = 2;
+    const tableCellPaddingY = 1.5;
+    const tableRowHeight = tableLineHeight + tableCellPaddingY * 2;
+    const tableRowCount = items.length + 2; // header + footer
+    const tableHeight = tableRowHeight * tableRowCount;
+    const totalsStartY = tableStartY + tableHeight + 3.5;
+
     // Number to words simple placeholder or we import the lib function. 
     // I will just use a placeholder or pass it in maybe? 
     // For now I'll omit or inline a basic one if critical, but the original file imported `numberToWords`.
@@ -82,16 +97,16 @@ export function InvoicePreview({ settings, invoice, customer, items, logoUrl, am
 
     return (
         <div
-            className="bg-white shadow-lg relative mx-auto"
+            className="bg-white shadow-lg relative mx-auto overflow-hidden"
             style={{
-                width: '210mm',
-                height: '297mm',
+                width: `${pageWidth}mm`,
+                height: `${pageHeight}mm`,
                 fontFamily: 'Helvetica, Arial, sans-serif',
                 // We use mm units directly for positioning
             }}
         >
             {/* === PAGE BORDER (Optional visualization only) === */}
-            {/* <div className="absolute inset-[5mm] border border-gray-200 pointer-events-none" /> */}
+            <div className="absolute" style={{ left: '5mm', top: '5mm', right: '5mm', bottom: '5mm', border: '1px solid rgb(200, 200, 200)', pointerEvents: 'none' }} />
 
             {/* === LOGO === */}
             {logoUrl && (
@@ -101,7 +116,8 @@ export function InvoicePreview({ settings, invoice, customer, items, logoUrl, am
                         left: `${settings.logo_x}mm`,
                         top: `${settings.logo_y}mm`,
                         width: `${settings.logo_width}mm`,
-                        height: `${settings.logo_width}mm`, // Square container, object-contain image
+                        height: `${logoHeight}mm`,
+                        maxWidth: `calc(${pageWidth}mm - ${settings.logo_x * 2}mm)`,
                     }}
                 >
                     <img
@@ -156,129 +172,125 @@ export function InvoicePreview({ settings, invoice, customer, items, logoUrl, am
                 }}
             />
 
-            {/* === BILL TO + INVOICE DETS === */}
-            <div
-                className="absolute"
-                style={{
-                    left: '7mm',
-                    right: '7mm',
-                    top: `${startY}mm`,
-                }}
-            >
-                <div className="flex justify-between">
-                    {/* Bill To */}
-                    <div>
-                        <div style={{
-                            fontSize: '3.8mm', // ~11pt
-                            fontWeight: 'bold',
-                            color: '#000',
-                            marginBottom: '2mm',
-                        }}>
-                            Bill To:
-                        </div>
-                        <div style={{ fontSize: '3.5mm', color: '#000' }}>
-                            <div className="font-semibold">{customer?.name || 'Walk-in Customer'}</div>
-                            <div>{customer?.phone}</div>
-                            <div>{customer?.address}</div>
-                        </div>
-                    </div>
+            {/* === BILL TO + INVOICE DETAILS (fixed positions) === */}
+            <div className="absolute" style={{ left: '7mm', top: `${startY}mm`, fontSize: `${ptToMm(11)}mm`, fontWeight: 'bold', color: '#000' }}>
+                Bill To:
+            </div>
+            <div className="absolute" style={{ left: '7mm', top: `${startY + 6}mm`, fontSize: `${ptToMm(10)}mm`, color: '#000' }}>
+                {customer?.name || 'Walk-in Customer'}
+            </div>
+            {customer?.phone && (
+                <div className="absolute" style={{ left: '7mm', top: `${startY + 11}mm`, fontSize: `${ptToMm(10)}mm`, color: '#000' }}>
+                    {customer.phone}
+                </div>
+            )}
+            {customer?.address && (
+                <div className="absolute" style={{ left: '7mm', top: `${startY + 21}mm`, fontSize: `${ptToMm(10)}mm`, color: '#000', width: '80mm', lineHeight: 1.15 }}>
+                    {customer.address}
+                </div>
+            )}
 
-                    {/* Invoice Meta */}
-                    <div style={{ fontSize: '3.5mm', textAlign: 'right', color: '#000' }}>
-                        <div>Invoice #: {invoice.invoice_number}</div>
-                        <div style={{ marginTop: '1.5mm' }}>
-                            Date: {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </div>
-                        <div style={{ marginTop: '1.5mm' }}>Status: {invoice.status}</div>
-                    </div>
+            <div className="absolute" style={{ right: '7mm', top: `${startY}mm`, fontSize: `${ptToMm(10)}mm`, textAlign: 'right', color: '#000' }}>
+                Invoice #: {invoice.invoice_number}
+            </div>
+            <div className="absolute" style={{ right: '7mm', top: `${startY + 5}mm`, fontSize: `${ptToMm(10)}mm`, textAlign: 'right', color: '#000' }}>
+                Date: {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </div>
+            <div className="absolute" style={{ right: '7mm', top: `${startY + 10}mm`, fontSize: `${ptToMm(10)}mm`, textAlign: 'right', color: '#000' }}>
+                Status: {invoice.status}
+            </div>
+
+            {/* === ITEMS TABLE === */}
+            <div className="absolute" style={{ left: '7mm', right: '7mm', top: `${tableStartY}mm`, border: '1px solid rgb(200, 200, 200)' }}>
+                {/* Header */}
+                <div style={{
+                    display: 'flex',
+                    height: `${tableRowHeight}mm`,
+                    backgroundColor: 'rgb(66, 66, 66)',
+                    color: 'white',
+                    fontSize: `${ptToMm(tableFontSize)}mm`,
+                    fontWeight: 'bold',
+                    padding: `0 ${tableCellPaddingX}mm`,
+                    alignItems: 'center',
+                }}>
+                    <div style={{ flex: 2 }}>Item</div>
+                    <div style={{ flex: 1, textAlign: 'center' }}>SKU</div>
+                    <div style={{ width: '8%', textAlign: 'center' }}>Qty</div>
+                    <div style={{ width: '18%', textAlign: 'center' }}>Price</div>
+                    <div style={{ width: '18%', textAlign: 'center' }}>Total</div>
                 </div>
 
-                {/* === ITEMS TABLE === */}
-                <div style={{ marginTop: '6mm', border: '1px solid rgb(200, 200, 200)' }}>
-// Header
-                    <div style={{
+                {/* Rows */}
+                {items.map((item, i) => (
+                    <div key={i} style={{
                         display: 'flex',
-                        backgroundColor: 'rgb(66, 66, 66)',
-                        color: 'white',
-                        fontSize: '3.2mm', // ~9pt
-                        fontWeight: 'bold',
-                        padding: '1.5mm 2mm',
-                    }}>
-                        <div style={{ flex: 2 }}>Item</div>
-                        <div style={{ flex: 1, textAlign: 'center' }}>SKU</div>
-                        <div style={{ width: '8%', textAlign: 'center' }}>Qty</div>
-                        <div style={{ width: '18%', textAlign: 'center' }}>Price</div>
-                        <div style={{ width: '18%', textAlign: 'center' }}>Total</div>
-                    </div>
-
-                    {/* Rows */}
-                    {items.map((item, i) => (
-                        <div key={i} style={{
-                            display: 'flex',
-                            fontSize: '3.2mm',
-                            padding: '1.5mm 2mm',
-                            borderTop: '1px solid rgb(200, 200, 200)',
-                            color: '#000',
-                        }}>
-                            <div style={{ flex: 2 }}>{item.product_name}</div>
-                            <div style={{ flex: 1, color: '#666', textAlign: 'center' }}>{item.sku || '-'}</div>
-                            <div style={{ width: '8%', textAlign: 'center' }}>{item.quantity}</div>
-                            <div style={{ width: '18%', textAlign: 'right' }}>
-                                Rs. {((item.unit_price * item.quantity - (item.discount_amount || 0)) / item.quantity).toFixed(1)}
-                            </div>
-                            <div style={{ width: '18%', textAlign: 'right' }}>Rs. {item.total.toFixed(1)}</div>
-                        </div>
-                    ))}
-
-                    {/* Footer Row */}
-                    <div style={{
-                        display: 'flex',
-                        fontSize: '3.2mm',
-                        padding: '1.5mm 2mm',
-                        borderTop: '2px solid rgb(200, 200, 200)',
-                        fontWeight: 'bold',
-                        backgroundColor: '#f0f0f0',
+                        height: `${tableRowHeight}mm`,
+                        fontSize: `${ptToMm(tableFontSize)}mm`,
+                        padding: `0 ${tableCellPaddingX}mm`,
+                        borderTop: '1px solid rgb(200, 200, 200)',
                         color: '#000',
+                        alignItems: 'center',
                     }}>
-                        <div style={{ flex: 2 }}>Total</div>
-                        <div style={{ flex: 1 }}></div>
-                        <div style={{ width: '8%', textAlign: 'center' }}>{totalQty}</div>
-                        <div style={{ width: '18%', textAlign: 'center' }}></div>
-                        <div style={{ width: '18%', textAlign: 'right' }}>Rs. {invoice.total_amount.toFixed(1)}</div>
+                        <div style={{ flex: 2 }}>{item.product_name}</div>
+                        <div style={{ flex: 1, color: '#666', textAlign: 'center' }}>{item.sku || '-'}</div>
+                        <div style={{ width: '8%', textAlign: 'center' }}>{item.quantity}</div>
+                        <div style={{ width: '18%', textAlign: 'right' }}>
+                            Rs. {((item.unit_price * item.quantity - (item.discount_amount || 0)) / item.quantity).toFixed(1)}
+                        </div>
+                        <div style={{ width: '18%', textAlign: 'right' }}>Rs. {item.total.toFixed(1)}</div>
                     </div>
+                ))}
+
+                {/* Footer Row */}
+                <div style={{
+                    display: 'flex',
+                    height: `${tableRowHeight}mm`,
+                    fontSize: `${ptToMm(tableFontSize)}mm`,
+                    padding: `0 ${tableCellPaddingX}mm`,
+                    borderTop: '2px solid rgb(200, 200, 200)',
+                    fontWeight: 'bold',
+                    backgroundColor: '#f0f0f0',
+                    color: '#000',
+                    alignItems: 'center',
+                }}>
+                    <div style={{ flex: 2 }}>Total</div>
+                    <div style={{ flex: 1 }}></div>
+                    <div style={{ width: '8%', textAlign: 'center' }}>{totalQty}</div>
+                    <div style={{ width: '18%', textAlign: 'center' }}></div>
+                    <div style={{ width: '18%', textAlign: 'right' }}>Rs. {invoice.total_amount.toFixed(1)}</div>
+                </div>
+            </div>
+
+            {/* === AMOUNT IN WORDS & TOTALS === */}
+            <div className="absolute" style={{ left: '7mm', right: '7mm', top: `${totalsStartY}mm`, display: 'flex', justifyContent: 'space-between' }}>
+                {/* Amount in Words */}
+                <div style={{ fontSize: `${ptToMm(10)}mm`, color: '#000', flex: 1, paddingRight: '2mm' }}>
+                    {amountInWords && `Amount in Words: ${amountInWords}`}
                 </div>
 
-                {/* === AMOUNT IN WORDS & TOTALS === */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3.5mm' }}>
-                    {/* Amount in Words */}
-                    <div style={{ fontSize: '3.5mm', color: '#000', flex: 1, paddingRight: '2mm' }}>
-                        {amountInWords && `Amount in Words: ${amountInWords}`}
+                {/* Totals Summary */}
+                <div style={{ width: '61mm', fontSize: `${ptToMm(10)}mm`, paddingRight: '2mm' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2mm' }}>
+                        <span>Subtotal:</span>
+                        <span>Rs. {(invoice.total_amount - (invoice.tax_amount || 0)).toFixed(1)}</span>
                     </div>
-
-                    {/* Totals Summary */}
-                    <div style={{ width: '61mm', fontSize: '3.5mm', paddingRight: '2mm' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2mm' }}>
-                            <span>Subtotal:</span>
-                            <span>Rs. {(invoice.total_amount - (invoice.tax_amount || 0) + (invoice.discount_amount || 0)).toFixed(1)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2mm' }}>
-                            <span>Discount:</span>
-                            <span>-Rs. {(invoice.discount_amount || 0).toFixed(1)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2mm' }}>
-                            <span>Tax:</span>
-                            <span>Rs. {(invoice.tax_amount || 0).toFixed(1)}</span>
-                        </div>
-                        <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            fontWeight: 'bold',
-                            fontSize: '4.2mm', // ~12pt
-                            marginTop: '3mm',
-                        }}>
-                            <span>Total:</span>
-                            <span>Rs. {invoice.total_amount.toFixed(1)}</span>
-                        </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2mm' }}>
+                        <span>Discount:</span>
+                        <span>{(invoice.discount_amount || 0) > 0 ? `-Rs. ${invoice.discount_amount?.toFixed(1)}` : '-'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2mm' }}>
+                        <span>Tax:</span>
+                        <span>Rs. {(invoice.tax_amount || 0).toFixed(1)}</span>
+                    </div>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontWeight: 'bold',
+                        fontSize: '4.2mm', // ~12pt
+                        marginTop: '3mm',
+                    }}>
+                        <span>Total:</span>
+                        <span>Rs. {invoice.total_amount.toFixed(1)}</span>
                     </div>
                 </div>
             </div>

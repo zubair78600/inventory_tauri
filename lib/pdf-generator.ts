@@ -25,6 +25,54 @@ let logoCache: {
 // Simple in-memory cache for settings to avoid DB calls on every PDF gen
 let settingsCache: any | null = null;
 
+// Shape types for custom drawing (matching PdfConfiguration.tsx)
+interface BaseShape {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    anchor?: 'page' | 'table';
+}
+
+interface RectangleShape extends BaseShape {
+    type: 'rectangle';
+    borderColor: string;
+    borderWidth: number;
+    fillColor: string;
+    fillOpacity: number;
+}
+
+interface TextBoxShape extends BaseShape {
+    type: 'text';
+    text: string;
+    fontSize: number;
+    fontColor: string;
+    fontBold?: boolean;
+    fontItalic?: boolean;
+    backgroundColor: string;
+    backgroundOpacity: number;
+}
+
+interface ImageShape extends BaseShape {
+    type: 'image';
+    imagePath: string;
+    aspectRatio: number;
+    borderWidth: number;
+    borderColor: string;
+    opacity: number;
+}
+
+type Shape = RectangleShape | TextBoxShape | ImageShape;
+
+// Helper to convert hex color to RGB array
+const hexToRgb = (hex: string): [number, number, number] => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+        ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
+        : [0, 0, 0];
+};
+
 export const clearSettingsCache = () => {
     settingsCache = null;
     logoCache = null; // Also clear logo cache as path might have changed
@@ -52,6 +100,10 @@ export const DEFAULT_SETTINGS = {
     font_size_header: 16,
     font_size_body: 10,
     header_align: 'left' as 'left' | 'center' | 'right',
+    page_size: 'a4' as 'a4' | 'a5' | 'custom',
+    page_mode: 'full' as 'full' | 'half',
+    page_width: 210,
+    page_height: 297,
 };
 
 const formatCurrency = (amount: number) => {
@@ -142,6 +194,9 @@ const addHeader = async (doc: jsPDF, title: string) => {
     const headerFontSize = getNumber(settings['invoice_font_size_header'], 16);
     const bodyFontSize = Number(settings['invoice_font_size_body']) || 10;
     const headerAlign = (settings['invoice_header_align'] as 'left' | 'center' | 'right') || 'left';
+
+    // Page Settings typically affect document creation but header calculation depends on width
+    // which is passed via doc.internal.pageSize.width so we are good.
 
     let calculatedLogoHeight = 0;
 
@@ -303,6 +358,149 @@ const addFooter = (doc: jsPDF) => {
     }
 };
 
+// Render custom shapes on the PDF
+const PREVIEW_ITEM_COUNT = 6;
+const TABLE_ROW_HEIGHT_MM = (9 * 0.352778 * 1.15) + 3; // 9pt font + 1.5mm top/bottom padding
+
+const renderCustomShapes = async (doc: jsPDF, settings: any, startY: number, actualTableEndY: number) => {
+    const shapesJson = settings['invoice_custom_shapes'];
+    console.log('renderCustomShapes called, shapesJson:', shapesJson);
+    if (!shapesJson) {
+        console.log('No custom shapes found in settings');
+        return;
+    }
+
+    let shapes: Shape[];
+    try {
+        shapes = JSON.parse(shapesJson);
+        console.log('Parsed shapes:', shapes);
+    } catch (e) {
+        console.error('Failed to parse custom shapes:', e);
+        return;
+    }
+
+    if (!Array.isArray(shapes) || shapes.length === 0) {
+        console.log('Shapes array is empty or not an array');
+        return;
+    }
+
+    console.log(`Rendering ${shapes.length} custom shapes...`);
+
+    const previewTableEndY = (startY + 27) + (TABLE_ROW_HEIGHT_MM * (PREVIEW_ITEM_COUNT + 2));
+    const tableDeltaY = actualTableEndY - previewTableEndY;
+
+    // Render each shape
+    for (const shape of shapes) {
+        const yOffset = shape.anchor === 'table' ? tableDeltaY : 0;
+        const shapeY = shape.y + yOffset;
+        if (shape.type === 'rectangle') {
+            // Draw rectangle
+            const rgb = hexToRgb(shape.borderColor);
+            doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+            doc.setLineWidth(shape.borderWidth * 0.264583); // Convert px to mm (1px ≈ 0.264583mm at 96dpi)
+
+            if (shape.fillOpacity > 0) {
+                const fillRgb = hexToRgb(shape.fillColor);
+                // jsPDF doesn't support opacity directly, so we'll just fill if opacity > 0.5
+                if (shape.fillOpacity > 0.5) {
+                    doc.setFillColor(fillRgb[0], fillRgb[1], fillRgb[2]);
+                    doc.rect(shape.x, shapeY, shape.width, shape.height, 'FD'); // Fill and Draw
+                } else {
+                    doc.rect(shape.x, shapeY, shape.width, shape.height, 'S'); // Stroke only
+                }
+            } else {
+                if (shape.borderWidth > 0) {
+                    doc.rect(shape.x, shapeY, shape.width, shape.height, 'S'); // Stroke only
+                }
+            }
+        } else if (shape.type === 'text') {
+            // Draw text box background if opacity > 0
+            if (shape.backgroundOpacity > 0.5) {
+                const bgRgb = hexToRgb(shape.backgroundColor);
+                doc.setFillColor(bgRgb[0], bgRgb[1], bgRgb[2]);
+                doc.rect(shape.x, shapeY, shape.width, shape.height, 'F');
+            }
+
+            // Draw text
+            if (shape.text && shape.text.trim()) {
+                const fontRgb = hexToRgb(shape.fontColor);
+                doc.setTextColor(fontRgb[0], fontRgb[1], fontRgb[2]);
+                doc.setFontSize(shape.fontSize);
+
+                // Set font style based on bold/italic flags
+                let fontStyle: 'normal' | 'bold' | 'italic' | 'bolditalic' = 'normal';
+                if (shape.fontBold && shape.fontItalic) {
+                    fontStyle = 'bolditalic';
+                } else if (shape.fontBold) {
+                    fontStyle = 'bold';
+                } else if (shape.fontItalic) {
+                    fontStyle = 'italic';
+                }
+                doc.setFont('helvetica', fontStyle);
+
+                // Split text to fit within the box width
+                const textLines = doc.splitTextToSize(shape.text, shape.width - 2); // 2mm padding
+                const lineHeight = shape.fontSize * 0.352778 * 1.2; // Convert pt to mm with line spacing
+
+                // Start text slightly below the top of the box
+                let textY = shapeY + shape.fontSize * 0.352778 + 1; // 1mm top padding
+
+                for (const line of textLines) {
+                    if (textY + lineHeight <= shapeY + shape.height) {
+                        doc.text(line, shape.x + 1, textY); // 1mm left padding
+                        textY += lineHeight;
+                    }
+                }
+            }
+        } else if (shape.type === 'image') {
+            // Draw image shape
+            try {
+                const picturesDir = await imageCommands.getPicturesDirectory();
+                const fullImagePath = `${picturesDir}/${shape.imagePath}`;
+                const fileData = await readFile(fullImagePath);
+                const base64 = btoa(fileData.reduce((data: string, byte: number) => data + String.fromCharCode(byte), ''));
+                const dataUrl = `data:image/jpeg;base64,${base64}`;
+
+                // Add image to PDF (match editor's object-contain behavior)
+                const targetAspect = shape.height / shape.width;
+                let drawX = shape.x;
+                let drawY = shapeY;
+                let drawWidth = shape.width;
+                let drawHeight = shape.height;
+
+                if (shape.aspectRatio && shape.aspectRatio > 0) {
+                    if (shape.aspectRatio > targetAspect) {
+                        drawHeight = shape.height;
+                        drawWidth = drawHeight / shape.aspectRatio;
+                        drawX = shape.x + (shape.width - drawWidth) / 2;
+                    } else {
+                        drawWidth = shape.width;
+                        drawHeight = drawWidth * shape.aspectRatio;
+                        drawY = shapeY + (shape.height - drawHeight) / 2;
+                    }
+                }
+
+                doc.addImage(dataUrl, 'JPEG', drawX, drawY, drawWidth, drawHeight);
+
+                // Draw border if specified
+                if (shape.borderWidth > 0) {
+                    const borderRgb = hexToRgb(shape.borderColor);
+                    doc.setDrawColor(borderRgb[0], borderRgb[1], borderRgb[2]);
+                    doc.setLineWidth(shape.borderWidth * 0.264583);
+                    doc.rect(shape.x, shapeY, shape.width, shape.height, 'S');
+                }
+            } catch (err) {
+                console.error('Failed to load shape image for PDF:', err);
+            }
+        }
+    }
+
+    // Reset colors and font after drawing shapes
+    doc.setDrawColor(0, 0, 0);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+};
+
 const createBlobUrl = (doc: jsPDF): string => {
     const blob = doc.output('blob');
     return URL.createObjectURL(blob);
@@ -311,15 +509,55 @@ const createBlobUrl = (doc: jsPDF): string => {
 export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[], customer?: Customer | null): Promise<{ url: string; size: string; duration: string }> => {
     const startTime = performance.now();
     console.log("Generating Invoice PDF...");
-    const doc = new jsPDF();
+    let settings: any = {};
+    try {
+        if (settingsCache) {
+            settings = settingsCache;
+        } else {
+            settings = await settingsCommands.getAll();
+            settingsCache = settings;
+        }
+    } catch (e) {
+        console.warn("Failed to load settings for PDF", e);
+    }
+
+    const pageSize = settings['invoice_page_size'] || 'a4';
+    const pageMode = settings['invoice_page_mode'] || 'full';
+    let pageWidth = 210;
+    let pageHeight = 297;
+
+    if (pageSize === 'a5') {
+        pageWidth = 148;
+        pageHeight = 210;
+    } else if (pageSize === 'custom') {
+        pageWidth = Number(settings['invoice_page_width']) || 210;
+        pageHeight = Number(settings['invoice_page_height']) || 297;
+    }
+
+    // If Half Page Mode is active
+    if (pageMode === 'half') {
+        // Typically custom width or standard width but half height? 
+        // Or literally printing 2 invoices per page?
+        // "Adjust all in half page" implies using A5-like height or A4-half.
+        // Let's assume user wants to constrain height to half of the selected size.
+        pageHeight = pageHeight / 2;
+    }
+
+    const doc = new jsPDF({
+        orientation: pageWidth > pageHeight ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: [pageWidth, pageHeight]
+    });
 
     // Add page border with 5mm (≈15px) padding on all sides
-    const pageWidth = doc.internal.pageSize.width;
-    const pageHeight = doc.internal.pageSize.height;
-    const borderPadding = 5; // 5mm ≈ 15px
+    // Recalculate dimensions from doc internal to be sure
+    const docWidth = doc.internal.pageSize.width;
+    const docHeight = doc.internal.pageSize.height;
+
+    const borderPadding = 5; // 5mm
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.5);
-    doc.rect(borderPadding, borderPadding, pageWidth - (borderPadding * 2), pageHeight - (borderPadding * 2));
+    doc.rect(borderPadding, borderPadding, docWidth - (borderPadding * 2), docHeight - (borderPadding * 2));
 
     const startY = await addHeader(doc, 'INVOICE');
 
@@ -327,7 +565,7 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
 
-    const rightColX = pageWidth - 7;
+    const rightColX = docWidth - 7;
 
     doc.text(`Invoice #: ${invoice.invoice_number}`, rightColX, startY, { align: 'right' });
     doc.text(`Date: ${formatDate(invoice.created_at)}`, rightColX, startY + 5, { align: 'right' });
@@ -442,7 +680,7 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
 
     // Totals Section - align values with the actual Total column text position
     const summaryBlockWidth = 61;
-    const summaryRightX = totalValueX ?? (pageWidth - tableMargin - tableCellPadding.right);
+    const summaryRightX = totalValueX ?? (docWidth - tableMargin - tableCellPadding.right);
     const summaryLabelX = summaryRightX - summaryBlockWidth;
 
     doc.text(`Subtotal:`, summaryLabelX, finalY);
@@ -463,6 +701,9 @@ export const generateInvoicePDF = async (invoice: Invoice, items: InvoiceItem[],
     doc.setFontSize(12);
     doc.text(`Total:`, summaryLabelX, finalY + 20);
     doc.text(formatCurrency(invoice.total_amount), summaryRightX, finalY + 20, { align: 'right' });
+
+    // Render custom shapes (rectangles and text boxes) drawn by user
+    await renderCustomShapes(doc, settings, startY, doc.lastAutoTable.finalY);
 
     addFooter(doc);
 

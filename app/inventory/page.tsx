@@ -6,7 +6,7 @@ import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@t
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+
 import {
   Table,
   TableBody,
@@ -417,7 +417,8 @@ export default function Inventory() {
 
                 <div className="md:col-span-2">
                   <label className="form-label">Supplier</label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     value={newProduct.supplier_id}
                     onChange={(e) => setNewProduct({ ...newProduct, supplier_id: e.target.value })}
                   >
@@ -427,7 +428,7 @@ export default function Inventory() {
                         {s.name}
                       </option>
                     ))}
-                  </Select>
+                  </select>
                 </div>
                 <div className="md:col-span-2">
                   <div className="flex items-center justify-between mb-1">
@@ -475,7 +476,8 @@ export default function Inventory() {
                       </Button>
                     </div>
                   ) : (
-                    <Select
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       value={newProduct.category}
                       onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
                     >
@@ -489,7 +491,7 @@ export default function Inventory() {
                           {cat}
                         </option>
                       ))}
-                    </Select>
+                    </select>
                   )}
                 </div>
               </div>
@@ -597,7 +599,8 @@ export default function Inventory() {
                 </div>
                 <div>
                   <label className="form-label whitespace-nowrap text-xs">Supplier</label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     value={editProduct.supplier_id ?? ''}
                     onChange={(e) =>
                       setEditProduct({
@@ -612,7 +615,7 @@ export default function Inventory() {
                         {s.name}
                       </option>
                     ))}
-                  </Select>
+                  </select>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -662,7 +665,8 @@ export default function Inventory() {
                       </Button>
                     </div>
                   ) : (
-                    <Select
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       value={editProduct.category || ''}
                       onChange={(e) => setEditProduct({ ...editProduct, category: e.target.value })}
                     >
@@ -676,7 +680,7 @@ export default function Inventory() {
                           {cat}
                         </option>
                       ))}
-                    </Select>
+                    </select>
                   )}
                 </div>
               </div>

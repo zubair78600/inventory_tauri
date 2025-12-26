@@ -5,9 +5,8 @@ import { useState, useDeferredValue, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SearchPill } from '@/components/shared/SearchPill';
-import { invoiceCommands, customerCommands, settingsCommands, imageCommands, productCommands, type PaginatedResult, type Customer, type UpdateInvoiceInput, type CreateInvoiceItemInput, type DeletedInvoice, type InvoiceModification } from '@/lib/tauri';
-import { generateInvoicePDF, DEFAULT_COMPANY_NAME, DEFAULT_COMPANY_ADDRESS, DEFAULT_COMPANY_PHONE, DEFAULT_COMPANY_EMAIL, numberToWords } from '@/lib/pdf-generator';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { invoiceCommands, customerCommands, productCommands, type PaginatedResult, type Customer, type UpdateInvoiceInput, type CreateInvoiceItemInput, type DeletedInvoice, type InvoiceModification } from '@/lib/tauri';
+import { generateInvoicePDF } from '@/lib/pdf-generator';
 import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { Pencil, Trash2, Plus, X, Minus, History, FileX } from 'lucide-react';
@@ -18,7 +17,6 @@ import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { InvoicePreview, type InvoiceLayoutSettings } from '@/components/shared/InvoicePreview';
 
 type InvoiceItem = {
   id: number;
@@ -45,64 +43,8 @@ export default function Sales() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
-
-  // Settings State for dynamic header
-  const [companySettings, setCompanySettings] = useState({
-    company_name: DEFAULT_COMPANY_NAME,
-    company_address: DEFAULT_COMPANY_ADDRESS,
-    company_phone: DEFAULT_COMPANY_PHONE,
-    company_email: DEFAULT_COMPANY_EMAIL,
-    company_comments: '',
-    logo_path: null as string | null,
-    logo_width: 30,
-    logo_x: 20,
-    logo_y: 20,
-    header_x: 14,
-    header_y: 50,
-    font_size_header: 16,
-    font_size_body: 10,
-    header_align: 'left' as 'left' | 'center' | 'right',
-    logoUrl: null as string | null,
-  });
-
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const settings = await settingsCommands.getAll();
-
-        let logoUrl = null;
-        // Construct full logo path if setting exists
-        // Note: PdfConfiguration logic uses both rawSettings['invoice_logo_path'] and separate picture dir logic
-        // We will assume settingsCommands.getAll() returns the keys we need.
-        if (settings['invoice_logo_path']) {
-          const picturesDir = await imageCommands.getPicturesDirectory();
-          logoUrl = convertFileSrc(`${picturesDir}/${settings['invoice_logo_path']}`);
-        }
-
-        setCompanySettings({
-          company_name: settings['invoice_company_name'] || DEFAULT_COMPANY_NAME,
-          company_address: settings['invoice_company_address'] || DEFAULT_COMPANY_ADDRESS,
-          company_phone: settings['invoice_company_phone'] || DEFAULT_COMPANY_PHONE,
-          company_email: settings['invoice_company_email'] || DEFAULT_COMPANY_EMAIL,
-          company_comments: settings['invoice_company_comments'] || '',
-          logo_path: settings['invoice_logo_path'] || null,
-          logo_width: Number(settings['invoice_logo_width']) || 30,
-          logo_x: Number(settings['invoice_logo_x']) || 20,
-          logo_y: Number(settings['invoice_logo_y']) || 20,
-          header_x: Number(settings['invoice_header_x']) || 14,
-          header_y: Number(settings['invoice_header_y']) || 50,
-          font_size_header: Number(settings['invoice_font_size_header']) || 16,
-          font_size_body: Number(settings['invoice_font_size_body']) || 10,
-          header_align: (settings['invoice_header_align'] as 'left' | 'center' | 'right') || 'left',
-          // Extended for LogoUrl which isn't part of settings interface but needed for display
-          logoUrl: logoUrl,
-        } as InvoiceLayoutSettings & { logoUrl: string | null });
-      } catch (err) {
-        console.error("Failed to load company settings", err);
-      }
-    };
-    loadSettings();
-  }, []);
+  const [inlinePdfUrl, setInlinePdfUrl] = useState<string | null>(null);
+  const [isInlinePdfLoading, setIsInlinePdfLoading] = useState(false);
 
   // Edit/Delete State
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -164,7 +106,7 @@ export default function Sales() {
   const { data: details, isLoading: itemsLoading } = useQuery({
     queryKey: ['invoice-details', selected?.id],
     queryFn: async () => {
-      if (!selected?.id) return { items: [], customer: null }; // Return null customer default
+      if (!selected?.id) return { items: [], rawItems: [], customer: null, invoice: null }; // Return null customer default
       const data = await invoiceCommands.getById(selected.id);
 
       let customer: Customer | null = null;
@@ -201,18 +143,60 @@ export default function Sales() {
       });
 
       return {
+        invoice: data.invoice,
         customer,
         items: mappedItems,
+        rawItems: data.items,
       };
     },
     enabled: !!selected?.id,
   });
 
   const items = details?.items ?? [];
+  const rawItems = details?.rawItems ?? [];
   const fullCustomer = details?.customer;
+  const invoice = details?.invoice ?? selected;
 
-  // Calculate Totals for Footer
-  const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+  useEffect(() => {
+    let isActive = true;
+    const buildPreview = async () => {
+      if (!invoice || rawItems.length === 0) {
+        setInlinePdfUrl(null);
+        setIsInlinePdfLoading(false);
+        return;
+      }
+
+      setIsInlinePdfLoading(true);
+      try {
+        const { url } = await generateInvoicePDF(invoice, rawItems, fullCustomer || undefined);
+        if (!isActive) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        setInlinePdfUrl(prev => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+      } catch (error) {
+        console.error('Failed to generate inline PDF preview:', error);
+        setInlinePdfUrl(null);
+      } finally {
+        if (isActive) setIsInlinePdfLoading(false);
+      }
+    };
+
+    buildPreview();
+
+    return () => {
+      isActive = false;
+    };
+  }, [invoice?.id, rawItems, fullCustomer]);
+
+  useEffect(() => {
+    return () => {
+      if (inlinePdfUrl) URL.revokeObjectURL(inlinePdfUrl);
+    };
+  }, [inlinePdfUrl]);
 
   if (loading && !sales.length) return <div>Loading...</div>;
   if (status === 'error') return <div>Error: {error ? error.message : 'Unknown error'}</div>;
@@ -447,21 +431,24 @@ export default function Sales() {
           <CardContent className="p-0 flex-1 overflow-hidden bg-slate-100/50 dark:bg-slate-950/50">
             {selected ? (
               <div className="h-full overflow-auto p-4 flex justify-center">
-                <div className="origin-top transform scale-[0.65] mt-[-20px] mb-[-100px]" style={{ width: '210mm' }}>
-                  <InvoicePreview
-                    settings={companySettings}
-                    invoice={{
-                      ...selected,
-                      status: 'Paid', // Assuming all sales history items are paid/completed
-                    }}
-                    customer={fullCustomer || (selected.customer_name ? {
-                      name: selected.customer_name,
-                      phone: selected.customer_phone
-                    } : null)}
-                    items={items}
-                    logoUrl={companySettings.logoUrl}
-                    amountInWords={numberToWords(Math.round(selected.total_amount))}
-                  />
+                <div className="w-full max-w-[900px] aspect-[210/297] bg-white border rounded-md shadow-sm overflow-hidden">
+                  {isInlinePdfLoading && (
+                    <div className="h-full w-full flex items-center justify-center text-sm text-slate-500">
+                      Generating preview...
+                    </div>
+                  )}
+                  {!isInlinePdfLoading && inlinePdfUrl && (
+                    <iframe
+                      src={inlinePdfUrl}
+                      className="w-full h-full"
+                      title="Invoice PDF Preview"
+                    />
+                  )}
+                  {!isInlinePdfLoading && !inlinePdfUrl && (
+                    <div className="h-full w-full flex items-center justify-center text-sm text-slate-500">
+                      Preview unavailable.
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -636,4 +623,3 @@ export default function Sales() {
     </div >
   );
 }
-
