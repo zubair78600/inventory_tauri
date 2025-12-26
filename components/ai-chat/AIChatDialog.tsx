@@ -21,6 +21,7 @@ import {
     ChevronRight,
     Maximize2,
     Minimize2,
+    Minus,
     History,
     Settings,
     BarChart3,
@@ -84,7 +85,8 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
     const [sidecarProgress, setSidecarProgress] = useState<{ percentage: number; speed_mbps: number } | null>(null);
 
     // UI state
-    const [isMaximized, setIsMaximized] = useState(false);
+    type ViewState = 'minimized' | 'normal' | 'maximized';
+    const [viewState, setViewState] = useState<ViewState>('normal');
     const [hasOldHistory, setHasOldHistory] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [historyOffset, setHistoryOffset] = useState(0);
@@ -300,10 +302,10 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
 
     // Check server status and focus input
     useEffect(() => {
-        if (open && sidecarDownloaded) {
+        if (open && sidecarDownloaded && viewState !== 'minimized') {
             setTimeout(() => inputRef.current?.focus(), 500);
         }
-    }, [open, sidecarDownloaded]);
+    }, [open, sidecarDownloaded, viewState]);
 
     // Periodic health check - auto-reconnect if disconnected
     useEffect(() => {
@@ -376,6 +378,20 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
         setIsStartingServer(true);
         setBackendLogs([]); // Clear logs on start
         try {
+            // Check if server is already running but just needs model init
+            const health = await aiChatApi.healthCheck();
+            if (health.healthy && !health.ready) {
+                console.log('Server running but model not ready - triggering initialization...');
+                const initResult = await aiChatApi.initializeModel();
+                if (initResult.success) {
+                    await checkServerStatus();
+                    return;
+                } else {
+                    console.error('Initialization failed:', initResult.error);
+                    // Fallthrough to full restart if init failed
+                }
+            }
+
             await aiChatApi.startSidecar();
 
             // Poll for server readiness (up to 45 seconds - model loading takes ~30s)
@@ -555,8 +571,10 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
             saveFailedQuery(userMessage.content, '', errorMsg);
         } finally {
             setIsLoading(false);
-            // Keep focus on input after sending
-            setTimeout(() => inputRef.current?.focus(), 100);
+            // Keep focus on input after sending (only if not minimized)
+            if (viewState !== 'minimized') {
+                setTimeout(() => inputRef.current?.focus(), 100);
+            }
         }
     };
 
@@ -671,23 +689,65 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
     if (open && status && !status.model_downloaded) {
         return (
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="sm:max-w-[500px] border-none bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl rounded-2xl">
-                    <DialogTitle className="flex items-center gap-2 text-xl font-light">
-                        <Sparkles className="h-6 w-6 text-sky-500" />
-                        Setting up AI Model
-                    </DialogTitle>
+                <DialogContent className={cn(
+                    "border-none bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl transition-all duration-300",
+                    viewState === 'minimized'
+                        ? "fixed bottom-6 right-6 w-80 h-auto rounded-xl p-4"
+                        : "sm:max-w-[500px] rounded-2xl"
+                )}>
+                    <div className="flex items-center justify-between mb-4">
+                        <DialogTitle className="flex items-center gap-2 text-xl font-light">
+                            <Sparkles className="h-6 w-6 text-sky-500" />
+                            {viewState === 'minimized' ? "Downloading..." : "Setting up AI Model"}
+                        </DialogTitle>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setViewState(viewState === 'minimized' ? 'normal' : 'minimized')}
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-slate-600 dark:text-slate-300 hover:text-foreground"
+                                title={viewState === 'minimized' ? "Expand" : "Minimize"}
+                            >
+                                {viewState === 'minimized' ? <Maximize2 className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+                            </button>
+                            <button
+                                onClick={() => onOpenChange(false)}
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-slate-600 dark:text-slate-300 hover:text-foreground"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                    </div>
+
                     <DialogDescription className="hidden">
                         Downloading and configuring the AI model
                     </DialogDescription>
-                    <DownloadProgress onComplete={async () => {
-                        // Restart sidecar to load the newly downloaded model
-                        try {
-                            await aiChatApi.stopSidecar();
-                        } catch {
-                            // Ignore stop errors
-                        }
-                        await startServer();
-                    }} onCancel={() => onOpenChange(false)} />
+
+                    {viewState !== 'minimized' ? (
+                        <DownloadProgress onComplete={async () => {
+                            // Restart sidecar to load the newly downloaded model
+                            try {
+                                await aiChatApi.stopSidecar();
+                            } catch {
+                                // Ignore stop errors
+                            }
+                            await startServer();
+                        }} onCancel={() => onOpenChange(false)} />
+                    ) : (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Downloading in background...</span>
+                            </div>
+                            {/* Minimized progress bar - simplified */}
+                            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                                <motion.div
+                                    className="h-full bg-sky-500"
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: "100%" }} // This is a fake animation since we don't have progress props exposed here easily without refactoring DownloadProgress.
+                                    transition={{ duration: 60, ease: "linear" }}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </DialogContent>
             </Dialog>
         );
@@ -778,11 +838,14 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                 <DialogContent
                     className={cn(
                         "flex flex-col p-0 gap-0 border-white/20 bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl shadow-2xl overflow-hidden ring-1 ring-black/5 dark:ring-white/10 transition-all duration-300",
-                        isMaximized
+                        viewState === 'maximized'
                             ? "!max-w-[100vw] !w-[100vw] !h-[100vh] !rounded-none"
                             : "sm:max-w-[800px] w-full h-[650px] rounded-[40px]"
                     )}
-                    onInteractOutside={(e) => e.preventDefault()}
+                    onInteractOutside={(e) => {
+                        // Prevent closing when clicking outside if minimized to prevent accidental loss
+                        if (viewState === 'minimized') e.preventDefault();
+                    }}
                 >
                     <DialogDescription className="hidden">
                         AI Chat Interface to interact with inventory data
@@ -791,7 +854,12 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="px-6 py-4 flex items-center justify-between border-b border-black/5 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-md z-10"
+                        className={cn(
+                            "px-6 py-4 flex items-center justify-between border-b border-black/5 dark:border-white/5 backdrop-blur-md z-10",
+                            viewState === 'minimized'
+                                ? "bg-white dark:bg-slate-900"
+                                : "bg-white/50 dark:bg-black/20"
+                        )}
                     >
                         <div className="flex-1 min-w-0">
                             <DialogTitle className="flex items-center gap-3">
@@ -834,14 +902,14 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                                         alert('Failed to save chat: ' + String(error));
                                     }
                                 }}
-                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-slate-600 dark:text-slate-300 hover:text-foreground"
                                 title="Download Chat History"
                             >
                                 <Download className="h-4 w-4" />
                             </button>
                             {/* Toolbar buttons */}
                             <button
-                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-slate-600 dark:text-slate-300 hover:text-foreground"
                                 title="Settings"
                             >
                                 <Settings className="h-4 w-4" />
@@ -861,174 +929,179 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                                     {isStartingServer ? 'Starting...' : 'Reconnect'}
                                 </motion.button>
                             )}
+
                             <button
-                                onClick={() => setIsMaximized(!isMaximized)}
-                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
-                                title={isMaximized ? "Minimize" : "Maximize"}
+                                onClick={() => setViewState(viewState === 'maximized' ? 'normal' : 'maximized')}
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-slate-600 dark:text-slate-300 hover:text-foreground"
+                                title={viewState === 'maximized' ? "Restore" : "Maximize"}
                             >
-                                {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                                {viewState === 'maximized' ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                             </button>
                             <button
                                 onClick={() => onOpenChange(false)}
-                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                                className="h-8 w-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-slate-600 dark:text-slate-300 hover:text-foreground"
                             >
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
                     </motion.div>
 
-                    {/* Chat Area */}
-                    <div className="flex-1 overflow-hidden relative bg-slate-50/50 dark:bg-slate-900/50">
-                        <ScrollArea className="h-full px-6 pt-6 pb-4">
-                            {/* Load History Button - show when there's history to load */}
-                            {(hasOldHistory && historyOffset < totalHistoryCount) || (hasOldHistory && allHistoryMessages.length === 0) ? (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="flex justify-center mb-4"
-                                >
-                                    <button
-                                        onClick={loadOldHistory}
-                                        disabled={isLoadingHistory}
-                                        className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-sm font-medium text-slate-600 dark:text-slate-300 flex items-center gap-2 transition-colors shadow-sm"
+                    {/* Chat Area - Hidden when minimized */}
+                    {viewState !== 'minimized' && (
+                        <div className="flex-1 overflow-hidden relative bg-slate-50/50 dark:bg-slate-900/50">
+                            <ScrollArea className="h-full px-6 pt-6 pb-4">
+                                {/* Load History Button - show when there's history to load */}
+                                {(hasOldHistory && historyOffset < totalHistoryCount) || (hasOldHistory && allHistoryMessages.length === 0) ? (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="flex justify-center mb-4"
                                     >
-                                        {isLoadingHistory ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                Loading...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <History className="h-4 w-4" />
-                                                {allHistoryMessages.length === 0
-                                                    ? 'Load Previous Conversations'
-                                                    : `Load ${Math.min(HISTORY_LOAD_BATCH, totalHistoryCount - historyOffset)} more (${totalHistoryCount - historyOffset} remaining)`
-                                                }
-                                            </>
-                                        )}
-                                    </button>
-                                </motion.div>
-                            ) : null}
-                            {!isServerReady && !isStartingServer ? (
-                                <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
-                                    <Bot className="h-16 w-16 text-muted-foreground mb-4" />
-                                    <h3 className="text-lg font-medium">Server Disconnected</h3>
-                                    <p className="text-sm text-muted-foreground mt-2 max-w-md">
-                                        The AI sidecar is not responding. Click "Reconnect" in the top right or check your backend logs.
-                                    </p>
-                                </div>
-                            ) : messages.length === 0 ? (
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    className="h-full flex flex-col items-center justify-center max-w-2xl mx-auto"
-                                >
-                                    <div className="mb-8 text-center space-y-2">
-                                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-sky-500/10 to-indigo-600/10 flex items-center justify-center mx-auto mb-6 ring-1 ring-black/5">
-                                            <Sparkles className="h-8 w-8 text-indigo-500" />
-                                        </div>
-                                        <h2 className="text-2xl font-light text-foreground">
-                                            How can I help you today?
-                                        </h2>
-                                        <p className="text-muted-foreground">
-                                            I can analyze your inventory, track sales, and generate reports instantly.
+                                        <button
+                                            onClick={loadOldHistory}
+                                            disabled={isLoadingHistory}
+                                            className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-sm font-medium text-slate-600 dark:text-slate-300 flex items-center gap-2 transition-colors shadow-sm"
+                                        >
+                                            {isLoadingHistory ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    Loading...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <History className="h-4 w-4" />
+                                                    {allHistoryMessages.length === 0
+                                                        ? 'Load Previous Conversations'
+                                                        : `Load ${Math.min(HISTORY_LOAD_BATCH, totalHistoryCount - historyOffset)} more (${totalHistoryCount - historyOffset} remaining)`
+                                                    }
+                                                </>
+                                            )}
+                                        </button>
+                                    </motion.div>
+                                ) : null}
+                                {!isServerReady && !isStartingServer ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
+                                        <Bot className="h-16 w-16 text-muted-foreground mb-4" />
+                                        <h3 className="text-lg font-medium">Server Disconnected</h3>
+                                        <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                                            The AI sidecar is not responding. Click "Reconnect" in the top right or check your backend logs.
                                         </p>
                                     </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
-                                        {SUGGESTED_QUESTIONS.map((q, i) => (
-                                            <motion.button
-                                                key={i}
-                                                whileHover={{ scale: 1.02, backgroundColor: "rgba(var(--primary), 0.05)" }}
-                                                whileTap={{ scale: 0.98 }}
-                                                onClick={() => handleSend(q)}
-                                                className="p-4 rounded-xl text-left bg-white dark:bg-slate-800 border border-black/5 dark:border-white/5 shadow-sm hover:shadow-md hover:border-indigo-500/30 transition-all group"
-                                            >
-                                                <span className="text-sm font-medium text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                                                    {q}
-                                                </span>
-                                            </motion.button>
-                                        ))}
-                                    </div>
-                                </motion.div>
-                            ) : (
-                                <div className="space-y-6 pb-4">
-                                    <AnimatePresence initial={false}>
-                                        {messages.map((msg) => (
-                                            <MessageBubble
-                                                key={msg.id}
-                                                message={msg}
-                                                onImprove={handleImproveQuery}
-                                                isCompact={!isMaximized}
-                                            />
-                                        ))}
-                                    </AnimatePresence>
-
-                                    {isLoading && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="flex justify-start"
-                                        >
-                                            <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm border border-black/5 flex items-center gap-2">
-                                                <div className="flex gap-1">
-                                                    {[0, 1, 2].map(i => (
-                                                        <motion.div
-                                                            key={i}
-                                                            className="h-1.5 w-1.5 rounded-full bg-indigo-500"
-                                                            animate={{ y: [0, -5, 0] }}
-                                                            transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
-                                                        />
-                                                    ))}
-                                                </div>
-                                                <span className="text-xs text-muted-foreground font-medium">Thinking...</span>
+                                ) : messages.length === 0 ? (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        className="h-full flex flex-col items-center justify-center max-w-2xl mx-auto"
+                                    >
+                                        <div className="mb-8 text-center space-y-2">
+                                            <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-sky-500/10 to-indigo-600/10 flex items-center justify-center mx-auto mb-6 ring-1 ring-black/5">
+                                                <Sparkles className="h-8 w-8 text-indigo-500" />
                                             </div>
-                                        </motion.div>
-                                    )}
-                                    <div ref={scrollRef} />
-                                </div>
-                            )}
-                        </ScrollArea>
-                    </div>
+                                            <h2 className="text-2xl font-light text-foreground">
+                                                How can I help you today?
+                                            </h2>
+                                            <p className="text-muted-foreground">
+                                                I can analyze your inventory, track sales, and generate reports instantly.
+                                            </p>
+                                        </div>
 
-                    {/* Input Area */}
-                    <div className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-black/5 dark:border-white/5 z-20">
-                        <div className="relative max-w-3xl mx-auto flex items-center gap-2">
-                            <div className="relative flex-1">
-                                <input
-                                    ref={inputRef}
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSend(input)}
-                                    placeholder="Type a message..."
-                                    disabled={isLoading || !isServerReady}
-                                    className="w-full h-12 pl-12 pr-4 rounded-full bg-slate-100 dark:bg-slate-800 border-none focus:ring-2 focus:ring-indigo-500/20 text-foreground placeholder:text-muted-foreground/60 shadow-inner transition-all"
-                                />
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-                                    <Search className="h-5 w-5 opacity-50" />
-                                </div>
-                            </div>
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => handleSend(input)}
-                                disabled={!input.trim() || isLoading}
-                                className={cn(
-                                    "h-12 w-12 rounded-full flex items-center justify-center shadow-md transition-all",
-                                    input.trim()
-                                        ? "bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-indigo-500/25"
-                                        : "bg-slate-200 dark:bg-slate-700 text-slate-400"
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
+                                            {SUGGESTED_QUESTIONS.map((q, i) => (
+                                                <motion.button
+                                                    key={i}
+                                                    whileHover={{ scale: 1.02, backgroundColor: "rgba(var(--primary), 0.05)" }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                    onClick={() => handleSend(q)}
+                                                    className="p-4 rounded-xl text-left bg-white dark:bg-slate-800 border border-black/5 dark:border-white/5 shadow-sm hover:shadow-md hover:border-indigo-500/30 transition-all group"
+                                                >
+                                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                                        {q}
+                                                    </span>
+                                                </motion.button>
+                                            ))}
+                                        </div>
+                                    </motion.div>
+                                ) : (
+                                    <div className="space-y-6 pb-4">
+                                        <AnimatePresence initial={false}>
+                                            {messages.map((msg) => (
+                                                <MessageBubble
+                                                    key={msg.id}
+                                                    message={msg}
+                                                    onImprove={handleImproveQuery}
+                                                    isCompact={viewState !== 'maximized'}
+                                                />
+                                            ))}
+                                        </AnimatePresence>
+
+                                        {isLoading && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                className="flex justify-start"
+                                            >
+                                                <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm border border-black/5 flex items-center gap-2">
+                                                    <div className="flex gap-1">
+                                                        {[0, 1, 2].map(i => (
+                                                            <motion.div
+                                                                key={i}
+                                                                className="h-1.5 w-1.5 rounded-full bg-indigo-500"
+                                                                animate={{ y: [0, -5, 0] }}
+                                                                transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground font-medium">Thinking...</span>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                        <div ref={scrollRef} />
+                                    </div>
                                 )}
-                            >
-                                <ArrowRight className="h-5 w-5" />
-                            </motion.button>
+                            </ScrollArea>
                         </div>
-                        <div className="text-center mt-2">
-                            <p className="text-[10px] text-muted-foreground/60">
-                                AI can make mistakes. Check important info.
-                            </p>
+                    )}
+
+                    {/* Input Area - Hidden when minimized */}
+                    {viewState !== 'minimized' && (
+                        <div className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-black/5 dark:border-white/5 z-20">
+                            <div className="relative max-w-3xl mx-auto flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <input
+                                        ref={inputRef}
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleSend(input)}
+                                        placeholder="Type a message..."
+                                        disabled={isLoading || !isServerReady}
+                                        className="w-full h-12 pl-12 pr-4 rounded-full bg-slate-100 dark:bg-slate-800 border-none focus:ring-2 focus:ring-indigo-500/20 text-foreground placeholder:text-muted-foreground/60 shadow-inner transition-all"
+                                    />
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                        <Search className="h-5 w-5 opacity-50" />
+                                    </div>
+                                </div>
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => handleSend(input)}
+                                    disabled={!input.trim() || isLoading}
+                                    className={cn(
+                                        "h-12 w-12 rounded-full flex items-center justify-center shadow-md transition-all",
+                                        input.trim()
+                                            ? "bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-indigo-500/25"
+                                            : "bg-slate-200 dark:bg-slate-700 text-slate-400"
+                                    )}
+                                >
+                                    <ArrowRight className="h-5 w-5" />
+                                </motion.button>
+                            </div>
+                            <div className="text-center mt-2">
+                                <p className="text-[10px] text-muted-foreground/60">
+                                    AI can make mistakes. Check important info.
+                                </p>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </DialogContent>
             </Dialog>
 
@@ -1204,7 +1277,7 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                                 <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
                                     <button
                                         onClick={() => setShowSql(!showSql)}
-                                        className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] font-mono text-muted-foreground flex justify-between items-center transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
+                                        className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] font-mono text-slate-700 dark:text-slate-300 flex justify-between items-center transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
                                     >
                                         <div className="flex items-center gap-1.5">
                                             <ChevronRight className={cn("h-3 w-3 transition-transform", showSql && "rotate-90")} />
@@ -1221,7 +1294,7 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                                                 className="overflow-hidden"
                                             >
                                                 <div className="bg-slate-50 dark:bg-slate-950 p-3 border-t border-black/5">
-                                                    <code className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 whitespace-pre-wrap break-all">
+                                                    <code className="text-[11px] font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all">
                                                         {message.sql}
                                                     </code>
                                                 </div>
@@ -1243,10 +1316,10 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                                 return (
                                     <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
                                         {/* Header row - flex container with toggle and CSV button as siblings */}
-                                        <div className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] text-muted-foreground flex justify-between items-center">
+                                        <div className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] text-slate-700 dark:text-slate-300 flex justify-between items-center">
                                             <button
                                                 onClick={() => setShowRawData(!showRawData)}
-                                                className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+                                                className="flex items-center gap-1.5 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
                                             >
                                                 <ChevronRight className={cn("h-3 w-3 transition-transform", showRawData && "rotate-90")} />
                                                 <Table2 className="h-3 w-3" />
@@ -1456,7 +1529,7 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                         <div className="mt-3 rounded-lg overflow-hidden border border-black/10 dark:border-white/10">
                             <button
                                 onClick={() => setShowSql(!showSql)}
-                                className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] font-mono text-muted-foreground flex justify-between items-center transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
+                                className="w-full bg-slate-100 dark:bg-slate-900 px-3 py-2 text-[10px] font-mono text-slate-700 dark:text-slate-300 flex justify-between items-center transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
                             >
                                 <div className="flex items-center gap-1.5">
                                     <ChevronRight className={cn("h-3 w-3 transition-transform", showSql && "rotate-90")} />
@@ -1473,7 +1546,7 @@ function MessageBubble({ message, onImprove, isCompact = false }: { message: Cha
                                         className="overflow-hidden"
                                     >
                                         <div className="bg-slate-50 dark:bg-slate-950 p-3 border-t border-black/5">
-                                            <code className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 whitespace-pre-wrap break-all">
+                                            <code className="text-[11px] font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all">
                                                 {message.sql}
                                             </code>
                                         </div>

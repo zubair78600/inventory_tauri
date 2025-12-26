@@ -27,6 +27,8 @@ import { EntityImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 import { EntityImageUpload } from '@/components/shared/EntityImageUpload';
 import { imageCommands } from '@/lib/tauri';
 import { useAuth } from '@/contexts/AuthContext';
+import { PriceCalculatorModal } from '@/components/inventory/PriceCalculatorModal';
+import { Calculator } from 'lucide-react';
 
 type NewProductFormState = {
   name: string;
@@ -48,6 +50,7 @@ export default function Inventory() {
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
   const [newProduct, setNewProduct] = useState<NewProductFormState>({
     name: '',
     sku: '',
@@ -80,19 +83,14 @@ export default function Inventory() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Auto-calculate Amount Paid when Price or Stock changes
-  useEffect(() => {
+  // Calculate total amount to be paid (for display in label only)
+  const totalAmountToBePaid = useMemo(() => {
     const price = parseFloat(newProduct.price);
     const stock = parseInt(newProduct.stock_quantity, 10);
-
-    // Only update if we have valid numbers
     if (!isNaN(price) && !isNaN(stock)) {
-      const calculated = (price * stock).toFixed(2);
-      // Update only if different to avoid loop (though dependencies handle that)
-      if (newProduct.amount_paid !== calculated) {
-        setNewProduct(prev => ({ ...prev, amount_paid: calculated }));
-      }
+      return (price * stock).toFixed(2);
     }
+    return '0.00';
   }, [newProduct.price, newProduct.stock_quantity]);
 
   useEffect(() => {
@@ -377,16 +375,29 @@ export default function Inventory() {
                     required
                   />
                 </div>
-                <div>
-                  <label className="form-label whitespace-nowrap text-xs">Selling Price</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={newProduct.selling_price}
-                    onChange={(e) => setNewProduct({ ...newProduct, selling_price: e.target.value })}
-                  />
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="form-label whitespace-nowrap text-xs">Selling Price</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={newProduct.selling_price}
+                      onChange={(e) => setNewProduct({ ...newProduct, selling_price: e.target.value })}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mb-0 h-10"
+                    onClick={() => setShowPriceCalculator(true)}
+                    title="Open Price Calculator"
+                  >
+                    <Calculator className="w-4 h-4 mr-1" />
+                    Calculate
+                  </Button>
                 </div>
                 <div>
                   <label className="form-label whitespace-nowrap text-xs">Stock Quantity</label>
@@ -400,14 +411,14 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="form-label whitespace-nowrap text-xs truncate" title="Amount Paid">
-                    Amount Paid {newProduct.amount_paid ? `(${newProduct.amount_paid})` : ''}
+                  <label className="form-label whitespace-nowrap text-xs truncate" title={`Total Amount to Pay: ${totalAmountToBePaid}`}>
+                    Amount Paid ({totalAmountToBePaid})
                   </label>
                   <Input
                     type="number"
                     step="0.01"
                     min="0"
-                    placeholder="0.00"
+                    placeholder="Enter initial payment"
                     value={newProduct.amount_paid}
                     onChange={(e) =>
                       setNewProduct({ ...newProduct, amount_paid: e.target.value })
@@ -528,6 +539,24 @@ export default function Inventory() {
           </Card>
         )
       }
+
+      {/* Price Calculator Modal */}
+      <PriceCalculatorModal
+        isOpen={showPriceCalculator}
+        onClose={() => setShowPriceCalculator(false)}
+        onPriceCalculated={(data) => {
+          setNewProduct(prev => ({
+            ...prev,
+            price: data.actualPrice.toFixed(2),
+            selling_price: data.sellingPrice.toFixed(2),
+            stock_quantity: data.quantity.toString(),
+            amount_paid: '', // Clear amount paid so user can enter initial payment
+          }));
+          setShowPriceCalculator(false);
+        }}
+        initialProductCost={newProduct.price ? parseFloat(newProduct.price) : undefined}
+        initialQuantity={newProduct.stock_quantity ? parseInt(newProduct.stock_quantity) : undefined}
+      />
 
 
 

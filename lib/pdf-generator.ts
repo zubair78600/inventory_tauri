@@ -1131,3 +1131,6 @@ export const generateSupplierDetailPDF = async (
     addFooter(doc);
     return createBlobUrl(doc);
 };
+
+// Export price calculation PDF generator
+export { generatePriceCalculationPDF } from './pdf-generators/price-calculation';

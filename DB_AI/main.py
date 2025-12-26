@@ -60,6 +60,34 @@ class DownloadProgress(BaseModel):
     speed_mbps: float = 0.0
 
 
+app = FastAPI(title="Inventory AI Chat")
+
+def initialize_model():
+    """Helper to initialize the VannaAI model if available"""
+    global vanna_ai, model_init_error
+    
+    if MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 0:
+        try:
+            vanna_ai = VannaAI(
+                model_path=str(MODEL_PATH),
+                db_path=str(DB_PATH),
+                vectordb_path=str(VECTORDB_PATH)
+            )
+            logger.info("VannaAI initialized successfully")
+            model_init_error = None
+            return True
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Failed to initialize VannaAI: {error_msg}")
+            model_init_error = error_msg
+            vanna_ai = None
+            return False
+    else:
+        logger.warning(f"Model not found at {MODEL_PATH}")
+        model_init_error = "Model file not found or empty"
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global vanna_ai, sql_executor, query_cache, model_init_error
@@ -71,24 +99,8 @@ async def lifespan(app: FastAPI):
     # Initialize Cache
     query_cache = QueryCache(str(DB_PATH.parent))
     
-    # Initialize VannaAI only if model is downloaded and valid
-    if MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 0:
-        try:
-            vanna_ai = VannaAI(
-                model_path=str(MODEL_PATH),
-                db_path=str(DB_PATH),
-                vectordb_path=str(VECTORDB_PATH)
-            )
-            logger.info("VannaAI initialized successfully")
-            model_init_error = None
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Failed to initialize VannaAI: {error_msg}")
-            model_init_error = error_msg
-            vanna_ai = None
-    else:
-        logger.warning(f"Model not found at {MODEL_PATH}")
-        model_init_error = "Model file not found or empty"
+    # Try to initialize model
+    initialize_model()
     
     yield
     
@@ -109,6 +121,17 @@ app.add_middleware(
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "ready": vanna_ai is not None}
+
+
+@app.post("/initialize")
+async def trigger_initialization():
+    """Manually trigger model initialization (e.g. after download)"""
+    success = initialize_model()
+    return {
+        "success": success, 
+        "ready": vanna_ai is not None,
+        "error": model_init_error
+    }
 
 
 @app.get("/status", response_model=SetupStatus)

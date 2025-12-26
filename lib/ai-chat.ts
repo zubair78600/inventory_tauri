@@ -172,7 +172,18 @@ export const aiChatApi = {
     },
 
     /**
-     * Check if the AI server is healthy
+     * Manually trigger model initialization
+     */
+    initializeModel: async (): Promise<{ success: boolean; ready: boolean; error?: string }> => {
+        const response = await fetch(`${AI_SERVER_URL}/initialize`, { method: 'POST' });
+        if (!response.ok) {
+            throw new Error('Initialization request failed');
+        }
+        return response.json();
+    },
+
+    /**
+     * Check if the AI server is healthy and ready
      */
     /**
      * Check if the AI server is healthy and ready
