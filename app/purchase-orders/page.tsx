@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -256,16 +262,20 @@ export default function PurchaseOrders() {
                 <div>
                   <label className="form-label">Supplier *</label>
                   <Select
-                    value={newPO.supplier_id || ''}
-                    onChange={(e) => setNewPO({ ...newPO, supplier_id: parseInt(e.target.value) || null })}
+                    value={newPO.supplier_id?.toString() || ''}
+                    onValueChange={(val) => setNewPO({ ...newPO, supplier_id: parseInt(val) || null })}
                     required
                   >
-                    <option value="">Select Supplier</option>
-                    {suppliers.map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                      </option>
-                    ))}
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select Supplier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                          {supplier.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
                 <div>
@@ -293,17 +303,20 @@ export default function PurchaseOrders() {
                       <div className="col-span-6">
                         <label className="form-label text-xs">Product</label>
                         <Select
-                          value={item.product_id || ''}
-                          onChange={(e) => updateItem(index, 'product_id', parseInt(e.target.value) || null)}
-                          className="text-sm"
+                          value={item.product_id?.toString() || ''}
+                          onValueChange={(val) => updateItem(index, 'product_id', parseInt(val) || null)}
                           required
                         >
-                          <option value="">Select Product</option>
-                          {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                              {product.name} ({product.sku})
-                            </option>
-                          ))}
+                          <SelectTrigger className="w-full text-sm">
+                            <SelectValue placeholder="Select Product" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {products.map((product) => (
+                              <SelectItem key={product.id} value={product.id.toString()}>
+                                {product.name} ({product.sku})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
                         </Select>
                       </div>
                       <div className="col-span-2">

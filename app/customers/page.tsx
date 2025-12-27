@@ -216,7 +216,7 @@ export default function Customers() {
               className="w-[260px] mt-1.5"
             />
           </div>
-          <p className="text-sm text-muted-foreground">{totalCount} total customers</p>
+          <p className="text-sm text-slate-500 font-medium">{totalCount} total customers</p>
         </div>
 
         <div className="flex gap-2 items-center z-20">

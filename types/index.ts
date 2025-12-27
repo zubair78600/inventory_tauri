@@ -42,6 +42,7 @@ export type Product = {
   updated_at: string;
   image_path: string | null;
   category: string | null;
+  description?: string | null;
   total_sold?: number;
   total_sold_amount?: number; // Actual revenue after discounts
 };

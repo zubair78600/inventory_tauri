@@ -411,7 +411,7 @@ export default function Sales() {
               className="w-[260px] mt-1.5"
             />
           </div>
-          <p className="text-sm text-muted-foreground">{totalCount} total orders</p>
+          <p className="text-sm text-slate-500 font-medium">{totalCount} total orders</p>
         </div>
       </div>
 
@@ -419,7 +419,7 @@ export default function Sales() {
         <Card className="p-0 overflow-hidden flex flex-col h-full relative">
           <CardHeader className="pb-2">
             <CardTitle>Sales History</CardTitle>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-slate-500 font-medium">
               {totalCount} total orders
             </p>
           </CardHeader>

@@ -9,10 +9,15 @@ import { useLocationDefaults } from '@/hooks/useLocationDefaults';
 import { EntityThumbnail } from '@/components/shared/EntityThumbnail';
 import { PDFPreviewDialog } from '@/components/shared/PDFPreviewDialog';
 import { generateInvoicePDF } from '@/lib/pdf-generator';
-import { FileText, Clock, Loader2, Pin } from 'lucide-react';
+import { FileText, Clock, Loader2, Pin, Settings, RotateCcw, Move, Search, X } from 'lucide-react';
 import { shareInvoiceViaWhatsApp, openWhatsAppChat } from '@/lib/whatsapp-share';
 import { PhoneEntryDialog } from '@/components/shared/PhoneEntryDialog';
 import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
+import { ResizableBillingLayout, useLayoutSettings } from '@/components/billing/ResizableBillingLayout';
+import { usePanelSize } from '@/components/billing/ResponsivePanel';
+import { getAdaptiveStyles, calculateGridColumns } from '@/components/billing/adaptive-styles';
+import { ProductDetailsDialog } from '@/components/billing/ProductDetailsDialog';
+import { ProductContextMenu } from '@/components/billing/ProductContextMenu';
 
 type CartItem = {
   product_id: number;
@@ -21,6 +26,66 @@ type CartItem = {
   cost_price: number; // For profit-weighted discount calculation
   quantity: number;
   max_stock: number;
+};
+
+// Standalone Settings Menu to avoid remounting the entire Products panel
+const ProductsSettingsMenu = ({
+  onShowQuickAdd,
+}: {
+  onShowQuickAdd: () => void;
+}) => {
+  const { handleStartReorganize, handleResetLayout } = useLayoutSettings();
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors border border-slate-200 shadow-sm"
+        title="Settings"
+      >
+        <Settings size={18} />
+      </button>
+
+      {showSettingsMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowSettingsMenu(false)} />
+          <div className="absolute right-0 top-full mt-2 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 min-w-[200px]">
+            <button
+              onClick={() => {
+                onShowQuickAdd();
+                setShowSettingsMenu(false);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+            >
+              <Settings size={16} className="text-slate-400" />
+              Customize Quick Add
+            </button>
+            <button
+              onClick={() => {
+                handleStartReorganize();
+                setShowSettingsMenu(false);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+            >
+              <Move size={16} className="text-slate-400" />
+              Reorganize Layout
+            </button>
+            <button
+              onClick={() => {
+                handleResetLayout();
+                setShowSettingsMenu(false);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <RotateCcw size={16} className="text-red-400" />
+              Reset Layout
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 };
 
 export default function Billing() {
@@ -45,7 +110,14 @@ export default function Billing() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState<boolean>(false);
   const [productSearch, setProductSearch] = useState<string>('');
-  const [debouncedProductSearch, setDebouncedProductSearch] = useState<string>('');
+  const { isReorganizing } = useLayoutSettings();
+
+  // Dialog & Menu States
+  const [showProductDetails, setShowProductDetails] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuProduct, setContextMenuProduct] = useState<Product | null>(null);
+
+  const [debouncedProductSearch, setDebouncedProductSearch] = useState(productSearch);
   const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
   const [taxRate, setTaxRate] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
@@ -67,6 +139,7 @@ export default function Billing() {
   const [showQuickAddSettings, setShowQuickAddSettings] = useState(false);
   const importQuickAddSettingsModal = () => import('@/components/billing/QuickAddSettingsModal');
   const [QuickAddModal, setQuickAddModal] = useState<any>(null);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
 
   const pageSize = 20;
 
@@ -157,7 +230,7 @@ export default function Billing() {
       }
       return undefined;
     },
-    enabled: debouncedProductSearch.length >= 2,
+    enabled: debouncedProductSearch.length >= 1,
     placeholderData: keepPreviousData,
   });
 
@@ -552,538 +625,569 @@ export default function Billing() {
     }
   };
 
-  return (
-    <div className="grid gap-6 lg:grid-cols-2 h-[calc(100vh-6rem)] overflow-hidden">
-      {QuickAddModal && (
-        <QuickAddModal
-          isOpen={showQuickAddSettings}
-          onClose={() => setShowQuickAddSettings(false)}
-          currentIds={quickAddIds}
-          onSave={handleUpdateQuickAdd}
-          columns={gridColumns}
-          onColumnsChange={handleUpdateGridColumns}
-        />
-      )}
-      <div className="h-full flex flex-col overflow-hidden">
-        <div className="card space-y-4 flex-1 overflow-y-auto">
-          <h2 className="section-title">Current Bill</h2>
+  // Current Bill Panel Content
+  const currentBillPanel = (
+    <div className="card !p-4 space-y-4 flex-1 overflow-y-auto shadow-md">
+      <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Current Bill</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Phone Number - First and Mandatory */}
-            <div className="relative">
-              <label className="form-label">Phone <span className="text-red-500">*</span></label>
-              <input
-                className="form-input"
-                value={customerPhone}
-                onChange={(e) => {
-                  const newVal = e.target.value.replace(/\D/g, '').slice(0, 10);
-                  setCustomerPhone(newVal);
-                  setShowCustomerSuggestions(true);
-
-                  // If a customer was previously selected from suggestions,
-                  // changing the phone number should reset the selection and name
-                  // to avoid data mismatch (e.g. valid name with invalid/new phone)
-                  if (selectedCustomerId) {
-                    setSelectedCustomerId(null);
-                    setCustomerName('');
-                  }
-                }}
-                onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
-                placeholder="Enter Phone (10 digits)"
-                maxLength={10}
-                required
-              />
-              {showCustomerSuggestions && customerSuggestions.length > 0 && (
-                <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-[0_12px_30px_-22px_rgba(15,23,42,0.4)] max-h-56 overflow-auto">
-                  {customerSuggestions.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-sky-50"
-                      onClick={() => {
-                        setCustomerName(c.name);
-                        setCustomerPhone(c.phone ?? '');
-                        setSelectedCustomerId(c.id);
-                        setShowCustomerSuggestions(false);
-                      }}
-                    >
-                      <div className="text-left">
-                        <span className="font-semibold text-slate-800 block">{c.phone}</span>
-                        <span className="text-xs text-slate-500">{c.name}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Customer Name - Second */}
-            <div>
-              <label className="form-label">Customer Name <span className="text-red-500">*</span></label>
-              <input
-                className="form-input"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Enter Name"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="table-container">
-            <div className="space-y-2 w-full">
-              <div className="grid grid-cols-[1.2fr,0.6fr,0.9fr,0.9fr,0.5fr] md:grid-cols-[1.4fr,0.7fr,1fr,1fr,0.6fr] gap-2 text-xs md:text-sm font-semibold text-slate-500 uppercase tracking-[0.05em]">
-                <span className="pl-2">Item</span>
-                <span className="text-center">Qty</span>
-                <span className="text-center">Price</span>
-                <span className="text-center">Total</span>
-                <span className="text-center">Action</span>
-              </div>
-              <div
-                className={`divide-y divide-slate-200 dark:divide-slate-700/70 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800/70 overflow-hidden ${cart.length > 3 ? 'max-h-48 overflow-y-auto' : ''
-                  }`}
-              >
-                {cart.map((item) => {
-                  const itemDiscount = getItemDiscount(item.product_id);
-                  const originalTotal = item.unit_price * item.quantity;
-                  const finalTotal = originalTotal - itemDiscount;
-                  const discountedUnitPrice = item.quantity > 0 ? finalTotal / item.quantity : 0;
-                  const hasDiscount = discount > 0 && itemDiscount > 0;
-
-                  return (
-                    <div
-                      key={item.product_id}
-                      className="grid grid-cols-[1.2fr,0.6fr,0.9fr,0.9fr,0.5fr] md:grid-cols-[1.4fr,0.7fr,1fr,1fr,0.6fr] items-center gap-2 px-4 py-3 text-sm md:text-base"
-                    >
-                      <span className="font-semibold text-slate-900 dark:text-slate-50 break-words pl-2">
-                        {item.name}
-                      </span>
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateQuantity(item.product_id, parseInt(e.target.value, 10))
-                        }
-                        className="w-14 md:w-16 justify-self-center form-input text-center"
-                      />
-                      {/* Price column with strikethrough when discounted */}
-                      <span className="text-center">
-                        {hasDiscount ? (
-                          <span className="flex flex-col items-center">
-                            <span className="line-through text-slate-400 text-xs">₹{item.unit_price.toFixed(0)}</span>
-                            <span className="text-green-600 font-medium">₹{discountedUnitPrice.toFixed(2)}</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-700 dark:text-slate-200">₹{item.unit_price.toFixed(0)}</span>
-                        )}
-                      </span>
-                      {/* Total column with strikethrough when discounted */}
-                      <span className="text-center">
-                        {hasDiscount ? (
-                          <span className="flex flex-col items-center">
-                            <span className="line-through text-slate-400 text-xs">₹{originalTotal.toFixed(0)}</span>
-                            <span className="text-green-600 font-semibold">₹{finalTotal.toFixed(2)}</span>
-                          </span>
-                        ) : (
-                          <span className="font-semibold text-slate-900 dark:text-slate-50">₹{originalTotal.toFixed(0)}</span>
-                        )}
-                      </span>
-                      <button
-                        className="text-danger text-xl justify-self-center font-semibold leading-none"
-                        aria-label="Remove item"
-                        onClick={() => removeFromCart(item.product_id)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  );
-                })}
-                {cart.length === 0 && (
-                  <div className="px-4 py-6 text-center text-muted-foreground text-sm">
-                    Cart is empty
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="form-label">Tax Rate (%)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={taxRate}
-                onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <label className="form-label">Discount (₹)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={discount}
-                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <label className="form-label">Payment Method</label>
-              <select
-                className="form-select"
-                value={paymentMethod}
-                onChange={(e) => {
-                  setPaymentMethod(e.target.value);
-                  // Reset initial paid when switching away from Credit
-                  if (e.target.value !== 'Credit') {
-                    setInitialPaid(0);
-                  }
-                }}
-              >
-                <option>Cash</option>
-                <option>Credit Card</option>
-                <option>Online</option>
-                <option>UPI</option>
-                <option>NetBanking</option>
-                <option>Wallet</option>
-                <option>Credit</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Credit Payment - Partial Payment Input */}
-          {paymentMethod === 'Credit' && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-2 text-amber-800">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                <span className="font-medium text-sm">Credit Sale - Customer will pay later</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label text-amber-800">Amount Paid Now</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={initialPaid || ''}
-                    onChange={(e) => setInitialPaid(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    min={0}
-                    max={calculateTotal()}
-                  />
-                </div>
-                <div>
-                  <label className="form-label text-amber-800">Credit Amount</label>
-                  <div className="form-input bg-amber-100 text-amber-900 font-semibold">
-                    ₹{(calculateTotal() - initialPaid).toFixed(0)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <LocationSelector
-            value={location}
-            onChange={setLocation}
-          />
-
-          <div className="border-t border-slate-200 pt-3 flex items-center justify-between text-lg font-semibold">
-            <span>Total</span>
-            <span>₹{calculateTotal().toFixed(0)}</span>
-          </div>
-
-          <button className="btn btn-primary w-full" onClick={handleCheckout}>
-            Generate Invoice
-          </button>
-
-          {/* Recent Invoices Section */}
-          <div className="card space-y-4">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-slate-500" />
-              <h2 className="section-title mb-0">Recent Invoices</h2>
-            </div>
-
-            <div className="space-y-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
-              {isRecentInvoicesLoading ? (
-                <div className="text-center py-6 text-sm text-muted-foreground">
-                  Loading recent invoices...
-                </div>
-              ) : recentInvoices.length === 0 ? (
-                <div className="text-center py-6 text-sm text-muted-foreground">
-                  No invoices yet.
-                </div>
-              ) : (
-                recentInvoices.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <div className="space-y-1">
-                      <div className="font-semibold text-sm text-slate-900 dark:text-slate-100">
-                        {inv.invoice_number}
-                      </div>
-                      <div className="text-xs text-slate-500 flex items-center gap-2">
-                        <span>{new Date(inv.created_at).toLocaleString()}</span>
-                        <span className="text-slate-300">•</span>
-                        <span className="font-medium">₹{inv.total_amount.toFixed(0)}</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => handleViewPdf(inv)}
-                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
-                        title="View Invoice PDF"
-                        disabled={generatingPdfId === inv.id}
-                      >
-                        {generatingPdfId === inv.id ? (
-                          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                        ) : (
-                          <FileText className="w-5 h-5" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleShareWhatsApp(inv)}
-                        className="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full transition-colors"
-                        title="Share via WhatsApp"
-                        disabled={sharingWhatsAppId === inv.id}
-                      >
-                        {sharingWhatsAppId === inv.id ? (
-                          <Loader2 className="w-5 h-5 animate-spin text-green-600" />
-                        ) : (
-                          <WhatsAppIcon size={20} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4 h-full flex flex-col overflow-hidden px-2">
-        <div className="flex items-center justify-between">
-          <h2 className="section-title">
-            Products {isSearching || productSearch.length >= 2 ? `(${totalSearchCount})` : `(${totalProductCount})`}
-          </h2>
-          <span className="text-xs text-muted-foreground">Tap to add to cart</span>
-        </div>
-
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Phone Number - First and Mandatory */}
         <div className="relative">
+          <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5 block">Phone <span className="text-red-500">*</span></label>
           <input
-            className="form-input"
-            placeholder="Search Product (min 2 chars)..."
-            value={productSearch}
-            onChange={(e) => setProductSearch(e.target.value)}
-          />
-          {isSearching && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              <div className="animate-spin h-5 w-5 border-2 border-sky-600 border-t-transparent rounded-full"></div>
-            </div>
-          )}
-        </div>
+            className="form-input !py-2 !px-3 !rounded-xl text-sm"
+            value={customerPhone}
+            onChange={(e) => {
+              const newVal = e.target.value.replace(/\D/g, '').slice(0, 10);
+              setCustomerPhone(newVal);
+              setShowCustomerSuggestions(true);
 
-        {productSearch.length >= 2 ? (
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Search Results</h3>
-            <div className={`grid gap-2.5 max-h-[420px] overflow-y-auto pr-1 ${gridColumns === 2 ? 'grid-cols-2' :
-              gridColumns === 3 ? 'grid-cols-2 lg:grid-cols-3' :
-                gridColumns === 4 ? 'grid-cols-2 lg:grid-cols-4' :
-                  gridColumns === 5 ? 'grid-cols-3 lg:grid-cols-5' :
-                    'grid-cols-3 lg:grid-cols-6'
-              }`}>
-              {searchResults.map((product) => (
+              if (selectedCustomerId) {
+                setSelectedCustomerId(null);
+                setCustomerName('');
+              }
+            }}
+            onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
+            placeholder="Enter Phone (10 digits)"
+            maxLength={10}
+            required
+          />
+          {showCustomerSuggestions && customerSuggestions.length > 0 && (
+            <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-[0_12px_30px_-22px_rgba(15,23,42,0.4)] max-h-56 overflow-auto">
+              {customerSuggestions.map((c) => (
                 <button
+                  key={c.id}
                   type="button"
-                  key={product.id}
-                  className={`card !p-2 border border-sky-100 text-left hover:-translate-y-0.5 transition ${gridColumns >= 5 ? '!p-1.5' : ''}`}
-                  onClick={() => addToCart(product)}
+                  className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-sky-50"
+                  onClick={() => {
+                    setCustomerName(c.name);
+                    setCustomerPhone(c.phone ?? '');
+                    setSelectedCustomerId(c.id);
+                    setShowCustomerSuggestions(false);
+                  }}
                 >
-                  <div className="flex flex-col gap-1.5 h-full">
-                    <div className="flex gap-2">
-                      {gridColumns <= 4 && (
-                        <EntityThumbnail
-                          entityId={product.id}
-                          entityType="product"
-                          imagePath={product.image_path}
-                          size="sm"
-                          className={gridColumns >= 4 ? 'h-8 w-8' : ''}
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className={`font-bold truncate leading-tight ${gridColumns >= 4 ? 'text-[10px]' : 'text-xs'}`} title={product.name}>
-                          {product.name}
-                        </div>
-                        {gridColumns <= 3 && (
-                          <div className="text-slate-500 text-[10px] truncate">SKU: {product.sku}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className={`flex justify-between items-center pt-1 border-t border-slate-50 mt-auto ${gridColumns >= 5 ? 'gap-1' : ''}`}>
-                      <span className={`font-bold text-slate-900 ${gridColumns >= 4 ? 'text-[10px]' : 'text-xs'}`}>
-                        ₹{(product.selling_price || product.price).toFixed(0)}
-                      </span>
-                      <span className={`${product.stock_quantity < 5 ? 'text-red-500' : 'text-emerald-600'} ${gridColumns >= 4 ? 'text-[9px]' : 'text-[10px]'} font-medium`}>
-                        {gridColumns >= 5 ? '' : 'Qty: '}{product.stock_quantity}
-                      </span>
-                    </div>
+                  <div className="text-left">
+                    <span className="font-semibold text-slate-800 block">{c.phone}</span>
+                    <span className="text-xs text-slate-500">{c.name}</span>
                   </div>
                 </button>
               ))}
-              {searchResults.length === 0 && !isSearching && (
-                <div className="text-muted-foreground">No products found</div>
-              )}
-              {hasMoreSearch && (
-                <div className="col-span-1 md:col-span-2 pt-2">
-                  <button
-                    onClick={() => fetchNextSearch()}
-                    disabled={isFetchingMoreSearch}
-                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-medium rounded-md transition-colors"
-                  >
-                    {isFetchingMoreSearch ? 'Loading...' : `Load More Results (${totalSearchCount - searchResults.length} remaining)`}
-                  </button>
-                </div>
-              )}
             </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            <div className="mb-4 flex-shrink-0">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-lg font-semibold whitespace-nowrap">Quick Add</h3>
-                  <select
-                    className="form-select py-1 px-2 text-sm w-40"
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                  >
-                    <option value="">All Categories</option>
-                    {categories.map((cat: string) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {!selectedCategory && (
-                    <button
-                      onClick={() => setShowQuickAddSettings(true)}
-                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
-                      title="Customize Quick Add List"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">{totalProductCount} total products</p>
-            </div>
+          )}
+        </div>
 
-            <div className={`grid gap-2 flex-1 overflow-y-auto pr-1 ${gridColumns === 2 ? 'grid-cols-2' :
-              gridColumns === 3 ? 'grid-cols-2 lg:grid-cols-3' :
-                gridColumns === 4 ? 'grid-cols-2 lg:grid-cols-4' :
-                  gridColumns === 5 ? 'grid-cols-3 lg:grid-cols-5' :
-                    'grid-cols-3 lg:grid-cols-6'
-              }`}>
-              {isQuickAddLoading && topProducts.length === 0 ? (
-                <div className="col-span-full text-center text-sm text-muted-foreground py-6">
-                  Loading products...
-                </div>
-              ) : (
-                topProducts.map((product, index) => (
-                  <button
-                    type="button"
-                    key={product.id}
-                    className={`card !p-2 text-left hover:-translate-y-0.5 transition relative flex flex-col h-full bg-white group ${gridColumns >= 5 ? '!p-1.5' : ''}`}
-                    onClick={() => addToCart(product)}
-                  >
-                    <div className={`absolute top-1 right-1 flex items-center justify-center rounded-full bg-slate-100 font-bold text-slate-400 group-hover:bg-sky-100 group-hover:text-sky-600 transition-colors ${gridColumns >= 4 ? 'h-4 w-4 text-[8px]' : 'h-5 w-5 text-[10px]'}`}>
-                      {quickAddIds.includes(product.id) ? <Pin size={gridColumns >= 4 ? 8 : 10} className="fill-current" /> : index + 1}
-                    </div>
-                    <div className="flex flex-col gap-1.5 h-full">
-                      <div className="flex gap-2">
-                        {gridColumns <= 4 && (
-                          <EntityThumbnail
-                            entityId={product.id}
-                            entityType="product"
-                            imagePath={product.image_path}
-                            size="sm"
-                            className={`flex-shrink-0 ${gridColumns >= 4 ? 'h-8 w-8' : 'h-10 w-10'}`}
-                          />
-                        )}
-                        <div className={`flex-1 min-w-0 ${gridColumns <= 3 ? 'pr-4' : ''}`}>
-                          <div className={`font-bold text-slate-800 truncate leading-tight group-hover:text-sky-700 ${gridColumns >= 4 ? 'text-[10px]' : 'text-xs'}`} title={product.name}>
-                            {product.name}
-                          </div>
-                          {gridColumns <= 3 && (
-                            <div className="text-slate-500 text-[10px] truncate" title={product.sku}>SKU: {product.sku}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className={`flex justify-between items-center pt-1 border-t border-slate-50 mt-auto ${gridColumns >= 5 ? 'gap-1' : ''}`}>
-                        <span className={`font-bold text-slate-900 ${gridColumns >= 4 ? 'text-[10px]' : 'text-xs'}`}>
-                          ₹{(product.selling_price || product.price).toFixed(0)}
-                        </span>
-                        <span className={`${product.stock_quantity < 5 ? 'text-red-500' : 'text-emerald-600'} ${gridColumns >= 4 ? 'text-[9px]' : 'text-[10px]'} font-medium`}>
-                          {gridColumns >= 5 ? '' : 'Qty: '}{product.stock_quantity}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-            {/* Load More for Quick Add */}
-            {hasMoreQuickAdd && (
-              <div className="pt-2">
-                <button
-                  onClick={() => fetchNextQuickAdd()}
-                  disabled={isFetchingMoreQuickAdd}
-                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-medium rounded-md transition-colors"
+        {/* Customer Name - Second */}
+        <div>
+          <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5 block">Customer Name <span className="text-red-500">*</span></label>
+          <input
+            className="form-input !py-2 !px-3 !rounded-xl text-sm"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            placeholder="Enter Name"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="table-container -mx-1">
+        <div className="space-y-1.5 w-full">
+          <div className="grid grid-cols-[1.2fr,0.6fr,0.9fr,0.9fr,0.5fr] md:grid-cols-[1.4fr,0.7fr,1fr,1fr,0.6fr] gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="pl-3">Item</span>
+            <span className="text-center">Qty</span>
+            <span className="text-center">Price</span>
+            <span className="text-center">Total</span>
+            <span className="text-center">Action</span>
+          </div>
+          <div
+            className={`divide-y divide-slate-100 dark:divide-slate-700/50 rounded-xl border border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 overflow-hidden min-h-[180px] flex flex-col ${cart.length > 3 ? 'max-h-40 overflow-y-auto' : ''
+              }`}
+          >
+            {cart.map((item) => {
+              const itemDiscount = getItemDiscount(item.product_id);
+              const originalTotal = item.unit_price * item.quantity;
+              const finalTotal = originalTotal - itemDiscount;
+              const discountedUnitPrice = item.quantity > 0 ? finalTotal / item.quantity : 0;
+              const hasDiscount = discount > 0 && itemDiscount > 0;
+
+              return (
+                <div
+                  key={item.product_id}
+                  className="grid grid-cols-[1.2fr,0.6fr,0.9fr,0.9fr,0.5fr] md:grid-cols-[1.4fr,0.7fr,1fr,1fr,0.6fr] items-center gap-2 px-3 py-2 text-[13px]"
                 >
-                  {isFetchingMoreQuickAdd ? 'Loading...' : `Load More Products (${totalProductCount - topProducts.length} remaining)`}
-                </button>
+                  <span className="font-semibold text-slate-900 dark:text-slate-50 break-words pl-2">
+                    {item.name}
+                  </span>
+                  <input
+                    type="number"
+                    value={item.quantity}
+                    onChange={(e) =>
+                      updateQuantity(item.product_id, parseInt(e.target.value, 10))
+                    }
+                    className="w-12 h-7 justify-self-center !py-0 !px-1 text-center bg-slate-50 border-slate-200 rounded-md text-xs font-bold"
+                  />
+                  {/* Price column with strikethrough when discounted */}
+                  <span className="text-center">
+                    {hasDiscount ? (
+                      <span className="flex flex-col items-center">
+                        <span className="line-through text-slate-400 text-xs">₹{item.unit_price.toFixed(0)}</span>
+                        <span className="text-green-600 font-medium">₹{discountedUnitPrice.toFixed(2)}</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-700 dark:text-slate-200">₹{item.unit_price.toFixed(0)}</span>
+                    )}
+                  </span>
+                  {/* Total column with strikethrough when discounted */}
+                  <span className="text-center">
+                    {hasDiscount ? (
+                      <span className="flex flex-col items-center">
+                        <span className="line-through text-slate-400 text-xs">₹{originalTotal.toFixed(0)}</span>
+                        <span className="text-green-600 font-semibold">₹{finalTotal.toFixed(2)}</span>
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-slate-900 dark:text-slate-50">₹{originalTotal.toFixed(0)}</span>
+                    )}
+                  </span>
+                  <button
+                    className="text-red-400 hover:text-red-600 text-lg justify-self-center font-bold leading-none transition-colors"
+                    aria-label="Remove item"
+                    onClick={() => removeFromCart(item.product_id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+            {cart.length === 0 && (
+              <div className="flex-1 flex items-center justify-center px-4 py-6 text-center text-slate-400/80 text-sm font-medium italic">
+                Cart is empty
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Success Modal */}
-      {
-        showSuccessModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
-            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl text-center space-y-4 animate-in fade-in zoom-in duration-200">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-                <svg
-                  className="h-6 w-6 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+        <div>
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Tax Rate (%)</label>
+          <input
+            type="number"
+            className="form-input h-8 !py-1 !px-2 !rounded-lg text-xs"
+            value={taxRate}
+            onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Discount (₹)</label>
+          <input
+            type="number"
+            className="form-input h-8 !py-1 !px-2 !rounded-lg text-xs"
+            value={discount}
+            onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Payment Method</label>
+          <select
+            className="form-select h-8 !py-1 !px-2 !pr-8 !rounded-lg text-xs"
+            value={paymentMethod}
+            onChange={(e) => {
+              setPaymentMethod(e.target.value);
+              // Reset initial paid when switching away from Credit
+              if (e.target.value !== 'Credit') {
+                setInitialPaid(0);
+              }
+            }}
+          >
+            <option>Cash</option>
+            <option>Credit Card</option>
+            <option>Online</option>
+            <option>UPI</option>
+            <option>NetBanking</option>
+            <option>Wallet</option>
+            <option>Credit</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Credit Payment - Partial Payment Input */}
+      {paymentMethod === 'Credit' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-2 text-amber-800">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span className="font-medium text-sm">Credit Sale - Customer will pay later</span>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label text-amber-800">Amount Paid Now</label>
+              <input
+                type="number"
+                className="form-input"
+                value={initialPaid || ''}
+                onChange={(e) => setInitialPaid(parseFloat(e.target.value) || 0)}
+                placeholder="0"
+                min={0}
+                max={calculateTotal()}
+              />
+            </div>
+            <div>
+              <label className="form-label text-amber-800">Credit Amount</label>
+              <div className="form-input bg-amber-100 text-amber-900 font-semibold">
+                ₹{(calculateTotal() - initialPaid).toFixed(0)}
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Invoice Generated!</h3>
-                <p className="text-sm text-slate-500">
-                  The invoice has been successfully created and saved.
-                </p>
-              </div>
-              <button
-                className="btn btn-primary w-full"
-                onClick={() => setShowSuccessModal(false)}
-              >
-                Done
-              </button>
             </div>
           </div>
-        )
-      }
+        </div>
+      )}
+
+      <LocationSelector
+        value={location}
+        onChange={setLocation}
+      />
+
+      <div className="border-t border-slate-100 mt-1 pt-2 flex items-center justify-between text-base font-bold text-slate-900 border-dashed">
+        <span>Total</span>
+        <span className="text-xl">₹{calculateTotal().toFixed(0)}</span>
+      </div>
+
+      <button className="btn btn-primary w-full !py-2.5 !rounded-xl font-bold tracking-wide" onClick={handleCheckout}>
+        Generate Invoice
+      </button>
+    </div>
+  );
+
+  // Recent Invoices Panel Content
+  const recentInvoicesPanel = (
+    <div className="card h-full flex flex-col overflow-hidden !p-3 space-y-3 shadow-md">
+      <div className="flex items-center gap-2">
+        <Clock className="w-4 h-4 text-slate-500" />
+        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-0">Recent Invoices</h2>
+      </div>
+
+      <div className="space-y-3 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+        {isRecentInvoicesLoading ? (
+          <div className="text-center py-6 text-sm text-muted-foreground">
+            Loading recent invoices...
+          </div>
+        ) : recentInvoices.length === 0 ? (
+          <div className="text-center py-6 text-sm text-muted-foreground">
+            No invoices yet.
+          </div>
+        ) : (
+          recentInvoices.map((inv) => (
+            <div key={inv.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+              <div className="space-y-1">
+                <div className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+                  {inv.invoice_number}
+                </div>
+                <div className="text-xs text-slate-500 flex items-center gap-2">
+                  <span>{new Date(inv.created_at).toLocaleString()}</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="font-medium">₹{inv.total_amount.toFixed(0)}</span>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => handleViewPdf(inv)}
+                  className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
+                  title="View Invoice PDF"
+                  disabled={generatingPdfId === inv.id}
+                >
+                  {generatingPdfId === inv.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                  ) : (
+                    <FileText className="w-5 h-5" />
+                  )}
+                </button>
+                <button
+                  onClick={() => handleShareWhatsApp(inv)}
+                  className="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full transition-colors"
+                  title="Share via WhatsApp"
+                  disabled={sharingWhatsAppId === inv.id}
+                >
+                  {sharingWhatsAppId === inv.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-green-600" />
+                  ) : (
+                    <WhatsAppIcon size={20} />
+                  )}
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
+
+  return (
+    <>
+      <ResizableBillingLayout
+        currentBillPanel={currentBillPanel}
+        recentInvoicesPanel={recentInvoicesPanel}
+        productsPanel={
+          <div className="card h-full flex flex-col overflow-hidden !p-4 shadow-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="section-title">
+                Products {isSearching || productSearch.length >= 1 ? `(${totalSearchCount})` : `(${totalProductCount})`}
+              </h2>
+              <span className="text-xs text-sky-600/80 font-medium">Tap to add to cart</span>
+            </div>
+
+            <div className="relative mb-4 group">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sky-500 transition-colors">
+                <Search size={18} />
+              </div>
+              <input
+                className="form-input !pl-10 !pr-10"
+                placeholder="Search Product..."
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+              />
+              {productSearch && (
+                <button
+                  onClick={() => setProductSearch('')}
+                  className="absolute right-10 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                >
+                  <X size={16} />
+                </button>
+              )}
+              {isSearching && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="animate-spin h-5 w-5 border-2 border-sky-600 border-t-transparent rounded-full"></div>
+                </div>
+              )}
+            </div>
+
+            {productSearch.length >= 1 ? (
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Search Results</h3>
+                <div className={`grid gap-2.5 overflow-y-auto p-1 pr-1.5 ${gridColumns === 2 ? 'grid-cols-2 max-h-[550px]' :
+                  gridColumns === 3 ? 'grid-cols-2 lg:grid-cols-3 max-h-[420px]' :
+                    gridColumns === 4 ? 'grid-cols-2 lg:grid-cols-4 max-h-[420px]' :
+                      gridColumns === 5 ? 'grid-cols-3 lg:grid-cols-5 max-h-[420px]' :
+                        'grid-cols-3 lg:grid-cols-6 max-h-[420px]'
+                  }`}>
+                  {searchResults.map((product) => (
+                    <button
+                      type="button"
+                      key={product.id}
+                      className={`card !p-0 border border-sky-100 text-left hover:-translate-y-0.5 transition group relative overflow-hidden flex flex-col ${gridColumns === 2 ? 'h-[110px]' : 'h-[85px]'} ${gridColumns >= 5 ? '!p-0' : ''}`}
+                      onClick={() => addToCart(product)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setContextMenuProduct(product);
+                        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+                      }}
+                    >
+                      <div className="flex flex-col h-full gap-2 p-2">
+                        <div className="flex gap-2 min-h-0">
+                          {gridColumns <= 4 && (
+                            <EntityThumbnail
+                              entityId={product.id}
+                              entityType="product"
+                              imagePath={product.image_path}
+                              size="sm"
+                              className={gridColumns === 2 ? 'h-16 w-16 min-w-[4rem]' : gridColumns >= 4 ? 'h-7 w-7' : 'h-8 w-8'}
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-bold leading-tight text-slate-900 ${gridColumns === 2 ? 'text-xs line-clamp-2' : gridColumns >= 4 ? 'text-[10px] truncate' : 'text-xs truncate'}`} title={product.name}>
+                              {product.name}
+                            </div>
+                            {gridColumns <= 3 && (
+                              <div className="text-slate-500 text-[10px] truncate uppercase mt-0.5">SKU: {product.sku}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Price tag in top-right corner */}
+                        <div className={`absolute top-1 right-1 flex items-center justify-center rounded-md bg-slate-900/80 backdrop-blur-sm px-1.5 py-0.5 font-bold text-white group-hover:bg-sky-600 transition-colors z-10 ${gridColumns >= 4 ? 'text-[9px]' : 'text-[10px]'}`}>
+                          ₹{(product.selling_price || product.price).toFixed(0)}
+                        </div>
+
+                        <div className="mt-auto flex items-center justify-between">
+                          <span className={`font-medium ${product.stock_quantity < 5 ? 'text-red-500' : 'text-slate-400'} ${gridColumns >= 5 ? 'text-[8px]' : 'text-[9px]'} uppercase tracking-wider`}>
+                            {gridColumns >= 5 ? '' : 'Stock: '}{product.stock_quantity}
+                          </span>
+                          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                        </div>
+                      </div>
+                      {/* Hover state overlay */}
+                      <div className="absolute inset-0 bg-sky-600/0 group-hover:bg-sky-600/5 transition-colors pointer-events-none ring-inset group-focus:ring-2 ring-sky-500"></div>
+                    </button>
+                  ))}
+                  {searchResults.length === 0 && !isSearching && (
+                    <div className="text-muted-foreground">No products found</div>
+                  )}
+                  {hasMoreSearch && (
+                    <div className="col-span-1 md:col-span-2 pt-2">
+                      <button
+                        onClick={() => fetchNextSearch()}
+                        disabled={isFetchingMoreSearch}
+                        className="w-full py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-medium rounded-md transition-colors"
+                      >
+                        {isFetchingMoreSearch ? 'Loading...' : `Load More Results (${totalSearchCount - searchResults.length} remaining)`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+                <div className="mb-4 flex-shrink-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-semibold whitespace-nowrap">Quick Add</h3>
+                      <select
+                        className="form-select py-1 px-2 text-sm w-40"
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                      >
+                        <option value="">All Categories</option>
+                        {categories.map((cat: string) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <ProductsSettingsMenu onShowQuickAdd={() => setShowQuickAddSettings(true)} />
+                  </div>
+                  <p className="text-sm text-slate-500 font-medium">{totalProductCount} total products</p>
+                </div>
+
+                <div className={`grid gap-2 flex-1 overflow-y-auto scroll-smooth custom-scrollbar p-1 pr-1.5 ${gridColumns === 2 ? 'grid-cols-2' :
+                  gridColumns === 3 ? 'grid-cols-2 lg:grid-cols-3' :
+                    gridColumns === 4 ? 'grid-cols-2 lg:grid-cols-4' :
+                      gridColumns === 5 ? 'grid-cols-3 lg:grid-cols-5' :
+                        'grid-cols-3 lg:grid-cols-6'
+                  }`}>
+                  {isQuickAddLoading && topProducts.length === 0 ? (
+                    <div className="col-span-full text-center text-sm text-muted-foreground py-6">
+                      Loading products...
+                    </div>
+                  ) : (
+                    topProducts.map((product, index) => (
+                      <button
+                        type="button"
+                        key={product.id}
+                        className={`card !p-0 text-left relative bg-white group overflow-hidden hover:ring-2 hover:ring-sky-300 active:ring-sky-500 active:bg-sky-50 flex flex-col ${gridColumns === 2 ? 'h-[110px]' : 'h-[85px]'}`}
+                        onClick={() => addToCart(product)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setContextMenuProduct(product);
+                          setContextMenuPosition({ x: e.clientX, y: e.clientY });
+                        }}
+                        title={`${product.name} - ₹${(product.selling_price || product.price).toFixed(0)}`}
+                      >
+                        {/* Price tag in top-right corner */}
+                        <div className={`absolute top-1 right-1 flex items-center justify-center rounded-md bg-slate-900/80 backdrop-blur-sm px-1.5 py-0.5 font-bold text-white group-hover:bg-sky-600 transition-colors z-10 ${gridColumns >= 4 ? 'text-[9px]' : 'text-[10px]'}`}>
+                          ₹{(product.selling_price || product.price).toFixed(0)}
+                        </div>
+
+                        {/* Card number in bottom-right corner */}
+                        <div className={`absolute bottom-1 right-1 flex items-center justify-center rounded-md bg-slate-200 backdrop-blur-sm px-1.5 py-0.5 font-bold text-slate-600 group-hover:bg-sky-100 group-hover:text-sky-600 transition-colors z-10 ${gridColumns >= 4 ? 'text-[9px]' : 'text-[10px]'}`}>
+                          {quickAddIds.includes(product.id) ? <Pin size={gridColumns >= 4 ? 9 : 10} className="fill-current" /> : index + 1}
+                        </div>
+
+                        <div className="flex flex-col h-full gap-2 p-2">
+                          <div className="flex gap-2 min-h-0">
+                            {gridColumns <= 4 && (
+                              <EntityThumbnail
+                                entityId={product.id}
+                                entityType="product"
+                                imagePath={product.image_path}
+                                size="sm"
+                                className={gridColumns === 2 ? 'h-16 w-16 min-w-[4rem]' : gridColumns >= 4 ? 'h-7 w-7' : 'h-8 w-8'}
+                              />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <h4 className={`font-bold text-slate-900 leading-tight ${gridColumns === 2 ? 'text-xs line-clamp-2' : gridColumns >= 5 ? 'text-[9px] truncate' : gridColumns >= 4 ? 'text-[10px] truncate' : 'text-xs truncate'}`}>
+                                {product.name}
+                              </h4>
+                              {gridColumns <= 3 && (
+                                <p className="text-[10px] text-slate-500 truncate uppercase mt-0.5">
+                                  {product.sku}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-auto flex items-center justify-between">
+                            <span className={`font-medium ${product.stock_quantity < 5 ? 'text-red-500' : 'text-slate-400'} ${gridColumns >= 5 ? 'text-[8px]' : 'text-[9px]'} uppercase tracking-wider`}>
+                              {gridColumns >= 5 ? '' : 'Stock: '}{product.stock_quantity}
+                            </span>
+                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                          </div>
+                        </div>
+
+                        {/* Hover state overlay */}
+                        <div className="absolute inset-0 bg-sky-600/0 group-hover:bg-sky-600/5 transition-colors pointer-events-none ring-inset group-focus:ring-2 ring-sky-500"></div>
+                      </button>
+                    ))
+                  )}
+                  {hasMoreQuickAdd && (
+                    <div className="col-span-full pt-4 h-24 mb-12">
+                      <button
+                        onClick={() => fetchNextQuickAdd()}
+                        disabled={isFetchingMoreQuickAdd}
+                        className="w-full h-12 flex items-center justify-center bg-white dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-900/10 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition-all border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-sky-700 shadow-sm hover:shadow-md group"
+                      >
+                        {isFetchingMoreQuickAdd ? (
+                          <Loader2 className="animate-spin h-5 w-5 text-sky-600" />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="group-hover:text-sky-600 transition-colors">Load More Products</span>
+                            <span className="text-xs font-normal text-slate-400">({totalProductCount - topProducts.length} remaining)</span>
+                          </div>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        }
+      />
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl text-center space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+              <svg
+                className="h-6 w-6 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Invoice Generated!</h3>
+              <p className="text-sm text-slate-500">
+                The invoice has been successfully created and saved.
+              </p>
+            </div>
+            <button
+              className="btn btn-primary w-full"
+              onClick={() => setShowSuccessModal(false)}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
       <PDFPreviewDialog
         open={showPdfPreview}
         onOpenChange={setShowPdfPreview}
@@ -1095,6 +1199,39 @@ export default function Billing() {
         onOpenChange={setShowPhoneEntry}
         onConfirm={handlePhoneEntryConfirm}
       />
-    </div >
+
+      {/* Quick Add Settings Modal */}
+      {QuickAddModal && (
+        <QuickAddModal
+          isOpen={showQuickAddSettings}
+          onClose={() => setShowQuickAddSettings(false)}
+          currentIds={quickAddIds}
+          onSave={(newIds: number[]) => {
+            setQuickAddIds(newIds);
+            setShowQuickAddSettings(false);
+          }}
+          columns={gridColumns}
+          onColumnsChange={setGridColumns}
+        />
+      )}
+
+      {/* Product Context Menu */}
+      <ProductContextMenu
+        position={contextMenuPosition}
+        onClose={() => setContextMenuPosition(null)}
+        onViewDetails={() => setShowProductDetails(true)}
+        onAddToCart={() => {
+          if (contextMenuProduct) addToCart(contextMenuProduct);
+        }}
+      />
+
+      {/* Product Details Dialog */}
+      <ProductDetailsDialog
+        isOpen={showProductDetails}
+        onClose={() => setShowProductDetails(false)}
+        product={contextMenuProduct}
+        onAddToCart={addToCart}
+      />
+    </>
   );
 }

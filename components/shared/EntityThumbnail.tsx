@@ -86,6 +86,9 @@ export function EntityThumbnail({
     loadImage();
   }, [loadImage, refreshKey]);
 
+  // Check if className includes custom width/height (w-full, h-full, w-*, h-*)
+  const hasCustomSize = className && /(?:^|\s)(?:[wh]-(?:full|\[|\d+)|aspect-)/i.test(className);
+
   const containerStyles = cn(
     'relative flex items-center justify-center rounded-md overflow-hidden bg-muted transition-all',
     (!imagePath && showPlaceholderBorder) && 'border-2 border-slate-400 dark:border-slate-600',
@@ -105,11 +108,14 @@ export function EntityThumbnail({
     }
   };
 
+  // Use inline styles only if no custom size is provided in className
+  const inlineSize = hasCustomSize ? undefined : { width: pixelSize, height: pixelSize };
+
   if (loading) {
     return (
       <div
         className={containerStyles}
-        style={{ width: pixelSize, height: pixelSize }}
+        style={inlineSize}
       >
         <div className="animate-pulse bg-muted-foreground/20 w-full h-full" />
       </div>
@@ -120,7 +126,7 @@ export function EntityThumbnail({
     return (
       <div
         className={containerStyles}
-        style={{ width: pixelSize, height: pixelSize }}
+        style={inlineSize}
         onClick={onClick}
       >
         {getPlaceholderIcon()}
@@ -131,7 +137,7 @@ export function EntityThumbnail({
   return (
     <div
       className={containerStyles}
-      style={{ width: pixelSize, height: pixelSize }}
+      style={inlineSize}
       onClick={onClick}
     >
       <img

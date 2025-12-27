@@ -4,7 +4,13 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Dialog,
     DialogContent,
@@ -254,14 +260,18 @@ export function SupplierProductPaymentModal({
                                                 <label className="text-sm font-medium mb-1 block">Payment Mode</label>
                                                 <Select
                                                     value={newPayment.payment_method}
-                                                    onChange={(e) => setNewPayment({ ...newPayment, payment_method: e.target.value })}
+                                                    onValueChange={(val) => setNewPayment({ ...newPayment, payment_method: val })}
                                                 >
-                                                    <option value="">Select mode</option>
-                                                    <option value="Cash">Cash</option>
-                                                    <option value="UPI">UPI</option>
-                                                    <option value="Card">Card</option>
-                                                    <option value="Bank Transfer">Bank Transfer</option>
-                                                    <option value="Other">Other</option>
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue placeholder="Select mode" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Cash">Cash</SelectItem>
+                                                        <SelectItem value="UPI">UPI</SelectItem>
+                                                        <SelectItem value="Card">Card</SelectItem>
+                                                        <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
                                                 </Select>
                                             </div>
                                             <div>
