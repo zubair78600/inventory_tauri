@@ -418,7 +418,7 @@ export default function Customers() {
                     <TableCell className="font-semibold text-center space-y-1">
                       <div className="text-slate-900 dark:text-slate-100">{customer.name}</div>
                       {customer.address && (
-                        <div className="text-xs text-muted-foreground">{customer.address}</div>
+                        <div className="text-xs text-slate-500 font-medium">{customer.address}</div>
                       )}
                     </TableCell>
                     <TableCell className="text-center space-y-1">

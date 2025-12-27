@@ -131,7 +131,7 @@ function CustomerDetailsContent() {
                             Export PDF
                         </Button>
                     </div>
-                    <div className="text-right text-sm text-slate-500">
+                    <div className="text-right text-sm text-slate-500 font-medium">
                         <div className="flex items-center justify-end gap-1">
                             <Calendar className="w-4 h-4" />
                             Joined {new Date(customer.created_at).toLocaleDateString()}
@@ -143,7 +143,7 @@ function CustomerDetailsContent() {
                 <div className="flex items-center justify-between gap-5">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900">{customer.name}</h1>
-                        <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
+                        <div className="flex items-center gap-4 mt-2 text-slate-500 font-medium text-sm">
                             {(customer.town || customer.place) && (
                                 <div className="flex items-center gap-1">
                                     <MapPin className="w-4 h-4" /> {customer.town || customer.place}
@@ -254,16 +254,16 @@ function CustomerDetailsContent() {
                                         <FileText className="w-4 h-4 text-slate-400" />
                                         {invoice.invoice_number}
                                     </div>
-                                    <div className="text-slate-500 text-sm text-center">
+                                    <div className="text-slate-500 font-medium text-sm text-center">
                                         {new Date(invoice.created_at).toLocaleString()}
                                     </div>
                                     <div className="text-center font-medium text-slate-900">
                                         ₹{invoice.total_amount.toFixed(0)}
                                     </div>
-                                    <div className="text-center text-slate-500">
+                                    <div className="text-center text-slate-500 font-medium">
                                         {invoice.item_count}
                                     </div>
-                                    <div className="text-center text-slate-500">
+                                    <div className="text-center text-slate-500 font-medium">
                                         {invoice.discount_amount > 0 ? `₹${invoice.discount_amount.toFixed(0)}` : '-'}
                                     </div>
                                     <div className="text-center">
@@ -279,7 +279,7 @@ function CustomerDetailsContent() {
                                 {expandedInvoiceId === invoice.id && (
                                     <div className="bg-slate-50/50 px-4 pb-4 pt-0 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
                                         <div className="pl-10 pt-4">
-                                            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Purchased Items</h4>
+                                            <h4 className="text-xs font-bold text-slate-600 uppercase mb-2">Purchased Items</h4>
                                             {itemsLoading ? (
                                                 <div className="text-sm text-slate-400 py-2">Loading items...</div>
                                             ) : (
@@ -290,7 +290,7 @@ function CustomerDetailsContent() {
                                                                 <Package className="w-3 h-3 text-slate-400" />
                                                                 {item.product_name}
                                                             </div>
-                                                            <div className="text-slate-500">
+                                                            <div className="text-slate-500 font-medium">
                                                                 {item.quantity} x ₹{((item.quantity * item.unit_price - (item.discount_amount || 0)) / item.quantity).toFixed(1)}
                                                             </div>
                                                             <div className="text-right font-medium text-slate-900">

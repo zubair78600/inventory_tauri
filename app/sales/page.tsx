@@ -437,7 +437,7 @@ export default function Sales() {
                 >
                   <div className="space-y-1">
                     <p className="font-semibold text-slate-900 dark:text-slate-100">{sale.invoice_number}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-slate-500 font-medium">
                       {sale.customer_name ?? 'Walk-in'} •{' '}
                       {new Date(sale.created_at).toLocaleString()}
                     </p>
@@ -445,14 +445,14 @@ export default function Sales() {
 
                   <div className="text-right">
                     <p className="font-semibold text-slate-900 dark:text-slate-100">Rs. {sale.total_amount.toFixed(1)}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-slate-500 font-medium">
                       {sale.item_count ? `${sale.item_count} items` : ''}
                     </p>
                   </div>
                 </button>
               ))}
               {sales.length === 0 && (
-                <div className="px-4 py-4 text-sm text-muted-foreground">No sales found.</div>
+                <div className="px-4 py-4 text-sm text-slate-500">No sales found.</div>
               )}
               {hasNextPage && (
                 <div className="px-4 pb-4 pt-2">
@@ -480,7 +480,7 @@ export default function Sales() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Invoice Details</CardTitle>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-slate-500 font-medium">
                   {selected ? selected.invoice_number : 'Select an order to view products'}
                 </p>
               </div>

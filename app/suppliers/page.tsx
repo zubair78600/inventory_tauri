@@ -446,10 +446,10 @@ export default function Suppliers() {
                       </div>
                     </TableCell>
                     <TableCell className="font-semibold text-center">{supplier.name}</TableCell>
-                    <TableCell className="text-center">{supplier.contact_info}</TableCell>
-                    <TableCell className="text-center">{supplier.email}</TableCell>
-                    <TableCell className="text-center">{supplier.address}</TableCell>
-                    <TableCell className="text-center">{supplier.district}</TableCell>
+                    <TableCell className="text-center text-slate-500 font-medium">{supplier.contact_info}</TableCell>
+                    <TableCell className="text-center text-slate-500 font-medium">{supplier.email}</TableCell>
+                    <TableCell className="text-center text-slate-500 font-medium">{supplier.address}</TableCell>
+                    <TableCell className="text-center text-slate-500 font-medium">{supplier.district}</TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center gap-2">
                         <Button

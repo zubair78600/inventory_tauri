@@ -828,22 +828,22 @@ export default function Inventory() {
                           ₹{product.total_sold_amount.toFixed(0)}
                         </span>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-slate-500 font-medium">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-3 text-sm">
                         <span className="text-slate-700 font-medium">
-                          <span className="text-xs text-slate-400">Stock:</span>{' '}
+                          <span className="text-[10px] text-slate-600 font-bold uppercase tracking-tight">Stock:</span>{' '}
                           {product.total_purchased_quantity ?? product.stock_quantity}
                         </span>
                         <span className="text-slate-300">|</span>
-                        <span className="text-slate-600">
-                          <span className="text-xs text-slate-400">Actual:</span> ₹{product.price.toFixed(0)}
+                        <span className="text-slate-600 font-medium">
+                          <span className="text-[10px] text-slate-600 font-bold uppercase tracking-tight">Actual:</span> ₹{product.price.toFixed(0)}
                         </span>
                         <span className="text-slate-300">|</span>
-                        <span className="text-emerald-600 font-medium">
-                          <span className="text-xs text-slate-400">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(0) : '-'}
+                        <span className="text-emerald-600 font-bold">
+                          <span className="text-[10px] text-slate-600 font-bold uppercase tracking-tight">Sale:</span> ₹{product.selling_price ? product.selling_price.toFixed(0) : '-'}
                         </span>
                       </div>
                     </TableCell>
@@ -857,7 +857,7 @@ export default function Inventory() {
                         ) : (
                           <Badge className="bg-emerald-100 text-emerald-700 px-1.5 py-0 h-5 text-[10px] whitespace-nowrap">In Stock</Badge>
                         )}
-                        <span className="text-[10px] text-slate-600 font-bold">
+                        <span className="text-[10px] text-slate-700 font-black">
                           {product.stock_quantity}
                         </span>
                       </div>

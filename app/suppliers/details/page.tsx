@@ -126,7 +126,7 @@ function SupplierDetailsContent() {
                             Export PDF
                         </Button>
                     </div>
-                    <div className="text-right text-sm text-slate-500">
+                    <div className="text-right text-sm text-slate-500 font-medium">
                         <div className="flex items-center justify-end gap-1">
                             <Calendar className="w-4 h-4" />
                             Joined {new Date(supplier.created_at).toLocaleDateString()}
@@ -138,7 +138,7 @@ function SupplierDetailsContent() {
                 <div className="flex items-center justify-between gap-5">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900">{supplier.name}</h1>
-                        <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
+                        <div className="flex items-center gap-4 mt-2 text-slate-500 font-medium text-sm">
                             {(supplier.state || supplier.district || supplier.town) && (
                                 <div className="flex items-center gap-1">
                                     <MapPin className="w-4 h-4" />
@@ -198,7 +198,7 @@ function SupplierDetailsContent() {
                     <div className="text-2xl font-bold text-emerald-600 mt-1">
                         ₹{products.reduce((acc, p) => acc + ((p.total_sold_amount ?? 0) - ((p.total_sold ?? 0) * p.price)), 0).toFixed(0)}
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-1">
+                    <div className="text-[10px] text-slate-500 font-medium mt-1">
                         Exp: ₹{products.reduce((acc, p) => acc + (((p.selling_price ?? 0) - p.price) * (p.total_purchased_quantity ?? 0)), 0).toFixed(0)}
                     </div>
                 </Card>
@@ -233,20 +233,20 @@ function SupplierDetailsContent() {
                                         className={`grid grid-cols-[1.2fr,2fr,1fr,0.8fr,0.8fr,1.2fr,1.2fr] gap-4 p-4 items-center transition-colors cursor-pointer ${isExpanded ? 'bg-sky-50' : 'hover:bg-slate-50'}`}
                                         onClick={() => setSelectedProduct(isExpanded ? null : product)}
                                     >
-                                        <div className="text-slate-500 text-sm text-center">
+                                        <div className="text-slate-500 font-medium text-sm text-center">
                                             {new Date(product.created_at).toLocaleString()}
                                         </div>
                                         <div className="font-medium text-slate-900 flex items-center justify-center gap-2">
                                             <Package className={`w-4 h-4 ${isExpanded ? 'text-sky-600' : 'text-slate-400'}`} />
                                             {product.name}
                                         </div>
-                                        <div className="text-slate-500 text-sm text-center">
+                                        <div className="text-slate-500 font-medium text-sm text-center">
                                             {product.sku}
                                         </div>
                                         <div className="text-center font-medium text-slate-900">
                                             {product.total_purchased_quantity ?? 0}
                                         </div>
-                                        <div className="text-center text-slate-500">
+                                        <div className="text-center text-slate-500 font-medium">
                                             ₹{product.price.toFixed(0)}
                                         </div>
                                         <div className="text-center">
