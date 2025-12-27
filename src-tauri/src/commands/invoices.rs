@@ -942,8 +942,8 @@ pub fn update_invoice_items(input: UpdateInvoiceItemsInput, db: State<Database>)
 
     // 6. Also record in unified entity_modifications table for Settings UI
     // Build field changes showing item count diff
-    let old_items_count = current_items.len();
-    let new_items_count = input.items.len();
+    let _old_items_count = current_items.len();
+    let _new_items_count = input.items.len();
     let mut field_changes: Vec<serde_json::Value> = Vec::new();
     
     // Detect removed items

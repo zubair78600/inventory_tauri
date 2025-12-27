@@ -25,7 +25,7 @@ impl Database {
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| rusqlite::Error::InvalidPath(parent.to_path_buf()))?;
+                .map_err(|_e| rusqlite::Error::InvalidPath(parent.to_path_buf()))?;
         }
 
         // Create connection manager with initialization hook

@@ -8,6 +8,7 @@ import { settingsCommands, imageCommands, GoogleImageResult, EntityModification 
 import { PdfConfiguration } from '@/components/settings/PdfConfiguration';
 import { InvoiceSeriesSettings } from '@/components/settings/InvoiceSeriesSettings';
 import { DataMigrationSettings } from '@/components/settings/DataMigrationSettings';
+import { GoogleDriveBackupSettings } from '@/components/settings/GoogleDriveBackupSettings';
 
 type DeletedItem = {
   id: number;
@@ -1235,351 +1236,334 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Test Area - Inline */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+
+            {/* Local Backup - Compact Integrated */}
+            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">Test Configuration:</h3>
-                <div className="flex gap-2 flex-1 max-w-sm">
-                  <input
-                    type="text"
-                    className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    placeholder="Search term..."
-                    value={testQuery}
-                    onChange={(e) => setTestQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleTestApi()}
-                  />
-                  <button
-                    onClick={() => void handleTestApi()}
-                    disabled={testing || !testQuery}
-                    className="btn btn-secondary h-8 text-xs whitespace-nowrap px-3"
-                  >
-                    {testing ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-                    <span className="ml-1.5">Search</span>
-                  </button>
+                <FileJson size={16} className="text-slate-400" />
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">Local Configuration Backup</h3>
+                  <p className="text-[10px] text-slate-500 uppercase font-medium tracking-tight">Export/Import JSON File</p>
                 </div>
-                {testError && <span className="text-xs text-red-500 truncate" title={testError}>{testError}</span>}
               </div>
 
-              {testResults.length > 0 && (
-                <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                  {testResults.map((res, i) => (
-                    <div key={i} className="w-16 h-16 flex-shrink-0 border rounded bg-slate-50 relative overflow-hidden group">
-                      <img src={res.thumbnail_link} alt={res.title} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Backup & Restore Section (Moved from General) */}
-          <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Backup & Restore</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-              Export all application settings to a JSON file or restore from a backup.
-            </p>
-
-            <div className="flex flex-wrap gap-4">
-              <button
-                onClick={() => void handleExportSettings()}
-                className="btn btn-secondary inline-flex items-center"
-              >
-                <Download size={16} className="mr-2" />
-                Export Settings (JSON)
-              </button>
-
-              <button
-                onClick={() => void handleImportSettings()}
-                className="btn btn-secondary inline-flex items-center"
-                disabled={loading}
-              >
-                {loading ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Upload size={16} className="mr-2" />}
-                Import Settings (JSON)
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => void handleExportSettings()}
+                  className="btn btn-secondary h-7 text-[11px] px-3 flex items-center gap-1.5"
+                >
+                  <Download size={12} />
+                  Export
+                </button>
+                <button
+                  onClick={() => void handleImportSettings()}
+                  disabled={loading}
+                  className="btn btn-secondary h-7 text-[11px] px-3 flex items-center gap-1.5"
+                >
+                  {loading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                  Import
+                </button>
+              </div>
             </div>
             {importingInfo && (
-              <div className="mt-4 p-4 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg text-sm">
+              <div className="mt-2 text-[10px] text-green-600 dark:text-green-400 font-medium px-1 flex items-center gap-1.5">
+                <CheckCircle size={10} />
                 {importingInfo}
               </div>
             )}
           </div>
+          <GoogleDriveBackupSettings />
         </div>
       )}
 
       {/* Invoice Tab */}
-      {activeTab === 'invoice' && (
-        <div className="space-y-6">
-          <h2 className="text-lg font-semibold mb-4">Invoice PDF Configuration</h2>
-          <PdfConfiguration />
-        </div>
-      )}
+      {
+        activeTab === 'invoice' && (
+          <div className="space-y-6">
+            <h2 className="text-lg font-semibold mb-4">Invoice PDF Configuration</h2>
+            <PdfConfiguration />
+          </div>
+        )
+      }
 
       {/* Users Tab - Restored */}
-      {activeTab === 'users' && user?.role === 'admin' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div>
-              <h2 className="text-base font-semibold">User Management</h2>
-              <p className="text-xs text-slate-500">Manage system access and permissions.</p>
+      {
+        activeTab === 'users' && user?.role === 'admin' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+              <div>
+                <h2 className="text-base font-semibold">User Management</h2>
+                <p className="text-xs text-slate-500">Manage system access and permissions.</p>
+              </div>
+              <button className="btn btn-primary h-8 text-xs" onClick={() => {
+                setEditingUser(null);
+                setNewUser({ username: '', password: '', role: 'user', permissions: [] });
+                setShowAddUser(true);
+              }}>
+                Add User
+              </button>
             </div>
-            <button className="btn btn-primary h-8 text-xs" onClick={() => {
-              setEditingUser(null);
-              setNewUser({ username: '', password: '', role: 'user', permissions: [] });
-              setShowAddUser(true);
-            }}>
-              Add User
-            </button>
-          </div>
 
-          <div className="card overflow-hidden !p-0">
-            <table className="w-full">
-              <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
-                <tr>
-                  <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Username</th>
-                  <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Role</th>
-                  <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Created At</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase text-slate-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {users.filter(u => u.username.toLowerCase() !== 'admin').map(u => (
-                  <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-4 py-2.5 font-medium text-xs">{u.username}</td>
-                    <td className="px-4 py-2.5 capitalize text-xs">{u.role}</td>
-                    <td className="px-4 py-2.5 text-slate-500 text-xs">{formatDate(u.created_at)}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <div className="flex justify-end gap-1">
-                        <button className="p-1.5 hover:bg-slate-100 rounded text-blue-600" onClick={() => startEditUser(u)}>
-                          <Edit size={14} />
-                        </button>
-                        {u.username.toLowerCase() !== 'admin' && (
-                          <button className="p-1.5 hover:bg-slate-100 rounded text-red-600" onClick={() => handleDeleteUser(u.id)}>
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+            <div className="card overflow-hidden !p-0">
+              <table className="w-full">
+                <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Username</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Role</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-medium uppercase text-slate-500">Created At</th>
+                    <th className="px-4 py-2 text-right text-[10px] font-medium uppercase text-slate-500">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {users.filter(u => u.username.toLowerCase() !== 'admin').map(u => (
+                    <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-2.5 font-medium text-xs">{u.username}</td>
+                      <td className="px-4 py-2.5 capitalize text-xs">{u.role}</td>
+                      <td className="px-4 py-2.5 text-slate-500 text-xs">{formatDate(u.created_at)}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <div className="flex justify-end gap-1">
+                          <button className="p-1.5 hover:bg-slate-100 rounded text-blue-600" onClick={() => startEditUser(u)}>
+                            <Edit size={14} />
+                          </button>
+                          {u.username.toLowerCase() !== 'admin' && (
+                            <button className="p-1.5 hover:bg-slate-100 rounded text-red-600" onClick={() => handleDeleteUser(u.id)}>
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Security Tab - Restored */}
-      {activeTab === 'security' && (
-        <div className="space-y-4">
-          <div className="card p-4">
-            <h2 className="text-base font-semibold mb-3">Security Settings</h2>
+      {
+        activeTab === 'security' && (
+          <div className="space-y-4">
+            <div className="card p-4">
+              <h2 className="text-base font-semibold mb-3">Security Settings</h2>
 
-            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${biometricEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
-                  <Fingerprint size={18} />
+              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${biometricEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
+                    <Fingerprint size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-sm">Biometric Authentication</h3>
+                    <p className="text-xs text-slate-500">
+                      {biometricCapability
+                        ? `Use ${getBiometricTypeName(biometricCapability.biometryType)} to sign in`
+                        : 'Biometric hardware not available'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-medium text-sm">Biometric Authentication</h3>
-                  <p className="text-xs text-slate-500">
-                    {biometricCapability
-                      ? `Use ${getBiometricTypeName(biometricCapability.biometryType)} to sign in`
-                      : 'Biometric hardware not available'}
-                  </p>
-                </div>
+                {biometricCapability ? (
+                  <button
+                    onClick={() => void handleToggleBiometric()}
+                    disabled={biometricLoading}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${biometricEnabled ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'
+                      }`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition z-10 ${biometricEnabled ? 'translate-x-4' : 'translate-x-1'
+                      }`} />
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-slate-400 italic">Not supported</span>
+                )}
               </div>
-              {biometricCapability ? (
-                <button
-                  onClick={() => void handleToggleBiometric()}
-                  disabled={biometricLoading}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${biometricEnabled ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'
-                    }`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition z-10 ${biometricEnabled ? 'translate-x-4' : 'translate-x-1'
-                    }`} />
-                </button>
-              ) : (
-                <span className="text-[10px] text-slate-400 italic">Not supported</span>
+              {biometricError && (
+                <div className="mt-3 p-2 bg-red-50 text-red-600 rounded text-xs flex gap-2 items-center">
+                  <AlertTriangle size={14} />
+                  {biometricError}
+                </div>
               )}
             </div>
-            {biometricError && (
-              <div className="mt-3 p-2 bg-red-50 text-red-600 rounded text-xs flex gap-2 items-center">
-                <AlertTriangle size={14} />
-                {biometricError}
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Themes Tab - Restored */}
-      {activeTab === 'themes' && (
-        <div className="space-y-4">
-          <div className="card p-4">
-            <h2 className="text-base font-semibold mb-1">Appearance</h2>
-            <p className="text-xs text-slate-600 mb-4">Customize the look and feel.</p>
+      {
+        activeTab === 'themes' && (
+          <div className="space-y-4">
+            <div className="card p-4">
+              <h2 className="text-base font-semibold mb-1">Appearance</h2>
+              <p className="text-xs text-slate-600 mb-4">Customize the look and feel.</p>
 
-            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 w-fit">
-              <span className="text-sm font-medium">Theme Preference:</span>
-              <ModeToggle />
+              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 w-fit">
+                <span className="text-sm font-medium">Theme Preference:</span>
+                <ModeToggle />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* AI Tab - Admin Only */}
-      {activeTab === 'ai' && isMasterAdmin && (
-        <div className="space-y-4">
-          <div className="card p-4">
-            <h2 className="text-base font-semibold mb-1">AI Assistant Settings</h2>
-            <p className="text-xs text-slate-600 mb-4">
-              Enable/Disable AI features.
-            </p>
+      {
+        activeTab === 'ai' && isMasterAdmin && (
+          <div className="space-y-4">
+            <div className="card p-4">
+              <h2 className="text-base font-semibold mb-1">AI Assistant Settings</h2>
+              <p className="text-xs text-slate-600 mb-4">
+                Enable/Disable AI features.
+              </p>
 
-            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-800">
-              <div>
-                <p className="font-medium text-sm">AI Assistant</p>
-                <p className="text-xs text-slate-500">
-                  {aiEnabled ? 'Enabled' : 'Disabled - AI hidden'}
+              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-800">
+                <div>
+                  <p className="font-medium text-sm">AI Assistant</p>
+                  <p className="text-xs text-slate-500">
+                    {aiEnabled ? 'Enabled' : 'Disabled - AI hidden'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleAiToggle}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${aiEnabled ? 'bg-primary' : 'bg-slate-300'
+                    }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${aiEnabled ? 'translate-x-4' : 'translate-x-1'
+                      }`}
+                  />
+                </button>
+              </div>
+
+              <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  <strong>Note:</strong> Requires password confirmation.
                 </p>
               </div>
-              <button
-                onClick={handleAiToggle}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${aiEnabled ? 'bg-primary' : 'bg-slate-300'
-                  }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${aiEnabled ? 'translate-x-4' : 'translate-x-1'
-                    }`}
-                />
-              </button>
             </div>
 
-            <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <p className="text-xs text-amber-800 dark:text-amber-200">
-                <strong>Note:</strong> Requires password confirmation.
-              </p>
-            </div>
+            <DataMigrationSettings />
           </div>
-
-          <DataMigrationSettings />
-        </div>
-      )}
+        )
+      }
 
       {/* AI Password Prompt Modal */}
-      {showAiPasswordPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
-            <h2 className="text-xl font-bold mb-2">AI Settings Password</h2>
-            <p className="text-sm text-slate-500 mb-4">
-              Enter the master password to {aiEnabled ? 'disable' : 'enable'} AI features.
-            </p>
-            <input
-              type="password"
-              placeholder="Enter password"
-              className="form-input w-full mb-2"
-              value={aiPasswordInput}
-              onChange={e => setAiPasswordInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAiPasswordSubmit()}
-              autoFocus
-            />
-            {aiPasswordError && (
-              <p className="text-sm text-red-500 mb-2">{aiPasswordError}</p>
-            )}
-            <div className="flex justify-end gap-3 pt-4">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowAiPasswordPrompt(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleAiPasswordSubmit}
-              >
-                Confirm
-              </button>
+      {
+        showAiPasswordPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+              <h2 className="text-xl font-bold mb-2">AI Settings Password</h2>
+              <p className="text-sm text-slate-500 mb-4">
+                Enter the master password to {aiEnabled ? 'disable' : 'enable'} AI features.
+              </p>
+              <input
+                type="password"
+                placeholder="Enter password"
+                className="form-input w-full mb-2"
+                value={aiPasswordInput}
+                onChange={e => setAiPasswordInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAiPasswordSubmit()}
+                autoFocus
+              />
+              {aiPasswordError && (
+                <p className="text-sm text-red-500 mb-2">{aiPasswordError}</p>
+              )}
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowAiPasswordPrompt(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleAiPasswordSubmit}
+                >
+                  Confirm
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Add/Edit User Modal */}
-      {showAddUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
-            <h2 className="text-xl font-bold mb-4">{editingUser ? 'Edit User' : 'Create New User'}</h2>
-            <form onSubmit={handleCreateUser} className="space-y-4">
-              <div>
-                <label className="form-label">Username</label>
-                <input
-                  type="text"
-                  required
-                  className="form-input"
-                  value={newUser.username}
-                  onChange={e => setNewUser({ ...newUser, username: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="form-label">{editingUser ? 'New Password (leave blank to keep)' : 'Password'}</label>
-                <input
-                  type="password"
-                  required={!editingUser}
-                  className="form-input"
-                  value={newUser.password}
-                  onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="form-label">Role</label>
-                <select
-                  className="form-input"
-                  value={newUser.role}
-                  onChange={e => setNewUser({ ...newUser, role: e.target.value })}
-                >
-                  <option value="user">User (Restricted)</option>
-                  <option value="admin">Admin (Full Access)</option>
-                </select>
-              </div>
-
-              {/* Page Access Permissions - only show for non-admin role */}
-              {newUser.role !== 'admin' && (
+      {
+        showAddUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+              <h2 className="text-xl font-bold mb-4">{editingUser ? 'Edit User' : 'Create New User'}</h2>
+              <form onSubmit={handleCreateUser} className="space-y-4">
                 <div>
-                  <label className="form-label">Page Access</label>
-                  <div className="grid grid-cols-2 gap-2 mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                    {PERMISSIONS.map((perm) => (
-                      <label key={perm.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 p-1.5 rounded transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={newUser.permissions.includes(perm.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setNewUser({ ...newUser, permissions: [...newUser.permissions, perm.id] });
-                            } else {
-                              setNewUser({ ...newUser, permissions: newUser.permissions.filter(p => p !== perm.id) });
-                            }
-                          }}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-slate-700 dark:text-slate-300">{perm.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">Select which pages this user can access</p>
+                  <label className="form-label">Username</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-input"
+                    value={newUser.username}
+                    onChange={e => setNewUser({ ...newUser, username: e.target.value })}
+                  />
                 </div>
-              )}
+                <div>
+                  <label className="form-label">{editingUser ? 'New Password (leave blank to keep)' : 'Password'}</label>
+                  <input
+                    type="password"
+                    required={!editingUser}
+                    className="form-input"
+                    value={newUser.password}
+                    onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Role</label>
+                  <select
+                    className="form-input"
+                    value={newUser.role}
+                    onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                  >
+                    <option value="user">User (Restricted)</option>
+                    <option value="admin">Admin (Full Access)</option>
+                  </select>
+                </div>
 
-              <div className="flex justify-end gap-3 pt-4">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddUser(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save User</button>
-              </div>
-            </form>
+                {/* Page Access Permissions - only show for non-admin role */}
+                {newUser.role !== 'admin' && (
+                  <div>
+                    <label className="form-label">Page Access</label>
+                    <div className="grid grid-cols-2 gap-2 mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                      {PERMISSIONS.map((perm) => (
+                        <label key={perm.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 p-1.5 rounded transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={newUser.permissions.includes(perm.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewUser({ ...newUser, permissions: [...newUser.permissions, perm.id] });
+                              } else {
+                                setNewUser({ ...newUser, permissions: newUser.permissions.filter(p => p !== perm.id) });
+                              }
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                          />
+                          <span className="text-slate-700 dark:text-slate-300">{perm.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">Select which pages this user can access</p>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowAddUser(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">Save User</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-    </div>
+    </div >
   );
 }
 

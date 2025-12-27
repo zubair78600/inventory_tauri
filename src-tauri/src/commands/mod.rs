@@ -15,6 +15,7 @@ pub mod customer_payments;
 pub mod ai_chat;
 pub mod data_management;
 pub mod share;
+pub mod google_drive;
 
 
 use serde::{Deserialize, Serialize};
@@ -42,4 +43,5 @@ pub use customer_payments::*;
 pub use ai_chat::*;
 pub use data_management::*;
 pub use share::*;
+pub use google_drive::*;
 

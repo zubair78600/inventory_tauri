@@ -59,3 +59,6 @@ src-tauri/binaries/
 # Logs
 *.log
 DB_AI/server.log
+
+# Google API
+credentials.json

@@ -34,6 +34,15 @@ pub fn run() {
       // Initialize AI sidecar state
       app.manage(commands::AiSidecarState::default());
 
+      // Initialize backup scheduler state
+      app.manage(commands::BackupSchedulerState::default());
+
+      // Start backup scheduler in background
+      let app_handle_for_scheduler = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        commands::google_drive::init_backup_scheduler(app_handle_for_scheduler).await;
+      });
+
       // Create Settings menu item
       let settings_item = MenuItemBuilder::with_id("settings", "Settings...").build(app)?;
 
@@ -212,6 +221,18 @@ pub fn run() {
       // Share commands
       commands::open_whatsapp_chat,
       commands::open_whatsapp_with_file,
+      // Google Drive backup commands
+      commands::start_google_auth,
+      commands::check_google_auth_status,
+      commands::disconnect_google_drive,
+      commands::run_backup_now,
+      commands::get_backup_status,
+      commands::get_drive_backups,
+      commands::restore_from_backup,
+      commands::delete_drive_backup,
+      commands::save_backup_config,
+      commands::get_backup_config,
+      commands::restart_backup_scheduler,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

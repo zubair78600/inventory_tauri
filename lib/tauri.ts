@@ -1648,3 +1648,124 @@ export const settingsCommands = {
     return await invoke<number>('clear_modifications_history');
   },
 };
+
+// ============================================================================
+// Google Drive Backup Types and Commands
+// ============================================================================
+
+export interface BackupStatus {
+  is_authenticated: boolean;
+  last_backup_time: string | null;
+  last_backup_status: 'success' | 'failed' | 'in_progress' | 'never';
+  last_error: string | null;
+  next_scheduled: string | null;
+  backup_size_mb: number | null;
+}
+
+export interface BackupConfig {
+  enabled: boolean;
+  backup_time: string;
+  custom_folders: string[];
+  retention_days: number;
+}
+
+export interface DriveBackupFile {
+  id: string;
+  name: string;
+  created_time: string;
+  size: number;
+}
+
+export interface BackupNotification {
+  notification_type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+}
+
+export interface TransferProgress {
+  processed_bytes: number;
+  total_bytes: number;
+}
+
+export const googleDriveCommands = {
+  /**
+   * Start Google OAuth 2.0 authentication flow
+   * @param credentialsJson - The credentials JSON from Google Cloud Console
+   */
+  startAuth: async (credentialsJson: string): Promise<void> => {
+    return await invoke<void>('start_google_auth', { credentialsJson });
+  },
+
+  /**
+   * Check if currently authenticated with Google Drive
+   */
+  checkAuthStatus: async (): Promise<boolean> => {
+    return await invoke<boolean>('check_google_auth_status');
+  },
+
+  /**
+   * Disconnect from Google Drive and clear stored tokens
+   */
+  disconnect: async (): Promise<void> => {
+    return await invoke<void>('disconnect_google_drive');
+  },
+
+  /**
+   * Run a backup immediately
+   * @returns The ID of the uploaded backup file
+   */
+  runBackupNow: async (): Promise<string> => {
+    return await invoke<string>('run_backup_now');
+  },
+
+  /**
+   * Get the current backup status
+   */
+  getBackupStatus: async (): Promise<BackupStatus> => {
+    return await invoke<BackupStatus>('get_backup_status');
+  },
+
+  /**
+   * Get list of backups stored in Google Drive
+   */
+  getDriveBackups: async (): Promise<DriveBackupFile[]> => {
+    return await invoke<DriveBackupFile[]>('get_drive_backups');
+  },
+
+  /**
+   * Restore from a backup file in Google Drive
+   * @param backupId - The Google Drive file ID of the backup
+   */
+  restoreFromBackup: async (backupId: string): Promise<string> => {
+    return await invoke<string>('restore_from_backup', { backupId });
+  },
+
+  /**
+   * Delete a backup file from Google Drive
+   * @param backupId - The Google Drive file ID to delete
+   */
+  deleteBackup: async (backupId: string): Promise<void> => {
+    return await invoke<void>('delete_drive_backup', { backupId });
+  },
+
+  /**
+   * Save backup configuration
+   */
+  saveConfig: async (config: BackupConfig): Promise<void> => {
+    return await invoke<void>('save_backup_config', { config });
+  },
+
+  /**
+   * Get current backup configuration
+   */
+  getConfig: async (): Promise<BackupConfig> => {
+    return await invoke<BackupConfig>('get_backup_config');
+  },
+
+  /**
+   * Restart the backup scheduler with new settings
+   */
+  restartScheduler: async (): Promise<void> => {
+    return await invoke<void>('restart_backup_scheduler');
+  },
+};
