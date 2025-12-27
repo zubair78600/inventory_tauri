@@ -459,6 +459,11 @@ export interface UpdateInvoiceInput {
   payment_method?: string | null;
   created_at?: string | null;
   status?: string | null;
+  tax_amount?: number | null;
+  discount_amount?: number | null;
+  state?: string | null;
+  district?: string | null;
+  town?: string | null;
 }
 
 /**

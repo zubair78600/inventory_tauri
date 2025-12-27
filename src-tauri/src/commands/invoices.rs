@@ -34,6 +34,11 @@ pub struct UpdateInvoiceInput {
     pub payment_method: Option<String>,
     pub created_at: Option<String>,
     pub status: Option<String>, // Reserved for future use (e.g., 'paid', 'void')
+    pub tax_amount: Option<f64>,
+    pub discount_amount: Option<f64>,
+    pub state: Option<String>,
+    pub district: Option<String>,
+    pub town: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -626,6 +631,37 @@ pub fn update_invoice(input: UpdateInvoiceInput, db: State<Database>) -> Result<
         updates.push("created_at = ?");
         params.push(Box::new(created_at));
     }
+    if let Some(tax_amount) = input.tax_amount {
+        updates.push("tax_amount = ?");
+        params.push(Box::new(tax_amount));
+    }
+    if let Some(discount_amount) = input.discount_amount {
+        updates.push("discount_amount = ?");
+        params.push(Box::new(discount_amount));
+    }
+    if let Some(state) = input.state {
+        updates.push("state = ?");
+        params.push(Box::new(state));
+    }
+    if let Some(district) = input.district {
+        updates.push("district = ?");
+        params.push(Box::new(district));
+    }
+    if let Some(town) = input.town {
+        updates.push("town = ?");
+        params.push(Box::new(town));
+    }
+
+    // Special handling: If tax or discount changed, we might need to recalculate total_amount
+    // But update_invoice is metadata only usually.
+    // However, if we change tax/discount, total MUST change.
+    // We should fetch current items total to recalculate correctly if tax/discount provided.
+    
+    // For now, let's assume the frontend sends the *Metadata* update, and if it wants to update totals likely it does it via logic?
+    // Actually, safest is to re-calculate total if tax/discount is touched.
+    
+    // Let's do a quick check if tax/discount is being updated
+    let recalculate_total = input.tax_amount.is_some() || input.discount_amount.is_some();
 
     if updates.is_empty() {
         return Err("No fields to update".to_string());
@@ -644,6 +680,32 @@ pub fn update_invoice(input: UpdateInvoiceInput, db: State<Database>) -> Result<
 
     if rows_affected == 0 {
         return Err(format!("Invoice with id {} not found", input.id));
+    }
+
+    if recalculate_total {
+        // Recalculate total_amount based on items + new (or existing) tax/discount
+        // We need to do this inside the transaction or after? Inside is better.
+
+        // 1. Get Sum of Items
+        let items_total: f64 = tx.query_row(
+            "SELECT COALESCE(SUM(quantity * unit_price), 0) FROM invoice_items WHERE invoice_id = ?",
+            [input.id],
+            |row| row.get(0)
+        ).map_err(|e| format!("Failed to get items total: {}", e))?;
+
+        // 2. Get current Tax/Discount (updated ones or existing)
+        let (current_tax, current_discount): (f64, f64) = tx.query_row(
+            "SELECT tax_amount, discount_amount FROM invoices WHERE id = ?",
+            [input.id],
+            |row| Ok((row.get(0)?, row.get(1)?))
+        ).map_err(|e| format!("Failed to get financials: {}", e))?;
+
+        let new_total = items_total + current_tax - current_discount;
+
+        tx.execute(
+            "UPDATE invoices SET total_amount = ? WHERE id = ?",
+            (new_total, input.id)
+        ).map_err(|e| format!("Failed to update calculated total: {}", e))?;
     }
 
     tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
@@ -764,9 +826,15 @@ pub fn update_invoice_items(input: UpdateInvoiceItemsInput, db: State<Database>)
 
     // Get current invoice and items for history
     let current_invoice = conn.query_row(
-        "SELECT id, invoice_number, total_amount FROM invoices WHERE id = ?1",
+        "SELECT id, invoice_number, total_amount, tax_amount, discount_amount FROM invoices WHERE id = ?1",
         [input.invoice_id],
-        |row| Ok((row.get::<_, i32>(0)?, row.get::<_, String>(1)?, row.get::<_, f64>(2)?)),
+        |row| Ok((
+            row.get::<_, i32>(0)?, 
+            row.get::<_, String>(1)?, 
+            row.get::<_, f64>(2)?,
+            row.get::<_, f64>(3)?,
+            row.get::<_, f64>(4)?
+        )),
     ).map_err(|e| format!("Invoice not found: {}", e))?;
 
     // Get current items
@@ -855,9 +923,14 @@ pub fn update_invoice_items(input: UpdateInvoiceItemsInput, db: State<Database>)
     }
 
     // 4. Update invoice total
+    // Recalculate using existing tax and discount from the invoice
+    let tax_amount = current_invoice.3;
+    let discount_amount = current_invoice.4;
+    let final_total = new_total + tax_amount - discount_amount;
+
     tx.execute(
         "UPDATE invoices SET total_amount = ?1 WHERE id = ?2",
-        (new_total, input.invoice_id),
+        (final_total, input.invoice_id),
     ).map_err(|e| format!("Failed to update invoice total: {}", e))?;
 
     // 5. Record modification history (legacy table)

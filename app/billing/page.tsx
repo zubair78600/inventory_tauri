@@ -63,6 +63,7 @@ export default function Billing() {
 
   // Quick Add State
   const [quickAddIds, setQuickAddIds] = useState<number[]>([]);
+  const [gridColumns, setGridColumns] = useState<number>(2);
   const [showQuickAddSettings, setShowQuickAddSettings] = useState(false);
   const importQuickAddSettingsModal = () => import('@/components/billing/QuickAddSettingsModal');
   const [QuickAddModal, setQuickAddModal] = useState<any>(null);
@@ -290,6 +291,13 @@ export default function Billing() {
             setQuickAddIds(ids);
           }
         }
+        const savedCols = settings['billing_grid_columns'];
+        if (savedCols) {
+          const cols = parseInt(savedCols, 10);
+          if (!isNaN(cols) && cols >= 2 && cols <= 6) {
+            setGridColumns(cols);
+          }
+        }
       } catch (e) {
         console.error("Failed to load quick add ids", e);
       }
@@ -302,9 +310,18 @@ export default function Billing() {
       await settingsCommands.set('quick_add_ids', JSON.stringify(newIds));
       setQuickAddIds(newIds);
       // Invalidate the query to refetch with new IDs
-      await queryClient.invalidateQueries({ queryKey: ['billing-products'] });
+      await queryClient.resetQueries({ queryKey: ['billing-products'] });
     } catch (err) {
       console.error("Failed to save quick add settings", err);
+    }
+  };
+
+  const handleUpdateGridColumns = async (cols: number) => {
+    try {
+      await settingsCommands.set('billing_grid_columns', cols.toString());
+      setGridColumns(cols);
+    } catch (err) {
+      console.error("Failed to save grid column settings", err);
     }
   };
 
@@ -543,6 +560,8 @@ export default function Billing() {
           onClose={() => setShowQuickAddSettings(false)}
           currentIds={quickAddIds}
           onSave={handleUpdateQuickAdd}
+          columns={gridColumns}
+          onColumnsChange={handleUpdateGridColumns}
         />
       )}
       <div className="h-full flex flex-col overflow-hidden">
@@ -840,7 +859,7 @@ export default function Billing() {
         </div>
       </div>
 
-      <div className="space-y-4 h-full flex flex-col overflow-hidden">
+      <div className="space-y-4 h-full flex flex-col overflow-hidden px-2">
         <div className="flex items-center justify-between">
           <h2 className="section-title">
             Products {isSearching || productSearch.length >= 2 ? `(${totalSearchCount})` : `(${totalProductCount})`}
@@ -865,30 +884,46 @@ export default function Billing() {
         {productSearch.length >= 2 ? (
           <div>
             <h3 className="text-lg font-semibold mb-3">Search Results</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
+            <div className={`grid gap-2.5 max-h-[420px] overflow-y-auto pr-1 ${gridColumns === 2 ? 'grid-cols-2' :
+              gridColumns === 3 ? 'grid-cols-2 lg:grid-cols-3' :
+                gridColumns === 4 ? 'grid-cols-2 lg:grid-cols-4' :
+                  gridColumns === 5 ? 'grid-cols-3 lg:grid-cols-5' :
+                    'grid-cols-3 lg:grid-cols-6'
+              }`}>
               {searchResults.map((product) => (
                 <button
                   type="button"
                   key={product.id}
-                  className="card border border-sky-100 text-left hover:-translate-y-0.5 transition"
+                  className={`card !p-2 border border-sky-100 text-left hover:-translate-y-0.5 transition ${gridColumns >= 5 ? '!p-1.5' : ''}`}
                   onClick={() => addToCart(product)}
                 >
-                  <div className="flex gap-3">
-                    <EntityThumbnail
-                      entityId={product.id}
-                      entityType="product"
-                      imagePath={product.image_path}
-                      size="md"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{product.name}</div>
-                      <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
-                      <div className="flex justify-between mt-2 text-sm">
-                        <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
-                        <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
-                          Stock: {product.stock_quantity}
-                        </span>
+                  <div className="flex flex-col gap-1.5 h-full">
+                    <div className="flex gap-2">
+                      {gridColumns <= 4 && (
+                        <EntityThumbnail
+                          entityId={product.id}
+                          entityType="product"
+                          imagePath={product.image_path}
+                          size="sm"
+                          className={gridColumns >= 4 ? 'h-8 w-8' : ''}
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className={`font-bold truncate leading-tight ${gridColumns >= 4 ? 'text-[10px]' : 'text-xs'}`} title={product.name}>
+                          {product.name}
+                        </div>
+                        {gridColumns <= 3 && (
+                          <div className="text-slate-500 text-[10px] truncate">SKU: {product.sku}</div>
+                        )}
                       </div>
+                    </div>
+                    <div className={`flex justify-between items-center pt-1 border-t border-slate-50 mt-auto ${gridColumns >= 5 ? 'gap-1' : ''}`}>
+                      <span className={`font-bold text-slate-900 ${gridColumns >= 4 ? 'text-[10px]' : 'text-xs'}`}>
+                        ₹{(product.selling_price || product.price).toFixed(0)}
+                      </span>
+                      <span className={`${product.stock_quantity < 5 ? 'text-red-500' : 'text-emerald-600'} ${gridColumns >= 4 ? 'text-[9px]' : 'text-[10px]'} font-medium`}>
+                        {gridColumns >= 5 ? '' : 'Qty: '}{product.stock_quantity}
+                      </span>
                     </div>
                   </div>
                 </button>
@@ -943,9 +978,14 @@ export default function Billing() {
               <p className="text-sm text-muted-foreground">{totalProductCount} total products</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 overflow-y-auto pr-1">
+            <div className={`grid gap-2 flex-1 overflow-y-auto pr-1 ${gridColumns === 2 ? 'grid-cols-2' :
+              gridColumns === 3 ? 'grid-cols-2 lg:grid-cols-3' :
+                gridColumns === 4 ? 'grid-cols-2 lg:grid-cols-4' :
+                  gridColumns === 5 ? 'grid-cols-3 lg:grid-cols-5' :
+                    'grid-cols-3 lg:grid-cols-6'
+              }`}>
               {isQuickAddLoading && topProducts.length === 0 ? (
-                <div className="col-span-1 md:col-span-2 text-center text-sm text-muted-foreground py-6">
+                <div className="col-span-full text-center text-sm text-muted-foreground py-6">
                   Loading products...
                 </div>
               ) : (
@@ -953,28 +993,39 @@ export default function Billing() {
                   <button
                     type="button"
                     key={product.id}
-                    className="card text-left hover:-translate-y-0.5 transition relative"
+                    className={`card !p-2 text-left hover:-translate-y-0.5 transition relative flex flex-col h-full bg-white group ${gridColumns >= 5 ? '!p-1.5' : ''}`}
                     onClick={() => addToCart(product)}
                   >
-                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500">
-                      {quickAddIds.includes(product.id) ? <Pin size={12} className="fill-current" /> : index + 1}
+                    <div className={`absolute top-1 right-1 flex items-center justify-center rounded-full bg-slate-100 font-bold text-slate-400 group-hover:bg-sky-100 group-hover:text-sky-600 transition-colors ${gridColumns >= 4 ? 'h-4 w-4 text-[8px]' : 'h-5 w-5 text-[10px]'}`}>
+                      {quickAddIds.includes(product.id) ? <Pin size={gridColumns >= 4 ? 8 : 10} className="fill-current" /> : index + 1}
                     </div>
-                    <div className="flex gap-3">
-                      <EntityThumbnail
-                        entityId={product.id}
-                        entityType="product"
-                        imagePath={product.image_path}
-                        size="md"
-                      />
-                      <div className="flex-1 min-w-0 pr-6">
-                        <div className="font-semibold truncate">{product.name}</div>
-                        <div className="text-muted-foreground text-sm">SKU: {product.sku}</div>
-                        <div className="flex justify-between mt-2 text-sm">
-                          <span>₹{(product.selling_price || product.price).toFixed(0)}</span>
-                          <span className={product.stock_quantity < 5 ? 'text-danger' : 'text-success'}>
-                            Stock: {product.stock_quantity}
-                          </span>
+                    <div className="flex flex-col gap-1.5 h-full">
+                      <div className="flex gap-2">
+                        {gridColumns <= 4 && (
+                          <EntityThumbnail
+                            entityId={product.id}
+                            entityType="product"
+                            imagePath={product.image_path}
+                            size="sm"
+                            className={`flex-shrink-0 ${gridColumns >= 4 ? 'h-8 w-8' : 'h-10 w-10'}`}
+                          />
+                        )}
+                        <div className={`flex-1 min-w-0 ${gridColumns <= 3 ? 'pr-4' : ''}`}>
+                          <div className={`font-bold text-slate-800 truncate leading-tight group-hover:text-sky-700 ${gridColumns >= 4 ? 'text-[10px]' : 'text-xs'}`} title={product.name}>
+                            {product.name}
+                          </div>
+                          {gridColumns <= 3 && (
+                            <div className="text-slate-500 text-[10px] truncate" title={product.sku}>SKU: {product.sku}</div>
+                          )}
                         </div>
+                      </div>
+                      <div className={`flex justify-between items-center pt-1 border-t border-slate-50 mt-auto ${gridColumns >= 5 ? 'gap-1' : ''}`}>
+                        <span className={`font-bold text-slate-900 ${gridColumns >= 4 ? 'text-[10px]' : 'text-xs'}`}>
+                          ₹{(product.selling_price || product.price).toFixed(0)}
+                        </span>
+                        <span className={`${product.stock_quantity < 5 ? 'text-red-500' : 'text-emerald-600'} ${gridColumns >= 4 ? 'text-[9px]' : 'text-[10px]'} font-medium`}>
+                          {gridColumns >= 5 ? '' : 'Qty: '}{product.stock_quantity}
+                        </span>
                       </div>
                     </div>
                   </button>

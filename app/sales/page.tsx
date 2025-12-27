@@ -16,7 +16,7 @@ import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -221,15 +221,28 @@ export default function Sales() {
       id: selected.id,
       customer_id: selected.customer_id,
       payment_method: selected.payment_method,
-      created_at: selected.created_at,
+      created_at: selected.created_at ? new Date(selected.created_at).toISOString().slice(0, 16) : undefined,
       status: 'paid',
+      tax_amount: selected.tax_amount,
+      discount_amount: selected.discount_amount,
+      state: selected.state,
+      district: selected.district,
+      town: selected.town,
     });
-    // Load current items into editable state
-    setEditItems(items.map(item => ({
-      product_id: item.product_id,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-    })));
+    // Load current items into editable state - use rawItems to get actual stored values
+    const sourceItems = rawItems.length > 0 ? rawItems : items;
+    setEditItems(sourceItems.map(item => {
+      // Get original price from product catalog, not from corrupted saved data
+      const product = products.find(p => p.id === item.product_id);
+      const originalPrice = product?.selling_price ?? product?.price ?? item.unit_price;
+      return {
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        original_price: originalPrice,
+        discount_amount: item.discount_amount || 0,
+      };
+    }));
     setProductSearchTerm('');
     setIsEditOpen(true);
   };
@@ -265,6 +278,8 @@ export default function Sales() {
         product_id: product.id,
         quantity: 1,
         unit_price: product.selling_price ?? product.price,
+        original_price: product.selling_price ?? product.price,
+        discount_amount: 0,
       }]);
     }
   };
@@ -277,7 +292,27 @@ export default function Sales() {
     setEditItems(prev => prev.map(i => {
       if (i.product_id === productId) {
         const newQty = Math.max(1, i.quantity + delta);
-        return { ...i, quantity: newQty };
+        // Recalculate discount based on new quantity
+        const originalPrice = (i as any).original_price || i.unit_price;
+        const perUnitDiscount = Math.max(0, originalPrice - i.unit_price);
+        const newDiscount = perUnitDiscount * newQty;
+        return { ...i, quantity: newQty, discount_amount: newDiscount };
+      }
+      return i;
+    }));
+  };
+
+  const handleItemChange = (productId: number, field: 'quantity' | 'unit_price' | 'discount_amount', value: number) => {
+    setEditItems(prev => prev.map(i => {
+      if (i.product_id === productId) {
+        if (field === 'unit_price') {
+          // Auto-calculate total discount when price is changed (per unit diff × quantity)
+          const originalPrice = (i as any).original_price || i.unit_price;
+          const perUnitDiscount = Math.max(0, originalPrice - value);
+          const totalDiscount = perUnitDiscount * i.quantity;
+          return { ...i, unit_price: value, discount_amount: totalDiscount };
+        }
+        return { ...i, [field]: value };
       }
       return i;
     }));
@@ -524,12 +559,17 @@ export default function Sales() {
                       Generating preview...
                     </div>
                   )}
-                  {!isInlinePdfLoading && inlinePdfUrl && (
+                  {!isInlinePdfLoading && inlinePdfUrl && !isEditOpen && (
                     <iframe
                       src={inlinePdfUrl}
                       className="w-full h-full"
                       title="Invoice PDF Preview"
                     />
+                  )}
+                  {!isInlinePdfLoading && inlinePdfUrl && isEditOpen && (
+                    <div className="h-full w-full flex items-center justify-center text-sm text-slate-500">
+                      Edit in progress...
+                    </div>
                   )}
                   {!isInlinePdfLoading && !inlinePdfUrl && (
                     <div className="h-full w-full flex items-center justify-center text-sm text-slate-500">
@@ -571,124 +611,268 @@ export default function Sales() {
         fileName={pdfFileName}
       />
 
-      {/* Edit Invoice Sheet (Full Editor) */}
+      {/* Edit Invoice Sheet (Full Editor - Billing Style) */}
       <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <SheetContent className="fixed inset-0 m-auto w-[90%] max-w-2xl h-[70vh] rounded-xl overflow-y-auto bg-white dark:bg-slate-900 shadow-2xl">
-          <SheetHeader>
-            <SheetTitle>Edit Invoice {selected?.invoice_number}</SheetTitle>
-          </SheetHeader>
-          <div className="space-y-6 py-4">
-            {/* Metadata Section */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Customer</label>
-                <Select
-                  value={editForm.customer_id?.toString() || ''}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, customer_id: Number(e.target.value) || null }))}
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                >
-                  <option value="">Walk-in Customer</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Payment Method</label>
-                <Select
-                  value={editForm.payment_method || ''}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, payment_method: e.target.value }))}
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                >
-                  <option value="cash">Cash</option>
-                  <option value="upi">UPI</option>
-                  <option value="card">Card</option>
-                  <option value="bank_transfer">Bank Transfer</option>
-                </Select>
-              </div>
-            </div>
+        <SheetContent
+          className="w-[98vw] max-w-7xl h-auto max-h-[85vh] rounded-2xl flex flex-col p-0 overflow-hidden bg-white dark:bg-slate-900 shadow-2xl border"
+          side="center"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50 dark:bg-slate-800 shrink-0">
+            <SheetTitle className="text-lg font-semibold">Edit Invoice {selected?.invoice_number}</SheetTitle>
+          </div>
 
-            {/* Items Section */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Invoice Items</h3>
-                <span className="text-xs text-slate-500">
-                  {editItems.length} item(s) • Rs. {editItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0).toFixed(1)}
-                </span>
-              </div>
+          {/* Main Content - 2 Column Grid (Billing Style) */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: Customer & Location */}
+              <div className="card space-y-4">
+                <h3 className="section-title text-sm font-semibold">Customer & Location</h3>
 
-              {/* Current Items Table */}
-              <div className="border rounded-lg divide-y">
-                {editItems.length === 0 && (
-                  <div className="p-4 text-center text-slate-500 text-sm">No items in invoice</div>
-                )}
-                {editItems.map((item, idx) => {
-                  const product = products.find(p => p.id === item.product_id);
-                  const productName = product?.name || items.find(i => i.product_id === item.product_id)?.product_name || `Product #${item.product_id}`;
-                  return (
-                    <div key={idx} className="flex items-center justify-between p-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{productName}</p>
-                        <p className="text-xs text-slate-500">Rs. {item.unit_price.toFixed(1)} each</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => updateItemQuantity(item.product_id, -1)}>
-                          <Minus className="w-3 h-3" />
-                        </Button>
-                        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-                        <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => updateItemQuantity(item.product_id, 1)}>
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => removeProductFromEdit(item.product_id)}>
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <p className="w-20 text-right font-medium text-sm">Rs. {(item.quantity * item.unit_price).toFixed(1)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Add Products */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Add Product</label>
-                <Input
-                  placeholder="Search products..."
-                  value={productSearchTerm}
-                  onChange={(e) => setProductSearchTerm(e.target.value)}
-                />
-                {productSearchTerm && products.length > 0 && (
-                  <div className="border rounded-lg max-h-40 overflow-y-auto divide-y">
-                    {products.slice(0, 5).map(p => (
-                      <button
-                        key={p.id}
-                        className="w-full flex items-center justify-between p-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800"
-                        onClick={() => { addProductToEdit(p); setProductSearchTerm(''); }}
-                      >
-                        <div>
-                          <p className="font-medium text-sm">{p.name}</p>
-                          <p className="text-xs text-slate-500">{p.sku} • Stock: {p.stock_quantity}</p>
-                        </div>
-                        <p className="text-sm font-medium">Rs. {(p.selling_price ?? p.price).toFixed(1)}</p>
-                      </button>
-                    ))}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="form-label">Customer</label>
+                    <Select
+                      value={editForm.customer_id?.toString() || ''}
+                      onValueChange={(val) => {
+                        const cid = val ? Number(val) : null;
+                        const customer = customers.find(c => c.id === cid);
+                        setEditForm(prev => ({
+                          ...prev,
+                          customer_id: cid,
+                          state: customer?.state || prev.state,
+                          district: customer?.district || prev.district,
+                          town: customer?.town || prev.town,
+                        }));
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select Customer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Walk-in Customer</SelectItem>
+                        {customers.map(c => (
+                          <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
+                  <div>
+                    <label className="form-label">Date & Time</label>
+                    <Input
+                      type="text"
+                      value={editForm.created_at ? new Date(editForm.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, created_at: e.target.value }))}
+                      className="form-input"
+                      placeholder="DD/MM/YYYY, HH:MM"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Payment Method</label>
+                    <Select
+                      value={editForm.payment_method || ''}
+                      onValueChange={(val) => setEditForm(prev => ({ ...prev, payment_method: val }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Cash">Cash</SelectItem>
+                        <SelectItem value="UPI">UPI</SelectItem>
+                        <SelectItem value="Card">Card</SelectItem>
+                        <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="Credit">Credit</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="form-label">Town</label>
+                    <Input
+                      value={editForm.town || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, town: e.target.value }))}
+                      className="form-input"
+                      placeholder="Town"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">District</label>
+                    <Input
+                      value={editForm.district || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, district: e.target.value }))}
+                      className="form-input"
+                      placeholder="District"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">State</label>
+                    <Input
+                      value={editForm.state || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, state: e.target.value }))}
+                      className="form-input"
+                      placeholder="State"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="form-label">Tax (₹)</label>
+                    <Input
+                      type="number"
+                      value={editForm.tax_amount ?? 0}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, tax_amount: parseFloat(e.target.value) || 0 }))}
+                      className="form-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Discount (₹)</label>
+                    <Input
+                      type="number"
+                      value={editForm.discount_amount ?? 0}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, discount_amount: parseFloat(e.target.value) || 0 }))}
+                      className="form-input"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Invoice Items */}
+              <div className="card space-y-4">
+                <h3 className="section-title text-sm font-semibold">Invoice Items</h3>
+
+                {/* Items Table */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-[50vh] overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-800 border-b">
+                        <tr>
+                          <th className="text-left py-2 px-3 font-medium">Product</th>
+                          <th className="text-right py-2 px-3 font-medium w-24">Price (₹)</th>
+                          <th className="text-center py-2 px-3 font-medium w-32">Qty</th>
+                          <th className="text-right py-2 px-3 font-medium w-24">Disc (₹)</th>
+                          <th className="text-right py-2 px-3 font-medium w-28">Total (₹)</th>
+                          <th className="w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {editItems.map((item, idx) => {
+                          const product = products.find(p => p.id === item.product_id);
+                          const productName = product?.name || items.find(i => i.product_id === item.product_id)?.product_name || `Product #${item.product_id}`;
+                          const itemTotal = item.quantity * item.unit_price; // Discount already reflected in reduced price
+
+                          return (
+                            <tr key={idx} className="bg-white dark:bg-slate-900">
+                              <td className="py-2 px-3">
+                                <p className="font-medium truncate max-w-[200px]">{productName}</p>
+                                <p className="text-xs text-slate-500">{product?.sku}</p>
+                              </td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  type="number"
+                                  className="h-8 text-right px-2 w-full"
+                                  value={item.unit_price}
+                                  onChange={(e) => handleItemChange(item.product_id, 'unit_price', parseFloat(e.target.value) || 0)}
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button size="sm" variant="outline" className="h-6 w-6 p-0" onClick={() => updateItemQuantity(item.product_id, -1)}>
+                                    <Minus className="w-3 h-3" />
+                                  </Button>
+                                  <span className="w-8 text-center">{item.quantity}</span>
+                                  <Button size="sm" variant="outline" className="h-6 w-6 p-0" onClick={() => updateItemQuantity(item.product_id, 1)}>
+                                    <Plus className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  type="number"
+                                  className="h-8 text-right px-2 w-full"
+                                  value={item.discount_amount || 0}
+                                  onChange={(e) => handleItemChange(item.product_id, 'discount_amount', parseFloat(e.target.value) || 0)}
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-right font-medium">
+                                {itemTotal.toFixed(1)}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => removeProductFromEdit(item.product_id)}>
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {editItems.length === 0 && (
+                      <div className="p-8 text-center text-slate-500">No items in invoice</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Add Products */}
+                <div className="space-y-2 mt-4">
+                  <label className="text-sm font-medium">Add Product</label>
+                  <div className="relative">
+                    <Input
+                      placeholder="Search to add product..."
+                      value={productSearchTerm}
+                      onChange={(e) => setProductSearchTerm(e.target.value)}
+                      className="pl-9"
+                    />
+                    <div className="absolute left-3 top-2.5 text-slate-400">
+                      <Plus className="w-4 h-4" />
+                    </div>
+                  </div>
+                  {productSearchTerm && products.length > 0 && (
+                    <div className="border rounded-lg max-h-40 overflow-y-auto divide-y bg-white dark:bg-slate-800 shadow-md">
+                      {products.slice(0, 5).map(p => (
+                        <button
+                          key={p.id}
+                          className="w-full flex items-center justify-between p-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700"
+                          onClick={() => { addProductToEdit(p); setProductSearchTerm(''); }}
+                        >
+                          <div>
+                            <p className="font-medium text-sm">{p.name}</p>
+                            <p className="text-xs text-slate-500">{p.sku} • Stock: {p.stock_quantity}</p>
+                          </div>
+                          <p className="text-sm font-medium">Rs. {(p.selling_price ?? p.price).toFixed(1)}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div> {/* End 2-col grid */}
+          </div> {/* End scrollable area */}
+
+          {/* Footer Totals */}
+          <div className="border-t p-4 flex items-center justify-between shrink-0 bg-slate-50 dark:bg-slate-800">
+            <div className="text-sm">
+              <div className="flex gap-4 text-slate-500">
+                <span>Items: <strong className="text-foreground">{editItems.length}</strong></span>
+                <span>Qty: <strong className="text-foreground">{editItems.reduce((acc, i) => acc + i.quantity, 0)}</strong></span>
               </div>
             </div>
-
-            {/* Total */}
-            <div className="flex items-center justify-between pt-4 border-t">
-              <span className="font-semibold">Total</span>
-              <span className="text-xl font-bold text-sky-600">
-                Rs. {editItems.reduce((sum, i) => sum + i.quantity * i.unit_price, 0).toFixed(1)}
-              </span>
+            <div className="flex items-center gap-4">
+              <div className="text-right mr-4">
+                <p className="text-xs text-slate-500">Net Total</p>
+                <p className="text-xl font-bold text-sky-600">
+                  Rs. {(
+                    editItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0) +
+                    (editForm.tax_amount || 0) - (editForm.discount_amount || 0)
+                  ).toFixed(2)}
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+              <Button onClick={handleUpdateInvoice} className="bg-sky-600 hover:bg-sky-700 text-white">Save Changes</Button>
             </div>
           </div>
-          <SheetFooter className="mt-4">
-            <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleUpdateInvoice}>Save Changes</Button>
-          </SheetFooter>
         </SheetContent>
       </Sheet>
 
@@ -714,6 +898,6 @@ export default function Sales() {
         onOpenChange={setShowPhoneEntry}
         onConfirm={handlePhoneEntryConfirm}
       />
-    </div >
+    </div>
   );
 }

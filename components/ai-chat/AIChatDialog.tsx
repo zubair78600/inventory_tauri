@@ -1074,10 +1074,10 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                                         onKeyDown={(e) => e.key === 'Enter' && handleSend(input)}
                                         placeholder="Type a message..."
                                         disabled={isLoading || !isServerReady}
-                                        className="w-full h-12 pl-12 pr-4 rounded-full bg-slate-100 dark:bg-slate-800 border-none focus:ring-2 focus:ring-indigo-500/20 text-foreground placeholder:text-muted-foreground/60 shadow-inner transition-all"
+                                        className="w-full h-12 pl-12 pr-4 rounded-full bg-slate-100 dark:bg-slate-800 border-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-slate-100 placeholder:text-slate-600 dark:placeholder:text-slate-400 shadow-inner transition-all"
                                     />
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-                                        <Search className="h-5 w-5 opacity-50" />
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-100">
+                                        <Search className="h-5 w-5 opacity-80" />
                                     </div>
                                 </div>
                                 <motion.button
@@ -1089,7 +1089,7 @@ export function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
                                         "h-12 w-12 rounded-full flex items-center justify-center shadow-md transition-all",
                                         input.trim()
                                             ? "bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-indigo-500/25"
-                                            : "bg-slate-200 dark:bg-slate-700 text-slate-400"
+                                            : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                                     )}
                                 >
                                     <ArrowRight className="h-5 w-5" />

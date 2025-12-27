@@ -396,13 +396,13 @@ export default function Customers() {
             <Table>
               <TableHeader className="sticky top-0 bg-white dark:bg-slate-950 z-10 shadow-sm">
                 <TableRow>
-                  <TableHead className="w-[50px] text-center font-bold text-black">S.No</TableHead>
-                  <TableHead className="text-center font-bold text-black">Customer</TableHead>
-                  <TableHead className="text-center font-bold text-black">Contact</TableHead>
-                  <TableHead className="text-center font-bold text-black">Place</TableHead>
-                  <TableHead className="text-center font-bold text-black">Last Billed</TableHead>
-                  <TableHead className="text-center font-bold text-black">Invoices</TableHead>
-                  <TableHead className="text-center font-bold text-black">Actions</TableHead>
+                  <TableHead className="w-[50px] text-center font-bold !text-black">S.No</TableHead>
+                  <TableHead className="text-center font-bold !text-black">Customer</TableHead>
+                  <TableHead className="text-center font-bold !text-black">Contact</TableHead>
+                  <TableHead className="text-center font-bold !text-black">Place</TableHead>
+                  <TableHead className="text-center font-bold !text-black">Last Billed</TableHead>
+                  <TableHead className="text-center font-bold !text-black">Invoices</TableHead>
+                  <TableHead className="text-center font-bold !text-black">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -422,14 +422,16 @@ export default function Customers() {
                       )}
                     </TableCell>
                     <TableCell className="text-center space-y-1">
-                      {customer.email && <div className="text-sm">{customer.email}</div>}
+                      {customer.email && <div className="text-sm text-slate-600 dark:text-slate-400">{customer.email}</div>}
                       {customer.phone && (
-                        <div className="text-sm text-muted-foreground">{customer.phone}</div>
+                        <div className="text-sm font-medium text-slate-700 dark:text-slate-300">{customer.phone}</div>
                       )}
                     </TableCell>
-                    <TableCell className="text-center text-sm">{customer.town || customer.place || '—'}</TableCell>
-                    <TableCell className="text-center text-sm text-muted-foreground">
-                      {customer.last_billed ? new Date(customer.last_billed).toLocaleString() : '—'}
+                    <TableCell className="text-center text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {customer.town?.trim() || customer.place?.trim() || '—'}
+                    </TableCell>
+                    <TableCell className="text-center text-sm text-slate-600 dark:text-slate-400">
+                      {customer.last_billed ? new Date(customer.last_billed).toLocaleDateString() : '—'}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center">

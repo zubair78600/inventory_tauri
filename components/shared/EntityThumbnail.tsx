@@ -16,6 +16,7 @@ interface EntityThumbnailProps {
   onClick?: (e?: React.MouseEvent) => void;
   className?: string;
   refreshKey?: number;
+  showPlaceholderBorder?: boolean;
 }
 
 const sizeMap = {
@@ -32,6 +33,7 @@ export function EntityThumbnail({
   onClick,
   className,
   refreshKey = 0,
+  showPlaceholderBorder = false,
 }: EntityThumbnailProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,8 +87,9 @@ export function EntityThumbnail({
   }, [loadImage, refreshKey]);
 
   const containerStyles = cn(
-    'relative flex items-center justify-center rounded-md overflow-hidden bg-muted',
-    onClick && 'cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all',
+    'relative flex items-center justify-center rounded-md overflow-hidden bg-muted transition-all',
+    (!imagePath && showPlaceholderBorder) && 'border-2 border-slate-400 dark:border-slate-600',
+    onClick && 'cursor-pointer hover:ring-2 hover:ring-primary/50',
     className
   );
 

@@ -10,9 +10,18 @@ interface QuickAddSettingsModalProps {
     onClose: () => void;
     currentIds: number[];
     onSave: (newIds: number[]) => void;
+    columns: number;
+    onColumnsChange: (cols: number) => void;
 }
 
-export function QuickAddSettingsModal({ isOpen, onClose, currentIds, onSave }: QuickAddSettingsModalProps) {
+export function QuickAddSettingsModal({
+    isOpen,
+    onClose,
+    currentIds,
+    onSave,
+    columns,
+    onColumnsChange
+}: QuickAddSettingsModalProps) {
     const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
 
     // Search & Suggestions State
@@ -241,10 +250,40 @@ export function QuickAddSettingsModal({ isOpen, onClose, currentIds, onSave }: Q
                         )}
                     </div>
 
-                    <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-slate-700 dark:text-slate-300">
-                            Your Selection ({selectedProducts.length})
-                        </h3>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-slate-700 dark:text-slate-300">
+                                Grid Layout Settings
+                            </h3>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-3 block">
+                                Columns per row (Quick Add Grid)
+                            </label>
+                            <div className="flex items-center gap-2">
+                                {[2, 3, 4, 5, 6].map((num) => (
+                                    <button
+                                        key={num}
+                                        onClick={() => onColumnsChange(num)}
+                                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all border ${columns === num
+                                                ? 'bg-primary text-white border-primary shadow-md'
+                                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-primary/50'
+                                            }`}
+                                    >
+                                        {num}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-2 italic">
+                                * Higher column counts will automatically hide product photos and reduce font size to fit.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2">
+                            <h3 className="font-semibold text-slate-700 dark:text-slate-300">
+                                Your Selection ({selectedProducts.length})
+                            </h3>
+                        </div>
                     </div>
 
                     {/* Draggable Selection List */}

@@ -144,9 +144,9 @@ function CustomerDetailsContent() {
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900">{customer.name}</h1>
                         <div className="flex items-center gap-4 mt-2 text-slate-500 text-sm">
-                            {customer.place && (
+                            {(customer.town || customer.place) && (
                                 <div className="flex items-center gap-1">
-                                    <MapPin className="w-4 h-4" /> {customer.place}
+                                    <MapPin className="w-4 h-4" /> {customer.town || customer.place}
                                 </div>
                             )}
                             {customer.phone && (

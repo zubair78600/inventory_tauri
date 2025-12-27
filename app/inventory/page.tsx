@@ -28,7 +28,7 @@ import { EntityImageUpload } from '@/components/shared/EntityImageUpload';
 import { imageCommands } from '@/lib/tauri';
 import { useAuth } from '@/contexts/AuthContext';
 import { PriceCalculatorModal } from '@/components/inventory/PriceCalculatorModal';
-import { Calculator } from 'lucide-react';
+import { Calculator, ChevronDown, ChevronUp } from 'lucide-react';
 
 type NewProductFormState = {
   name: string;
@@ -64,6 +64,8 @@ export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isNewCategory, setIsNewCategory] = useState(false);
   const [isEditNewCategory, setIsEditNewCategory] = useState(false);
+  const [showAddPhoto, setShowAddPhoto] = useState(false);
+  const [showEditPhoto, setShowEditPhoto] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const pageSize = 50;
 
@@ -158,6 +160,11 @@ export default function Inventory() {
   const invalidateProducts = () => {
     void queryClient.invalidateQueries({ queryKey: ['products'] });
     void queryClient.invalidateQueries({ queryKey: ['categories'] });
+    // Also reset billing queries so new products show up there immediately
+    // Using resetQueries instead of invalidateQueries to force a hard refetch of infinite lists
+    void queryClient.resetQueries({ queryKey: ['billing-products'] });
+    void queryClient.resetQueries({ queryKey: ['billing-search'] });
+    void queryClient.resetQueries({ queryKey: ['pinned-products'] });
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -509,28 +516,46 @@ export default function Inventory() {
 
               {/* Product Photo Upload Section for Add Product */}
               <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-                <label className="form-label mb-3">Product Photo (Optional)</label>
-                <EntityImageUpload
-                  entityId={null}
-                  entityType="product"
-                  entityName={newProduct.name}
-                  imagePath={null}
-                  previewUrl={tempPreviewUrl}
-                  onFileSelect={(file) => {
-                    setPendingImageFile(file);
-                    setPendingImageUrl(null);
-                    setTempPreviewUrl(URL.createObjectURL(file));
-                  }}
-                  onImageSelect={(url) => {
-                    setPendingImageUrl(url);
-                    setPendingImageFile(null);
-                    setTempPreviewUrl(url);
-                  }}
-                  onPreviewClick={() => {
-                    // Simply clear selection on preview click if needed, or implement a local preview modal
-                    // For now loop back to clearing or show nothing special since it's just a preview
-                  }}
-                />
+                <button
+                  type="button"
+                  onClick={() => setShowAddPhoto(!showAddPhoto)}
+                  className="flex items-center justify-between w-fit min-w-[220px] px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg group hover:border-sky-500/50 transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-0 cursor-pointer group-hover:text-sky-600 transition-colors">
+                      Product Photo (Optional)
+                    </label>
+                    <span className="text-[10px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                      {showAddPhoto ? 'Hide' : 'Show'}
+                    </span>
+                  </div>
+                  <div className={`text-slate-400 group-hover:text-sky-600 transition-all ${showAddPhoto ? 'rotate-180' : ''}`}>
+                    <ChevronDown size={18} />
+                  </div>
+                </button>
+
+                {showAddPhoto && (
+                  <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <EntityImageUpload
+                      entityId={null}
+                      entityType="product"
+                      entityName={newProduct.name}
+                      imagePath={null}
+                      previewUrl={tempPreviewUrl}
+                      onFileSelect={(file) => {
+                        setPendingImageFile(file);
+                        setPendingImageUrl(null);
+                        setTempPreviewUrl(URL.createObjectURL(file));
+                      }}
+                      onImageSelect={(url) => {
+                        setPendingImageUrl(url);
+                        setPendingImageFile(null);
+                        setTempPreviewUrl(url);
+                      }}
+                      onPreviewClick={() => { }}
+                    />
+                  </div>
+                )}
               </div>
               <Button type="submit" className="mt-4">
                 Add Product
@@ -716,17 +741,38 @@ export default function Inventory() {
 
               {/* Product Photo Section */}
               <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-                <label className="form-label mb-3">Product Photo</label>
-                <EntityImageUpload
-                  entityId={editProduct.id}
-                  entityType="product"
-                  entityName={editProduct.name}
-                  imagePath={editProduct.image_path}
-                  onImageChange={(newPath) => {
-                    setEditProduct({ ...editProduct, image_path: newPath });
-                    invalidateProducts();
-                  }}
-                />
+                <button
+                  type="button"
+                  onClick={() => setShowEditPhoto(!showEditPhoto)}
+                  className="flex items-center justify-between w-fit min-w-[220px] px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg group hover:border-sky-500/50 transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-0 cursor-pointer group-hover:text-sky-600 transition-colors">
+                      Product Photo
+                    </label>
+                    <span className="text-[10px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                      {showEditPhoto ? 'Hide' : 'Show'}
+                    </span>
+                  </div>
+                  <div className={`text-slate-400 group-hover:text-sky-600 transition-all ${showEditPhoto ? 'rotate-180' : ''}`}>
+                    <ChevronDown size={18} />
+                  </div>
+                </button>
+
+                {showEditPhoto && (
+                  <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <EntityImageUpload
+                      entityId={editProduct.id}
+                      entityType="product"
+                      entityName={editProduct.name}
+                      imagePath={editProduct.image_path}
+                      onImageChange={(newPath) => {
+                        setEditProduct({ ...editProduct, image_path: newPath });
+                        invalidateProducts();
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 mt-4">
@@ -805,17 +851,15 @@ export default function Inventory() {
                       {product.supplier_id ? supplierMap.get(product.supplier_id)?.name ?? '-' : '-'}
                     </TableCell>
                     <TableCell className="text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="flex justify-center">
-                          {product.stock_quantity < 10 ? (
-                            <Badge className="bg-red-100 text-red-700">Low Stock</Badge>
-                          ) : (
-                            <Badge className="bg-emerald-100 text-emerald-700">In Stock</Badge>
-                          )}
-                        </div>
-                        <div className="text-[11px] leading-none text-slate-500">
-                          Current: {product.stock_quantity}
-                        </div>
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        {product.stock_quantity < 10 ? (
+                          <Badge className="bg-red-100 text-red-700 px-1.5 py-0 h-5 text-[10px] whitespace-nowrap">Low Stock</Badge>
+                        ) : (
+                          <Badge className="bg-emerald-100 text-emerald-700 px-1.5 py-0 h-5 text-[10px] whitespace-nowrap">In Stock</Badge>
+                        )}
+                        <span className="text-[10px] text-slate-600 font-bold">
+                          {product.stock_quantity}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -852,6 +896,7 @@ export default function Inventory() {
                           entityType="product"
                           imagePath={product.image_path}
                           size="sm"
+                          showPlaceholderBorder={true}
                           onClick={(e) => {
                             e?.stopPropagation();
                             if (product.image_path) {
